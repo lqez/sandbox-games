@@ -2,6 +2,10 @@
 import * as THREE from 'three';
 import { OrbitControls } from './vendor/OrbitControls.js';
 import { RoundedBoxGeometry } from './vendor/RoundedBoxGeometry.js';
+import { EffectComposer } from './vendor/postprocessing/EffectComposer.js';
+import { RenderPass } from './vendor/postprocessing/RenderPass.js';
+import { SSAOPass } from './vendor/postprocessing/SSAOPass.js';
+import { OutputPass } from './vendor/postprocessing/OutputPass.js';
 import { buildKitTank, KIT_INFO, KIT_KEYS } from './src/kit-tank.js';
 
 // 차고에서 선택한 기체 (?tank=ft|mk4|t34|tiger)
@@ -77,11 +81,12 @@ renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.12;
 app.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x9cc8ee);
-scene.fog = new THREE.Fog(0x9cc8ee, 70, 140);
+scene.fog = new THREE.Fog(0xc7dcef, 70, 150);
 
 const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 300);
 camera.position.set(22, 26, 30);
@@ -96,18 +101,98 @@ controls.maxPolarAngle = Math.PI * 0.46;
 controls.enablePan = true;
 controls.panSpeed = 0.6;
 
-scene.add(new THREE.HemisphereLight(0xcfe4ff, 0x9a8f7d, 0.9));
-const sun = new THREE.DirectionalLight(0xfff4e0, 1.7);
+scene.add(new THREE.HemisphereLight(0xd8e8ff, 0x8f8468, 0.72));
+const sun = new THREE.DirectionalLight(0xfff2dc, 2.3);
 sun.position.set(24, 34, 16);
 sun.castShadow = true;
-sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.mapSize.set(4096, 4096);
 sun.shadow.camera.left = -26;
 sun.shadow.camera.right = 26;
 sun.shadow.camera.top = 26;
 sun.shadow.camera.bottom = -26;
 sun.shadow.camera.far = 90;
-sun.shadow.bias = -0.0006;
+sun.shadow.bias = -0.0004;
+sun.shadow.radius = 4;
 scene.add(sun);
+
+// ---------------------------------------------------------------------------
+// 야외 하늘: 캔버스 스카이돔(그라데이션 + 뭉게구름 + 태양 헤일로)
+// + PMREM 환경맵 → 물/플라스틱 표면에 하늘 반사 (이슈 #7)
+// ---------------------------------------------------------------------------
+function makeSkyTexture() {
+  const c = document.createElement('canvas');
+  c.width = 1024; c.height = 512;
+  const ctx = c.getContext('2d');
+  const g = ctx.createLinearGradient(0, 0, 0, 512);
+  g.addColorStop(0.0, '#3d7edb');
+  g.addColorStop(0.35, '#6fa8e8');
+  g.addColorStop(0.62, '#a8cdf0');
+  g.addColorStop(0.78, '#dcebf7');
+  g.addColorStop(1.0, '#e9e6d8');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 1024, 512);
+  // 태양 헤일로 (sun 방향과 비슷한 쪽)
+  const halo = ctx.createRadialGradient(700, 150, 0, 700, 150, 220);
+  halo.addColorStop(0, 'rgba(255,248,225,0.95)');
+  halo.addColorStop(0.25, 'rgba(255,244,214,0.4)');
+  halo.addColorStop(1, 'rgba(255,244,214,0)');
+  ctx.fillStyle = halo;
+  ctx.fillRect(0, 0, 1024, 512);
+  // 뭉게구름: 겹친 소프트 원 클러스터
+  const cloud = (cx, cy, s, alpha) => {
+    for (let i = 0; i < 14; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const r = Math.random() * s;
+      const px = cx + Math.cos(a) * r * 1.9;
+      const py = cy + Math.sin(a) * r * 0.55;
+      const pr = s * (0.35 + Math.random() * 0.4);
+      const cg = ctx.createRadialGradient(px, py, 0, px, py, pr);
+      cg.addColorStop(0, `rgba(255,255,255,${alpha})`);
+      cg.addColorStop(0.7, `rgba(250,252,255,${alpha * 0.55})`);
+      cg.addColorStop(1, 'rgba(250,252,255,0)');
+      ctx.fillStyle = cg;
+      ctx.beginPath();
+      ctx.arc(px, py, pr, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  };
+  cloud(160, 190, 55, 0.5);
+  cloud(430, 130, 70, 0.42);
+  cloud(840, 230, 48, 0.45);
+  cloud(620, 300, 60, 0.3);
+  cloud(80, 330, 42, 0.28);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.mapping = THREE.EquirectangularReflectionMapping;
+  return tex;
+}
+const skyTex = makeSkyTexture();
+scene.background = skyTex;
+{
+  // 환경맵: 하늘 + 지면색으로 구성한 미니 씬을 PMREM으로 변환
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  const envScene = new THREE.Scene();
+  envScene.background = skyTex;
+  const groundDisc = new THREE.Mesh(
+    new THREE.CircleGeometry(80, 24),
+    new THREE.MeshBasicMaterial({ color: 0x8aa86a })
+  );
+  groundDisc.rotation.x = -Math.PI / 2;
+  groundDisc.position.y = -6;
+  envScene.add(groundDisc);
+  scene.environment = pmrem.fromScene(envScene, 0.04).texture;
+  pmrem.dispose();
+}
+
+// SSAO 포스트프로세싱 체인 (이슈 #7)
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+const ssaoPass = new SSAOPass(scene, camera, window.innerWidth, window.innerHeight);
+ssaoPass.kernelRadius = 0.9;
+ssaoPass.minDistance = 0.0004;
+ssaoPass.maxDistance = 0.12;
+composer.addPass(ssaoPass);
+composer.addPass(new OutputPass());
 
 // ---------------------------------------------------------------------------
 // 툰 재질 / 외곽선
@@ -277,12 +362,21 @@ const terrainAt = (gx, gz) => terrain[gx][gz];
 // 지형 렌더링: 스무스 메시 + 수면 + 지면을 따라가는 그리드 라인
 // ---------------------------------------------------------------------------
 {
+  // 자연스러운 지면 색: 체커 대비를 낮추고(범위 표시는 별도 필드로) 노이즈 얼룩 추가
   const pos = terrainGeo.attributes.position;
   const colors = new Float32Array(pos.count * 3);
   const col = new THREE.Color();
+  const colB = new THREE.Color();
   for (let i = 0; i < pos.count; i++) {
-    const c = worldToCell({ x: pos.getX(i), z: pos.getZ(i) });
-    col.set(TERRAIN_COLORS[terrain[c.gx][c.gz]][(c.gx + c.gz) % 2]);
+    const wx = pos.getX(i), wz = pos.getZ(i);
+    const c = worldToCell({ x: wx, z: wz });
+    const pair = TERRAIN_COLORS[terrain[c.gx][c.gz]];
+    col.set(pair[0]);
+    colB.set(pair[1]);
+    col.lerp(colB, ((c.gx + c.gz) % 2) * 0.5);
+    // 노이즈 격자 범위(0..GRID)에 맞춘 그리드 좌표로 샘플링
+    const mottle = 0.88 + hNoise2((wx + HALF) / TILE, (wz + HALF) / TILE) * 0.24;
+    col.multiplyScalar(mottle);
     colors[i * 3] = col.r;
     colors[i * 3 + 1] = col.g;
     colors[i * 3 + 2] = col.b;
@@ -290,18 +384,64 @@ const terrainAt = (gx, gz) => terrain[gx][gz];
   terrainGeo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
 }
 terrainGeo.computeVertexNormals();
+
+// 흙/풀 디테일 텍스처 (프로시저럴 노이즈) — 컬러 얼룩 + 범프
+function makeDetailTexture() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 512;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#cfcfcf';
+  ctx.fillRect(0, 0, 512, 512);
+  const img = ctx.getImageData(0, 0, 512, 512);
+  const d = img.data;
+  for (let i = 0; i < d.length; i += 4) {
+    const v = 196 + Math.random() * 59; // 밝기 얼룩
+    d[i] = d[i + 1] = d[i + 2] = v;
+  }
+  ctx.putImageData(img, 0, 0);
+  // 굵은 얼룩(풀 뭉치/흙덩이 느낌) 오버레이
+  for (let i = 0; i < 2600; i++) {
+    const x = Math.random() * 512, y = Math.random() * 512;
+    const r = 1.5 + Math.random() * 5;
+    const bright = Math.random() > 0.5;
+    ctx.fillStyle = bright ? 'rgba(255,255,255,0.10)' : 'rgba(60,55,40,0.10)';
+    ctx.beginPath();
+    ctx.ellipse(x, y, r, r * (0.4 + Math.random() * 0.6), Math.random() * Math.PI, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(14, 14);
+  return tex;
+}
+const detailTex = makeDetailTexture();
 const terrainMesh = new THREE.Mesh(
   terrainGeo,
-  new THREE.MeshToonMaterial({ vertexColors: true, gradientMap })
+  new THREE.MeshStandardMaterial({
+    vertexColors: true,
+    map: detailTex,
+    bumpMap: detailTex,
+    bumpScale: 0.9,
+    roughness: 0.94,
+    metalness: 0,
+    envMapIntensity: 0.35,
+  })
 );
 terrainMesh.receiveShadow = true;
 terrainMesh.castShadow = true;
 scene.add(terrainMesh);
 
-// 수면
+// 수면 — 하늘을 반사하는 물 (PMREM 환경맵)
 const waterMesh = new THREE.Mesh(
   new THREE.PlaneGeometry(GRID * TILE, GRID * TILE),
-  new THREE.MeshToonMaterial({ color: 0x6fb7e8, gradientMap, transparent: true, opacity: 0.72 })
+  new THREE.MeshStandardMaterial({
+    color: 0x4d97cc,
+    transparent: true,
+    opacity: 0.78,
+    roughness: 0.08,
+    metalness: 0,
+    envMapIntensity: 1.3,
+  })
 );
 waterMesh.rotation.x = -Math.PI / 2;
 waterMesh.position.y = WATER_Y;
@@ -1135,14 +1275,38 @@ async function resolveImpact(impact, attacker, directUnit = null) {
   }
 }
 
-async function fireSequence(attacker, target, shot) {
-  const aim = aimPointOf(target);
-  // 목표 방향 회전 + 포신 부앙각
+// 목표를 향해 조준: 포탑 기체는 포탑 요 회전, 무포탑(Mark IV)은 차체 선회.
+// 포신 부앙각은 목표 고도차에 맞춰 자동 조절 (이슈 #6)
+const normAngle = (a) => THREE.MathUtils.euclideanModulo(a + Math.PI, Math.PI * 2) - Math.PI;
+async function aimAt(attacker, aim, pitchDeg, instant = false) {
   const dx = aim.x - attacker.group.position.x;
   const dz = aim.z - attacker.group.position.z;
-  await rotateTo(attacker, Math.atan2(dx, dz), 160);
-  const pitchRad = -THREE.MathUtils.degToRad(shot.pitch);
-  await tween(140, (e) => { attacker.cannon.rotation.x = pitchRad * e; });
+  const targetYaw = Math.atan2(dx, dz);
+  const pitchRad = -THREE.MathUtils.degToRad(pitchDeg);
+  if (attacker.hasTurret) {
+    const rel = normAngle(targetYaw - attacker.group.rotation.y);
+    const from = attacker.turret.rotation.y;
+    const diff = normAngle(rel - from);
+    if (Math.abs(diff) > 0.01 && !instant) {
+      sfxOnce(attacker);
+      await tween(160 + Math.abs(diff) * 130, (e) => { attacker.turret.rotation.y = from + diff * e; });
+    } else {
+      attacker.turret.rotation.y = rel;
+    }
+  } else {
+    await rotateTo(attacker, targetYaw, 200);
+  }
+  const fromP = attacker.cannon.rotation.x;
+  if (instant) attacker.cannon.rotation.x = pitchRad;
+  else await tween(140, (e) => { attacker.cannon.rotation.x = fromP + (pitchRad - fromP) * e; });
+  return pitchRad;
+}
+function sfxOnce(attacker) { if (!attacker._trvSfx) { attacker._trvSfx = true; setTimeout(() => (attacker._trvSfx = false), 400); sfx('step'); } }
+
+async function fireSequence(attacker, target, shot) {
+  const aim = aimPointOf(target);
+  // 포탑/차체 조준 + 포신 부앙각 자동 조절
+  const pitchRad = await aimAt(attacker, aim, shot.pitch);
 
   sfx('fire');
   const muzzlePos = new THREE.Vector3();
@@ -1193,21 +1357,151 @@ async function fireSequence(attacker, target, shot) {
 // ---------------------------------------------------------------------------
 const moveHighlightGroup = new THREE.Group();
 scene.add(moveHighlightGroup);
-const moveTileMat = new THREE.MeshBasicMaterial({
-  color: 0x4da3ff, transparent: true, opacity: 0.42, side: THREE.DoubleSide, depthWrite: false,
+const moveFillMat = new THREE.MeshBasicMaterial({
+  color: 0x4da3ff, transparent: true, opacity: 0.26, side: THREE.DoubleSide, depthWrite: false,
 });
-// 지면 굴곡을 따라가는 하이라이트 쿼드
-function conformQuad(gx, gz) {
-  const geo = new THREE.PlaneGeometry(TILE - 0.26, TILE - 0.26, 3, 3);
-  geo.rotateX(-Math.PI / 2);
-  const p = cellToWorld(gx, gz);
-  const pos = geo.attributes.position;
-  for (let i = 0; i < pos.count; i++) {
-    pos.setY(i, Math.max(sampleHeight(pos.getX(i) + p.x, pos.getZ(i) + p.z), WATER_Y) + 0.06);
+const moveEdgeMat = new THREE.MeshBasicMaterial({ color: 0x2f7fe0, transparent: true, opacity: 0.9, depthWrite: false });
+const fireRingMat = new THREE.MeshBasicMaterial({
+  color: 0xff5544, transparent: true, opacity: 0.55, side: THREE.DoubleSide, depthWrite: false,
+});
+
+const groundY = (x, z) => Math.max(sampleHeight(x, z), WATER_Y);
+
+// 셀 집합의 외곽 경계를 방향 있는 에지로 추출해 루프로 연결
+function boundaryLoops(cellSet) {
+  const h = TILE / 2;
+  const pending = new Map(); // "x,z" 시작점 -> [{ax,az,bx,bz}]
+  const pkey = (x, z) => `${Math.round(x * 4)},${Math.round(z * 4)}`;
+  for (const key of cellSet) {
+    const [gx, gz] = key.split(',').map(Number);
+    const c = cellToWorld(gx, gz);
+    // (인접 셀이 집합 밖) → 공유 에지, 영역이 왼쪽에 오도록 방향 부여
+    const edges = [
+      [0, 1,  c.x + h, c.z + h, c.x - h, c.z + h],
+      [1, 0,  c.x + h, c.z - h, c.x + h, c.z + h],
+      [0, -1, c.x - h, c.z - h, c.x + h, c.z - h],
+      [-1, 0, c.x - h, c.z + h, c.x - h, c.z - h],
+    ];
+    for (const [dx, dz, ax, az, bx, bz] of edges) {
+      if (!cellSet.has(cellKey(gx + dx, gz + dz))) {
+        const k = pkey(ax, az);
+        if (!pending.has(k)) pending.set(k, []);
+        pending.get(k).push({ ax, az, bx, bz });
+      }
+    }
   }
-  const m = new THREE.Mesh(geo, moveTileMat);
-  m.position.set(p.x, 0, p.z);
-  return m;
+  const loops = [];
+  while (pending.size) {
+    const firstArr = pending.values().next().value;
+    let seg = firstArr[0];
+    const loop = [];
+    while (seg) {
+      const k = pkey(seg.ax, seg.az);
+      const arr = pending.get(k);
+      arr.splice(arr.indexOf(seg), 1);
+      if (!arr.length) pending.delete(k);
+      loop.push([seg.ax, seg.az]);
+      const nk = pkey(seg.bx, seg.bz);
+      seg = pending.get(nk)?.[0] ?? null;
+    }
+    if (loop.length >= 4) loops.push(loop);
+  }
+  return loops;
+}
+
+// 차이킨 코너 커팅으로 다각형을 부드럽게 (닫힌 루프)
+function chaikin(loop, iterations = 2) {
+  let pts = loop;
+  for (let it = 0; it < iterations; it++) {
+    const next = [];
+    for (let i = 0; i < pts.length; i++) {
+      const [ax, az] = pts[i];
+      const [bx, bz] = pts[(i + 1) % pts.length];
+      next.push([ax * 0.75 + bx * 0.25, az * 0.75 + bz * 0.25]);
+      next.push([ax * 0.25 + bx * 0.75, az * 0.25 + bz * 0.75]);
+    }
+    pts = next;
+  }
+  return pts;
+}
+
+// 홀짝 규칙 점-다각형 판정 (루프 여러 개 → 구멍 자동 처리)
+function insideLoops(loops, x, z) {
+  let inside = false;
+  for (const loop of loops) {
+    for (let i = 0, j = loop.length - 1; i < loop.length; j = i++) {
+      const [xi, zi] = loop[i];
+      const [xj, zj] = loop[j];
+      if (zi > z !== zj > z && x < ((xj - xi) * (z - zi)) / (zj - zi) + xi) inside = !inside;
+    }
+  }
+  return inside;
+}
+
+// 부드러운 외곽선을 따라 지형에 밀착하는 튜브
+function loopTube(pts, lift, radius, mat) {
+  const v = pts.map(([x, z]) => new THREE.Vector3(x, groundY(x, z) + lift, z));
+  const curve = new THREE.CatmullRomCurve3(v, true, 'catmullrom', 0.1);
+  const geo = new THREE.TubeGeometry(curve, Math.max(48, pts.length), radius, 5, true);
+  return new THREE.Mesh(geo, mat);
+}
+
+// 이동 가능 영역: 콘벡스헐 느낌의 범위 필드 (부드러운 경계 + 지형 밀착 채움)
+function showMoveField(cells) {
+  if (!cells.size) return;
+  const set = new Set(cells.keys());
+  set.add(cellKey(player.gx, player.gz)); // 자기 칸 포함해 구멍 방지
+  const loops = boundaryLoops(set).map((l) => chaikin(l, 2));
+
+  // 채움: 0.5 간격 서브셀 래스터 → 지형 굴곡을 따라가는 쿼드
+  const step = 0.5;
+  const verts = [];
+  let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+  for (const loop of loops) {
+    for (const [x, z] of loop) {
+      minX = Math.min(minX, x); maxX = Math.max(maxX, x);
+      minZ = Math.min(minZ, z); maxZ = Math.max(maxZ, z);
+    }
+  }
+  for (let x = minX; x < maxX; x += step) {
+    for (let z = minZ; z < maxZ; z += step) {
+      if (!insideLoops(loops, x + step / 2, z + step / 2)) continue;
+      const y00 = groundY(x, z) + 0.05, y10 = groundY(x + step, z) + 0.05;
+      const y01 = groundY(x, z + step) + 0.05, y11 = groundY(x + step, z + step) + 0.05;
+      verts.push(x, y00, z, x, y01, z + step, x + step, y10, z);
+      verts.push(x + step, y10, z, x, y01, z + step, x + step, y11, z + step);
+    }
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(verts), 3));
+  moveHighlightGroup.add(new THREE.Mesh(geo, moveFillMat));
+  for (const loop of loops) moveHighlightGroup.add(loopTube(loop, 0.09, 0.09, moveEdgeMat));
+}
+
+// 사격 가능 범위: 지형을 따라가는 링 밴드 (맵 밖 구간은 생략)
+function showFireRange(unit) {
+  const c = cellToWorld(unit.gx, unit.gz);
+  const R = unit.fireRange * TILE;
+  const SEG = 160;
+  const half = 0.14;
+  const verts = [];
+  const inMap = (x, z) => Math.abs(x) <= HALF + 0.6 && Math.abs(z) <= HALF + 0.6;
+  for (let i = 0; i < SEG; i++) {
+    const a0 = (i / SEG) * Math.PI * 2;
+    const a1 = ((i + 1) / SEG) * Math.PI * 2;
+    const p = (a, r) => [c.x + Math.sin(a) * r, c.z + Math.cos(a) * r];
+    const [x0i, z0i] = p(a0, R - half), [x0o, z0o] = p(a0, R + half);
+    const [x1i, z1i] = p(a1, R - half), [x1o, z1o] = p(a1, R + half);
+    if (!inMap((x0i + x1o) / 2, (z0i + z1o) / 2)) continue;
+    const y0i = groundY(x0i, z0i) + 0.08, y0o = groundY(x0o, z0o) + 0.08;
+    const y1i = groundY(x1i, z1i) + 0.08, y1o = groundY(x1o, z1o) + 0.08;
+    verts.push(x0i, y0i, z0i, x0o, y0o, z0o, x1i, y1i, z1i);
+    verts.push(x0o, y0o, z0o, x1o, y1o, z1o, x1i, y1i, z1i);
+  }
+  if (!verts.length) return;
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(verts), 3));
+  moveHighlightGroup.add(new THREE.Mesh(geo, fireRingMat));
 }
 const targetRings = [];
 const targetRingGeo = new THREE.RingGeometry(1.0, 1.3, 28);
@@ -1223,12 +1517,6 @@ function clearHighlights() {
   targetRings.length = 0;
   for (const s of chanceSprites) scene.remove(s);
   chanceSprites.length = 0;
-}
-function showMoveHighlights(cells) {
-  for (const key of cells.keys()) {
-    const [gx, gz] = key.split(',').map(Number);
-    moveHighlightGroup.add(conformQuad(gx, gz));
-  }
 }
 function chanceSprite(text) {
   const canvas = document.createElement('canvas');
@@ -1332,45 +1620,66 @@ btnAgain.addEventListener('click', () => location.reload());
 // ---------------------------------------------------------------------------
 // 턴 상태 머신
 // ---------------------------------------------------------------------------
+// 행동력(AP) 시스템 (이슈 #6): 턴마다 AP 2.
+// 이동(턴당 1회)과 포격이 각각 AP 1 — 순서 자유.
+// 이동 없이 2연속 포격, 포격 후 이동, 이동 후 포격 모두 가능.
+const AP_PER_TURN = 2;
 let turnNo = 1;
-let phase = 'player-move';
+let phase = 'player-action';
 let busy = false;
+let ap = AP_PER_TURN;
+let movedThisTurn = false;
 let currentMoveCells = new Map();
 let currentTargets = [];
 
 function updateActionButton() {
-  if (phase === 'player-move') { btnAction.textContent = '이동 생략'; btnAction.disabled = busy; }
-  else if (phase === 'player-fire') { btnAction.textContent = '턴 종료'; btnAction.disabled = busy; }
+  if (phase === 'player-action') { btnAction.textContent = `턴 종료 (행동력 ${ap})`; btnAction.disabled = busy; }
   else { btnAction.textContent = '적 턴...'; btnAction.disabled = true; }
+}
+
+function refreshActionUI() {
+  clearHighlights();
+  currentMoveCells = !movedThisTurn && ap > 0 ? reachableCells(player) : new Map();
+  currentTargets = ap > 0
+    ? enemies
+        .filter((e) => e.alive)
+        .map((e) => ({ unit: e, shot: computeShot(player, { unit: e }) }))
+        .filter((t) => t.shot.ok)
+    : [];
+  if (currentMoveCells.size) showMoveField(currentMoveCells);
+  if (ap > 0) showFireRange(player);
+  showTargets(currentTargets);
+  const acts = [];
+  if (!movedThisTurn && ap > 0) acts.push('파란 영역 클릭 = 이동');
+  if (ap > 0) acts.push(currentTargets.length ? `적 클릭 = 포격 (가능 ${currentTargets.length}대)` : '적/지면 클릭 = 포격 (빨간 링 = 사거리)');
+  setHint(
+    `행동력 <b>${ap}</b> — ${acts.join(' · ')}<br>` +
+    '이동 없이 2연속 포격도, 포격 후 이동도 가능합니다. 포신 각도는 목표에 맞춰 자동 조준.'
+  );
+  updateActionButton();
 }
 
 function startPlayerTurn() {
   if (checkGameEnd()) return;
-  phase = 'player-move';
+  phase = 'player-action';
   busy = false;
+  ap = AP_PER_TURN;
+  movedThisTurn = false;
   turnLabel.textContent = `턴 ${turnNo} — 아군 차례`;
-  clearHighlights();
-  currentMoveCells = reachableCells(player);
-  showMoveHighlights(currentMoveCells);
-  setHint('파란 칸 클릭: 이동. 지형(풀·흙·모래·진흙·강)과 경사, 선회에 따라 갈 수 있는 범위가 달라집니다.');
-  updateActionButton();
+  refreshActionUI();
 }
 
-function enterFirePhase() {
-  phase = 'player-fire';
-  busy = false;
+// 행동 1회 소비 래퍼: 실행 → AP 차감 → 남으면 계속, 다 쓰면 턴 종료
+async function spendAction(run) {
+  busy = true;
   clearHighlights();
-  currentTargets = enemies
-    .filter((e) => e.alive)
-    .map((e) => ({ unit: e, shot: computeShot(player, { unit: e }) }))
-    .filter((t) => t.shot.ok);
-  showTargets(currentTargets);
-  if (currentTargets.length) {
-    setHint(`사격 가능한 적 ${currentTargets.length}대 — 표시된 명중률로 포격합니다.<br>수목/건물/지면을 클릭해 파괴 사격도 가능합니다.`);
-  } else {
-    setHint('사선이 닿는 적이 없습니다. (사거리·포신 각도·능선/건물 차폐 확인)<br>수목/건물/지면 포격은 가능합니다.');
-  }
   updateActionButton();
+  await run();
+  ap -= 1;
+  if (checkGameEnd()) return;
+  if (ap <= 0) { await endPlayerTurn(); return; }
+  busy = false;
+  refreshActionUI();
 }
 
 async function endPlayerTurn() {
@@ -1430,8 +1739,7 @@ function checkGameEnd() {
 
 btnAction.addEventListener('click', async () => {
   if (busy) return;
-  if (phase === 'player-move') enterFirePhase();
-  else if (phase === 'player-fire') await endPlayerTurn();
+  if (phase === 'player-action') await endPlayerTurn();
 });
 
 // ---------------------------------------------------------------------------
@@ -1452,56 +1760,92 @@ renderer.domElement.addEventListener('pointerup', async (e) => {
   pointer.y = -(e.clientY / window.innerHeight) * 2 + 1;
   raycaster.setFromCamera(pointer, camera);
 
-  if (phase === 'player-move') {
-    const cell = raycastGroundCell(raycaster);
-    if (!cell) return;
-    const info = currentMoveCells.get(cellKey(cell.gx, cell.gz));
-    if (!info) return;
-    busy = true;
-    clearHighlights();
-    updateActionButton();
-    await moveUnit(player, info.path);
-    enterFirePhase();
-  } else if (phase === 'player-fire') {
-    // 1) 적 유닛
-    const enemyHits = raycaster.intersectObjects(currentTargets.map((t) => t.unit.hitbox));
-    if (enemyHits.length) {
-      const unit = enemyHits[0].object.userData.unit;
-      const t = currentTargets.find((t) => t.unit === unit);
-      if (t) {
-        busy = true;
-        clearHighlights();
-        updateActionButton();
-        await fireSequence(player, { unit }, t.shot);
-        if (!checkGameEnd()) await endPlayerTurn();
-        return;
-      }
-    }
-    // 2) 프랍
-    const propHits = raycaster.intersectObjects([...props.values()].map((p) => p.hit));
-    if (propHits.length) {
-      const prop = propHits[0].object.userData.prop;
-      const shot = computeShot(player, { prop });
-      if (!shot.ok) { setHint(`${prop.def.name} 포격 불가 — ${shot.reason}`); return; }
-      busy = true;
-      clearHighlights();
-      updateActionButton();
-      await fireSequence(player, { prop }, shot);
-      if (!checkGameEnd()) await endPlayerTurn();
+  if (phase !== 'player-action') return;
+
+  // 1) 적 유닛 포격
+  const enemyHits = raycaster.intersectObjects(
+    enemies.filter((e) => e.alive).map((e) => e.hitbox)
+  );
+  if (enemyHits.length) {
+    if (ap <= 0) return;
+    const unit = enemyHits[0].object.userData.unit;
+    const t = currentTargets.find((t) => t.unit === unit);
+    if (!t) {
+      const shot = computeShot(player, { unit });
+      setHint(`포격 불가 — ${shot.reason}`);
       return;
     }
-    // 3) 지면 포격
-    const cell = raycastGroundCell(raycaster);
-    if (!cell) return;
-    const shot = computeShot(player, cell);
-    if (!shot.ok) { setHint(`포격 불가 — ${shot.reason}`); return; }
-    busy = true;
-    clearHighlights();
-    updateActionButton();
-    await fireSequence(player, cell, shot);
-    if (!checkGameEnd()) await endPlayerTurn();
+    await spendAction(() => fireSequence(player, { unit }, t.shot));
+    return;
   }
+  // 2) 프랍 포격
+  const propHits = raycaster.intersectObjects([...props.values()].map((p) => p.hit));
+  if (propHits.length && ap > 0) {
+    const prop = propHits[0].object.userData.prop;
+    const shot = computeShot(player, { prop });
+    if (!shot.ok) { setHint(`${prop.def.name} 포격 불가 — ${shot.reason}`); return; }
+    await spendAction(() => fireSequence(player, { prop }, shot));
+    return;
+  }
+  // 3) 지면: 이동 영역 안이면 이동, 밖이면 지면 포격
+  const cell = raycastGroundCell(raycaster);
+  if (!cell) return;
+  const info = currentMoveCells.get(cellKey(cell.gx, cell.gz));
+  if (info) {
+    await spendAction(async () => {
+      movedThisTurn = true;
+      await moveUnit(player, info.path);
+    });
+    return;
+  }
+  if (ap <= 0) return;
+  const shot = computeShot(player, cell);
+  if (!shot.ok) { setHint(`포격 불가 — ${shot.reason}`); return; }
+  await spendAction(() => fireSequence(player, cell, shot));
 });
+
+// ---------------------------------------------------------------------------
+// 호버 조준 프리뷰: 커서를 따라 포탑이 돌고 포신이 부앙각을 미리 잡는다 (이슈 #6)
+// ---------------------------------------------------------------------------
+let hoverAim = null;
+let lastHoverCheck = 0;
+renderer.domElement.addEventListener('pointermove', (e) => {
+  if (phase !== 'player-action' || busy) { hoverAim = null; return; }
+  const now = performance.now();
+  if (now - lastHoverCheck < 60) return;
+  lastHoverCheck = now;
+  pointer.x = (e.clientX / window.innerWidth) * 2 - 1;
+  pointer.y = -(e.clientY / window.innerHeight) * 2 + 1;
+  raycaster.setFromCamera(pointer, camera);
+  const enemyHit = raycaster.intersectObjects(
+    enemies.filter((en) => en.alive).map((en) => en.hitbox)
+  )[0];
+  if (enemyHit) {
+    hoverAim = aimPointOf({ unit: enemyHit.object.userData.unit });
+    return;
+  }
+  const ground = raycaster.intersectObject(terrainMesh, false)[0];
+  hoverAim = ground ? aimPointOf(worldToCell(ground.point)) : null;
+});
+function updateAimPreview(dt) {
+  if (!player.alive || phase !== 'player-action' || busy || !hoverAim) return;
+  const k = 1 - Math.exp(-dt * 9);
+  const aim = hoverAim;
+  const targetYaw = Math.atan2(aim.x - player.group.position.x, aim.z - player.group.position.z);
+  if (player.hasTurret) {
+    const rel = normAngle(targetYaw - player.group.rotation.y);
+    player.turret.rotation.y += normAngle(rel - player.turret.rotation.y) * k;
+  }
+  // 포신 부앙각 미리보기: 목표 고도차 기준, 한계각으로 클램프
+  const from = muzzleApprox(player);
+  const horiz = Math.hypot(aim.x - from.x, aim.z - from.z);
+  const pitchDeg = THREE.MathUtils.clamp(
+    (Math.atan2(aim.y - from.y, Math.max(horiz, 0.001)) * 180) / Math.PI,
+    PITCH_MIN, PITCH_MAX
+  );
+  const target = -THREE.MathUtils.degToRad(pitchDeg);
+  player.cannon.rotation.x += (target - player.cannon.rotation.x) * k;
+}
 
 // ---------------------------------------------------------------------------
 // 메인 루프
@@ -1510,14 +1854,19 @@ window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
+  composer.setSize(window.innerWidth, window.innerHeight);
 });
+let lastNow = 0;
 function animate(now) {
   requestAnimationFrame(animate);
+  const dt = Math.min(0.05, (now - lastNow) / 1000 || 0.016);
+  lastNow = now;
   updateTweens(now);
+  updateAimPreview(dt);
   const pulse = 1 + Math.sin(now * 0.006) * 0.08;
   for (const ring of targetRings) ring.scale.setScalar(pulse);
   controls.update();
-  renderer.render(scene, camera);
+  composer.render();
 }
 updatePlayerHpUI();
 startPlayerTurn();
@@ -1528,9 +1877,13 @@ requestAnimationFrame(animate);
 // ---------------------------------------------------------------------------
 window.__puratank = {
   seed,
+  ssaoPass,
+  composer,
+  moveHighlightGroup,
+  playerUnit: player,
   get state() {
     return {
-      turnNo, phase, busy,
+      turnNo, phase, busy, ap, movedThisTurn,
       player: { gx: player.gx, gz: player.gz, hp: player.hp, alive: player.alive, hullLv: player.hullLv, driverLv: player.driverLv },
       enemies: enemies.map((e) => ({ gx: e.gx, gz: e.gz, hp: e.hp, alive: e.alive, hullLv: e.hullLv, driverLv: e.driverLv })),
       props: props.size,

@@ -119,5 +119,6 @@ export function buildKitTank(key) {
   outer.traverse((o) => {
     if (o.isMesh && o !== hitbox) o.castShadow = true;
   });
-  return { group: outer, turret, cannon, muzzle, hitbox };
+  // hasTurret: 포탑 요 회전으로 조준 가능한 기체 (Mark IV는 차체 고정 스폰슨포)
+  return { group: outer, turret, cannon, muzzle, hitbox, hasTurret: !!spec.turretPivot };
 }
