@@ -1,6 +1,7 @@
-// main.js — PURATANK 파츠/런너/조립 애니메이션 뷰어
-// 조립 연출: 박스 오픈 → 런너 꺼내기(작업대/거치) → 니퍼 커팅 → 유리사포 → 비행 → 딸깍 스냅
-// 커팅 중인 런너만 작업대에 서고, 나머지는 박스에 기대 세워둔다.
+// main.js — PURATANK 차고(garage) 씬
+// 책상 위에서: 박스 선택 → 박스 가져와 개봉 → 니퍼/사포 조립.
+// 다른 전차를 고르면 만들던 파츠와 런너를 박스에 고이 담아 선반에 내려놓고
+// 새 박스를 꺼낸다. 시작 버튼 = 게임 핸드오프(game/index.html 또는 이벤트).
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
@@ -12,6 +13,7 @@ import { buildT34 } from './tanks/t34.js';
 import { buildTiger1 } from './tanks/tiger1.js';
 
 const BUILDERS = { ft: buildRenaultFT, mk4: buildMark4, t34: buildT34, tiger: buildTiger1 };
+const TANK_KEYS = ['ft', 'mk4', 't34', 'tiger'];
 const RUNNER_KEYS = ['A', 'B'];
 const BOX_TITLES = {
   ft: ['RENAULT FT', 'WWI FRENCH LIGHT TANK'],
@@ -36,23 +38,23 @@ renderer.toneMapping = THREE.ACESFilmicToneMapping;
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0xf1efe9);
-scene.fog = new THREE.Fog(0xf1efe9, 90, 180);
+scene.fog = new THREE.Fog(0xf1efe9, 110, 220);
 
-const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 300);
+const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 400);
 camera.position.set(15, 10, 19);
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.target.set(0, 3.2, 0);
 controls.enableDamping = true;
 controls.maxPolarAngle = Math.PI * 0.52;
 
-// ---------------------------------------------------------------- lights & floor
+// ---------------------------------------------------------------- lights
 scene.add(new THREE.HemisphereLight(0xffffff, 0xcfc6ba, 0.85));
 const key = new THREE.DirectionalLight(0xfff1de, 2.4);
 key.position.set(9, 16, 8);
 key.castShadow = true;
 key.shadow.mapSize.set(2048, 2048);
-key.shadow.camera.left = key.shadow.camera.bottom = -34;
-key.shadow.camera.right = key.shadow.camera.top = 34;
+key.shadow.camera.left = key.shadow.camera.bottom = -40;
+key.shadow.camera.right = key.shadow.camera.top = 40;
 key.shadow.bias = -0.0004;
 scene.add(key);
 const fill = new THREE.DirectionalLight(0xd7e4ff, 0.7);
@@ -62,13 +64,36 @@ const rim = new THREE.DirectionalLight(0xffffff, 0.55);
 rim.position.set(-4, 9, -12);
 scene.add(rim);
 
-const floor = new THREE.Mesh(
-  new THREE.CircleGeometry(90, 48),
-  new THREE.MeshStandardMaterial({ color: 0xe6e1d6, roughness: 0.95 })
-);
-floor.rotation.x = -Math.PI / 2;
-floor.receiveShadow = true;
-scene.add(floor);
+// ---------------------------------------------------------------- 책상 + 커팅매트
+{
+  const desk = new THREE.Mesh(
+    new THREE.CircleGeometry(110, 48),
+    new THREE.MeshStandardMaterial({ color: 0x9c7a4f, roughness: 0.85 })
+  );
+  desk.rotation.x = -Math.PI / 2;
+  desk.position.y = -0.16;
+  desk.receiveShadow = true;
+  scene.add(desk);
+
+  const mat = new THREE.Mesh(
+    new THREE.BoxGeometry(66, 0.16, 42),
+    new THREE.MeshStandardMaterial({ color: 0x37684f, roughness: 0.92 })
+  );
+  mat.position.set(-3, -0.08, -3);
+  mat.receiveShadow = true;
+  scene.add(mat);
+  const lineMat = new THREE.MeshStandardMaterial({ color: 0x2c5540, roughness: 0.9 });
+  for (let gx = -30; gx <= 30; gx += 6) {
+    const l = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.02, 41.4), lineMat);
+    l.position.set(-3 + gx, 0.005, -3);
+    scene.add(l);
+  }
+  for (let gz = -18; gz <= 18; gz += 6) {
+    const l = new THREE.Mesh(new THREE.BoxGeometry(65.4, 0.02, 0.16), lineMat);
+    l.position.set(-3, 0.005, -3 + gz);
+    scene.add(l);
+  }
+}
 
 // ---------------------------------------------------------------- 공구 (니퍼 / 유리사포)
 function makeNipper() {
@@ -96,10 +121,10 @@ function makeNipper() {
   }
   const bolt = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.46, 12), metal);
   inner.add(bolt);
-  inner.position.z = 1.72; // 원점을 날 끝으로 이동
+  inner.position.z = 1.72; // 원점 = 날 끝
   g.add(inner);
   g.userData.setJaw = (a) => arms.forEach((arm) => { arm.rotation.y = arm.userData.side * a; });
-  g.scale.setScalar(4.2); // 실제 니퍼 크기감 (SD 킷 대비 큼직하게)
+  g.scale.setScalar(4.2);
   g.visible = false;
   return g;
 }
@@ -126,7 +151,6 @@ const nipper = makeNipper();
 const glassFile = makeGlassFile();
 scene.add(nipper, glassFile);
 
-// 딸깍 스냅 링 이펙트 풀
 const snapPool = [];
 for (let i = 0; i < 8; i++) {
   const ring = new THREE.Mesh(
@@ -138,8 +162,7 @@ for (let i = 0; i < 8; i++) {
   snapPool.push(ring);
 }
 
-// ---------------------------------------------------------------- 박스 (타미야/아카데미풍 박스아트)
-// 완성 모델을 히어로 앵글로 렌더링해 캔버스 박스아트에 합성한다.
+// ---------------------------------------------------------------- 박스아트 (히어로 렌더 + 캔버스 합성)
 function renderHeroShot(defKey) {
   const s2 = buildState(defKey);
   const root = new THREE.Group();
@@ -192,10 +215,8 @@ function makeBoxArtTexture(defKey) {
   c.width = 1024; c.height = 768;
   const ctx = c.getContext('2d');
 
-  // 바탕 + 테두리
   ctx.fillStyle = '#f6f2e7';
   ctx.fillRect(0, 0, 1024, 768);
-  // 아트 영역 (하늘 그라데이션 + 지면)
   const ax = 26, ay = 108, aw = 972, ah = 610;
   const grad = ctx.createLinearGradient(0, ay, 0, ay + ah);
   grad.addColorStop(0, skyTop);
@@ -206,7 +227,6 @@ function makeBoxArtTexture(defKey) {
   ctx.beginPath();
   ctx.ellipse(520, ay + ah - 40, 430, 90, 0, 0, Math.PI * 2);
   ctx.fill();
-  // 액션 스트릭
   ctx.save();
   ctx.translate(510, 400);
   ctx.rotate(-0.12);
@@ -215,9 +235,7 @@ function makeBoxArtTexture(defKey) {
     ctx.fillRect(sx, sy, sw, 14);
   }
   ctx.restore();
-  // 히어로 렌더 합성
   ctx.drawImage(hero, 150, ay - 10, 780, 585);
-  // 로고 밴드 (상단)
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, 1024, 92);
   ctx.fillStyle = '#d0342c';
@@ -233,7 +251,6 @@ function makeBoxArtTexture(defKey) {
   ctx.fillText('SD SNAP KIT SERIES', 118, 86);
   ctx.fillStyle = '#d0342c';
   ctx.fillRect(0, 92, 1024, 10);
-  // 스케일 배지
   ctx.beginPath();
   ctx.arc(940, 180, 54, 0, Math.PI * 2);
   ctx.fillStyle = '#d0342c';
@@ -246,7 +263,6 @@ function makeBoxArtTexture(defKey) {
   ctx.textAlign = 'center';
   ctx.fillText('SD', 940, 196);
   ctx.textAlign = 'left';
-  // 타이틀 (하단 좌측)
   ctx.font = '900 92px sans-serif';
   ctx.lineWidth = 12;
   ctx.strokeStyle = 'rgba(255,255,255,0.9)';
@@ -258,7 +274,6 @@ function makeBoxArtTexture(defKey) {
   ctx.strokeText(sub, 48, 702);
   ctx.fillStyle = '#3d372f';
   ctx.fillText(sub, 48, 702);
-  // 하단 밴드
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 718, 1024, 50);
   ctx.fillStyle = '#6b6356';
@@ -277,7 +292,6 @@ function makeKitBox(artTex) {
   const cardIn = new THREE.MeshStandardMaterial({ color: 0xe4dac2, roughness: 0.85 });
   const red = new THREE.MeshStandardMaterial({ color: 0xd0342c, roughness: 0.6 });
   const t = 0.35;
-  // 트레이 (열린 상자)
   const tray = new THREE.Group();
   const tb = new THREE.Mesh(new THREE.BoxGeometry(BOX_W, t, BOX_D), cardIn);
   tb.position.y = -BOX_H / 2 + t / 2;
@@ -291,7 +305,6 @@ function makeKitBox(artTex) {
     tray.add(wall);
   }
   tray.traverse((o) => { o.castShadow = o.receiveShadow = true; });
-  // 뚜껑 (원점 = 상판 중앙, 스커트는 아래로)
   const lid = new THREE.Group();
   const LW = BOX_W + 0.7, LD = BOX_D + 0.7;
   const top = new THREE.Mesh(new THREE.BoxGeometry(LW, t, LD), card);
@@ -304,11 +317,9 @@ function makeKitBox(artTex) {
     wall.position.set(x, -LID_H / 2, z);
     lid.add(wall);
   }
-  // 측면 인쇄 밴드
   const band = new THREE.Mesh(new THREE.BoxGeometry(LW + 0.05, 0.75, LD + 0.05), red);
   band.position.y = -LID_H + 0.55;
   lid.add(band);
-  // 박스아트 상판
   const art = new THREE.Mesh(
     new THREE.PlaneGeometry(LW - 0.3, LD - 0.3),
     new THREE.MeshBasicMaterial({ map: artTex })
@@ -320,27 +331,61 @@ function makeKitBox(artTex) {
   return { tray, lid };
 }
 
+// ---------------------------------------------------------------- 차고 배치 상수
+const BOX_POS = new THREE.Vector3(-20, BOX_H / 2, -6);
+const BOX_ROT_Y = 0.55;
+const SHELF_SCALE = 0.62;
+const SHELF = {
+  ft: { pos: new THREE.Vector3(-28, (BOX_H / 2) * SHELF_SCALE, -26), yaw: 0.18 },
+  mk4: { pos: new THREE.Vector3(-9.5, (BOX_H / 2) * SHELF_SCALE, -28), yaw: -0.08 },
+  t34: { pos: new THREE.Vector3(9.5, (BOX_H / 2) * SHELF_SCALE, -28), yaw: 0.1 },
+  tiger: { pos: new THREE.Vector3(28, (BOX_H / 2) * SHELF_SCALE, -26), yaw: -0.16 },
+};
+const PACK_DUR = 2.0, FETCH_DUR = 1.0;
+
+const shelfGroup = new THREE.Group();
+const kitBoxes = {}; // key → { tray, lid }
+let kitBoxesReady = false;
+function ensureKitBoxes() {
+  if (kitBoxesReady) return;
+  for (const k of TANK_KEYS) {
+    const { tray, lid } = makeKitBox(makeBoxArtTexture(k));
+    kitBoxes[k] = { tray, lid };
+    shelfGroup.add(tray, lid);
+    setBoxPose(k, SHELF[k].pos, SHELF[k].yaw, SHELF_SCALE);
+  }
+  kitBoxesReady = true;
+}
+function setBoxPose(k, pos, yaw, scale) {
+  const { tray, lid } = kitBoxes[k];
+  tray.position.copy(pos);
+  tray.rotation.set(0, yaw, 0);
+  tray.scale.setScalar(scale);
+  lid.position.copy(pos).add(new THREE.Vector3(0, (BOX_H / 2 + 0.38) * scale, 0));
+  lid.rotation.set(0, yaw, 0);
+  lid.scale.setScalar(scale);
+}
+
 // ---------------------------------------------------------------- state
 const content = new THREE.Group();
 scene.add(content);
 
-let state = null;
-let mode = 'done';
-let tankKey = 't34';
-let animT = 0;
+let state = null; // 현재 세션
+let mode = 'build';
+let tankKey = null;
+let animT = 0; // 세션 마스터 클록 (pack + fetch + build)
 let playing = false;
 let spin = true;
+let packJob = null;
 
-// 타임라인: 박스 인트로 후 파츠당 커팅→사포→비행 파이프라인
 const BOX = 3.4, CUT = 0.55, SAND = 0.55, FLY = 0.6, STAGGER = 0.55;
 
 function euler(arr) { return new THREE.Euler(arr[0], arr[1], arr[2]); }
 const ZERO_E = new THREE.Euler();
 
-function clearContent() {
-  content.clear();
-  content.rotation.set(0, 0, 0);
-}
+const easeInOut = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+const easeOut = (t) => 1 - Math.pow(1 - t, 3);
+const clamp01 = (v) => Math.min(1, Math.max(0, v));
 
 function setStubs(part, scale, visible = true) {
   if (!part.gateStubs) return;
@@ -373,8 +418,8 @@ function buildState(keyName) {
       return { part, holder, slot, runnerKey: part.runner };
     });
 
-  const duration = BOX + STAGGER * (holders.length - 1) + CUT + SAND + FLY;
-  return { def, holders, runnerRoots, runnerData, tankRoot, duration };
+  const buildDur = BOX + STAGGER * (holders.length - 1) + CUT + SAND + FLY;
+  return { def, holders, runnerRoots, runnerData, tankRoot, buildDur };
 }
 
 function placeOnRunner(h) {
@@ -387,13 +432,10 @@ function placeAssembled(h) {
   h.holder.position.set(...h.part.assembled.pos);
   h.holder.quaternion.setFromEuler(euler(h.part.assembled.rot));
   h.holder.scale.setScalar(1);
-  setStubs(h.part, 1, false); // 완성품 — 사포로 다듬어 자국 없음
+  setStubs(h.part, 1, false);
 }
 
-// ---------------------------------------------------------------- build 씬 연출 데이터
-const BOX_POS = new THREE.Vector3(-20, BOX_H / 2, -6);
-const BOX_ROT_Y = 0.55;
-
+// ---------------------------------------------------------------- 세션 연출 준비
 function makePose(pos, rot, lift = 2.2, dur = 0.55) {
   return {
     pos: new THREE.Vector3(...pos),
@@ -402,22 +444,25 @@ function makePose(pos, rot, lift = 2.2, dur = 0.55) {
   };
 }
 
-// build 모드 연출 준비: 박스 + 런너 포즈 이벤트
+// 박스 안에 눕힌 런너 포즈 (기준: 작업 위치의 박스)
+function inBoxPose(idx) {
+  const p = makePose(
+    [BOX_POS.x - 0.7 - idx * 0.35, 1.6 + idx * 1.1, BOX_POS.z - 1.1 - idx * 0.55],
+    [0, 0, 0]
+  );
+  p.quat
+    .setFromEuler(new THREE.Euler(0, BOX_ROT_Y, 0))
+    .multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.PI / 2, 0, 0)));
+  return p;
+}
+
 function prepareBuildScene() {
   const rd = state.runnerData;
-  const artTex = makeBoxArtTexture(tankKey);
-  const { tray, lid } = makeKitBox(artTex);
-  tray.position.copy(BOX_POS);
-  tray.rotation.y = BOX_ROT_Y;
-  content.add(tray, lid);
-  state.lid = lid;
-  // 뚜껑 포즈: 닫힘 → 바닥에 아트가 보이게 내려놓음
-  state.lidClosed = makePose(
-    [BOX_POS.x, BOX_H + 0.35, BOX_POS.z], [0, BOX_ROT_Y, 0]
-  );
+  state.tray = kitBoxes[tankKey].tray;
+  state.lid = kitBoxes[tankKey].lid;
+  state.lidClosed = makePose([BOX_POS.x, BOX_H + 0.38, BOX_POS.z], [0, BOX_ROT_Y, 0]);
   state.lidOpen = makePose([22, LID_H + 0.2, -14], [0, -0.65, 0]);
 
-  // 런너 포즈들
   const standPose = {
     A: (h) => makePose([-7.0, h / 2 + 0.4, 0], [-0.06, 0.5, 0]),
     B: (h) => makePose([-4.6, h / 2 + 0.4, 1.6], [-0.06, 0.5, 0]),
@@ -426,19 +471,7 @@ function prepareBuildScene() {
     A: (h) => makePose([-18.2, (h / 2) * 0.94, -0.2], [-0.34, BOX_ROT_Y, 0]),
     B: (h) => makePose([-16.2, (h / 2) * 0.94, 1.2], [-0.34, BOX_ROT_Y, 0]),
   };
-  // 박스 안: 눕힌 뒤 박스 방향으로 요 회전 (q = Ry · Rx)
-  const boxPose = (idx) => {
-    const p = makePose(
-      [BOX_POS.x - 0.7 - idx * 0.35, 1.6 + idx * 1.1, BOX_POS.z - 1.1 - idx * 0.55],
-      [0, 0, 0]
-    );
-    p.quat
-      .setFromEuler(new THREE.Euler(0, BOX_ROT_Y, 0))
-      .multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.PI / 2, 0, 0)));
-    return p;
-  };
 
-  // 커팅 순서에서 활성 런너 구간 추출
   const segs = [];
   state.holders.forEach((h, i) => {
     const t0 = BOX + i * STAGGER;
@@ -449,14 +482,11 @@ function prepareBuildScene() {
   const firstKey = segs[0].key;
   const otherKey = firstKey === 'A' ? 'B' : 'A';
 
-  // 런너별 포즈 이벤트: {t, pose}
   const events = { A: [], B: [] };
-  events[firstKey].push({ t: 0, pose: boxPose(0) });
-  events[otherKey].push({ t: 0, pose: boxPose(1) });
-  // 인트로: 활성 런너 → 작업대, 나머지 → 박스에 기대기
+  events[firstKey].push({ t: 0, pose: inBoxPose(0) });
+  events[otherKey].push({ t: 0, pose: inBoxPose(1) });
   events[firstKey].push({ t: 1.55, pose: { ...standPose[firstKey](rd[firstKey].h), lift: 4, dur: 0.9 } });
   events[otherKey].push({ t: 2.15, pose: { ...restPose[otherKey](rd[otherKey].h), lift: 4, dur: 0.9 } });
-  // 커팅 대상이 바뀔 때마다 교대
   for (let i = 1; i < segs.length; i++) {
     const k = segs[i].key, o = k === 'A' ? 'B' : 'A';
     events[k].push({ t: segs[i].t0 - 0.5, pose: standPose[k](rd[k].h) });
@@ -465,7 +495,6 @@ function prepareBuildScene() {
   state.runnerEvents = events;
 }
 
-const _pA = new THREE.Vector3(), _pB = new THREE.Vector3();
 function evalPose(events, t, outObj) {
   let cur = events[0], prev = null;
   for (const e of events) {
@@ -475,7 +504,7 @@ function evalPose(events, t, outObj) {
     ? Math.min(1, (t - cur.t) / (cur.pose.dur ?? 0.55))
     : 1;
   if (prev && k < 1 && prev !== cur) {
-    const e = k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
+    const e = easeInOut(k);
     outObj.position.lerpVectors(prev.pose.pos, cur.pose.pos, e);
     outObj.position.y += Math.sin(e * Math.PI) * (cur.pose.lift ?? 2.2);
     outObj.quaternion.slerpQuaternions(prev.pose.quat, cur.pose.quat, e);
@@ -483,101 +512,191 @@ function evalPose(events, t, outObj) {
     outObj.position.copy(cur.pose.pos);
     outObj.quaternion.copy(cur.pose.quat);
   }
+  outObj.scale.setScalar(1);
 }
 
-// 뚜껑 애니메이션 (0.5s~1.8s: 들려서 바닥으로)
 function poseLid(t) {
   const lid = state.lid;
   if (!lid) return;
+  lid.scale.setScalar(1);
   if (t < 0.5) {
     lid.position.copy(state.lidClosed.pos);
     lid.quaternion.copy(state.lidClosed.quat);
-    if (t > 0.32) lid.rotation.z = Math.sin(t * 42) * 0.01; // 흔들림 (기대감)
+    if (t > 0.32) lid.rotation.z = Math.sin(t * 42) * 0.01;
     return;
   }
   const k = Math.min(1, (t - 0.5) / 1.3);
-  const e = k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
+  const e = easeInOut(k);
   lid.position.lerpVectors(state.lidClosed.pos, state.lidOpen.pos, e);
   lid.position.y += Math.sin(e * Math.PI) * 8;
   lid.quaternion.slerpQuaternions(state.lidClosed.quat, state.lidOpen.quat, e);
 }
 
-// ---------------------------------------------------------------- modes
-function setView(nextTank, nextMode) {
-  tankKey = nextTank;
-  mode = nextMode;
-  clearContent();
-  nipper.visible = glassFile.visible = false;
-  snapPool.forEach((r) => (r.visible = false));
-  document.getElementById('scrub-wrap').style.display = mode === 'build' ? 'flex' : 'none';
-  setCaption('');
+// ---------------------------------------------------------------- 선택 / 정리(pack) / 꺼내기(fetch)
+function contentsVisible(v) {
+  if (!state) return;
+  for (const rk of RUNNER_KEYS) state.runnerRoots[rk].visible = v;
+  for (const h of state.holders) h.holder.visible = v;
+}
 
-  if (mode === 'lineup') {
-    const xs = { ft: -16.5, mk4: -5.5, t34: 5.5, tiger: 16.5 };
-    for (const k of ['ft', 'mk4', 't34', 'tiger']) {
-      const s = buildState(k);
-      s.tankRoot.position.set(xs[k], 0, 0);
-      s.tankRoot.rotation.y = 0.5;
-      for (const h of s.holders) {
-        placeAssembled(h);
-        s.tankRoot.add(h.holder);
-      }
-      content.add(s.tankRoot);
-    }
-    state = null;
-    frameCamera(new THREE.Vector3(0, 3.4, 0), 45, [0.12, 0.5, 1.0]);
-    updateUI();
+function chooseTank(k, instant = false) {
+  if (mode !== 'build') {
+    setView(k, mode);
     return;
   }
+  ensureKitBoxes();
+  if (tankKey === k && state) return;
 
-  state = buildState(tankKey);
-  const rd = state.runnerData;
-
-  if (mode === 'runner') {
-    const gap = 2.2;
-    const totalW = rd.A.w + rd.B.w + gap;
-    let x = -totalW / 2;
-    let maxH = 0;
-    for (const rk of RUNNER_KEYS) {
-      state.runnerRoots[rk].position.set(x + rd[rk].w / 2, rd[rk].h / 2 + 1.4, 0);
-      x += rd[rk].w + gap;
-      maxH = Math.max(maxH, rd[rk].h);
-      content.add(state.runnerRoots[rk]);
-    }
-    for (const h of state.holders) {
-      placeOnRunner(h);
-      state.runnerRoots[h.runnerKey].add(h.holder);
-    }
-    const dist = Math.max(totalW * 1.05, maxH * 1.7) + 6;
-    frameCamera(new THREE.Vector3(0, maxH / 2 + 1.6, 0), dist, [0.25, 0.28, 1.0]);
-  } else if (mode === 'done') {
-    for (const h of state.holders) {
-      placeAssembled(h);
-      state.tankRoot.add(h.holder);
-    }
-    content.add(state.tankRoot);
-    frameCamera(new THREE.Vector3(0, 3.6, 0), 22);
-  } else if (mode === 'build') {
-    state.tankRoot.position.set(9.5, 0, 0.5);
-    state.tankRoot.rotation.y = -0.35;
-    content.add(state.runnerRoots.A, state.runnerRoots.B, state.tankRoot);
-    for (const h of state.holders) content.add(h.holder);
-    prepareBuildScene();
-    animT = 0;
-    playing = true;
-    applyBuild(0);
-    frameCamera(new THREE.Vector3(-2, 5.2, 0), 54, [0.45, 0.5, 0.75]);
+  // 만들던 세션 → 박스에 정리
+  if (state && tankKey) {
+    if (packJob) finalizePack(); // 이전 정리가 안 끝났으면 즉시 마무리
+    packJob = {
+      key: tankKey,
+      state,
+      snap: state.holders.map((h) => ({
+        holder: h.holder,
+        part: h.part,
+        pos: h.holder.position.clone(),
+        quat: h.holder.quaternion.clone(),
+        heap: new THREE.Vector3(
+          BOX_POS.x + (((h.part.order * 7) % 5) - 2) * 1.7,
+          1.3 + (h.part.order % 4) * 0.7,
+          BOX_POS.z + (((h.part.order * 13) % 5) - 2) * 1.6
+        ),
+      })),
+      runnerSnap: RUNNER_KEYS.map((rk, i) => ({
+        root: state.runnerRoots[rk],
+        pos: state.runnerRoots[rk].position.clone(),
+        quat: state.runnerRoots[rk].quaternion.clone(),
+        target: inBoxPose(i),
+      })),
+      lid: state.lid,
+      lidPos: state.lid.position.clone(),
+      lidQuat: state.lid.quaternion.clone(),
+    };
   }
+
+  tankKey = k;
+  state = buildState(k);
+  frameCamera(new THREE.Vector3(-1, 4.5, -3), 58, [0.42, 0.5, 0.75]);
+  content.add(state.runnerRoots.A, state.runnerRoots.B, state.tankRoot);
+  for (const h of state.holders) content.add(h.holder);
+  state.tankRoot.position.set(9.5, 0, 0.5);
+  state.tankRoot.rotation.y = -0.35;
+  prepareBuildScene();
+  contentsVisible(false);
+
+  state.packDur = packJob ? PACK_DUR : 0;
+  state.fetchEnd = state.packDur + FETCH_DUR;
+  state.duration = state.fetchEnd + state.buildDur;
+  state.fetched = false;
+  animT = instant ? state.fetchEnd : 0;
+  playing = !instant;
+  applyFrame(animT);
   updateUI();
 }
 
-function frameCamera(target, dist, dirArr = [0.62, 0.42, 0.78]) {
-  controls.target.copy(target);
-  const dir = new THREE.Vector3(...dirArr).normalize();
-  camera.position.copy(target.clone().addScaledVector(dir, dist));
+// 정리: 파츠/런너를 트레이에 담고 뚜껑 닫아 선반으로
+function applyPack(T) {
+  const pj = packJob;
+  if (!pj) return;
+  const e1 = easeInOut(clamp01(T / 1.15));
+  for (const s of pj.snap) {
+    s.holder.position.lerpVectors(s.pos, s.heap, e1);
+    s.holder.quaternion.copy(s.quat);
+    s.holder.scale.setScalar(1);
+    setStubs(s.part, 0, false);
+  }
+  for (const rs of pj.runnerSnap) {
+    rs.root.position.lerpVectors(rs.pos, rs.target.pos, e1);
+    rs.root.quaternion.slerpQuaternions(rs.quat, rs.target.quat, e1);
+    rs.root.position.y += Math.sin(e1 * Math.PI) * 2.5;
+  }
+  const lc = new THREE.Vector3(BOX_POS.x, BOX_H + 0.38, BOX_POS.z);
+  const lq = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, BOX_ROT_Y, 0));
+  const e2 = easeInOut(clamp01((T - 0.75) / 0.55));
+  pj.lid.position.lerpVectors(pj.lidPos, lc, e2);
+  pj.lid.position.y += Math.sin(e2 * Math.PI) * 4;
+  pj.lid.quaternion.slerpQuaternions(pj.lidQuat, lq, e2);
+  pj.lid.scale.setScalar(1);
+  const k3 = clamp01((T - 1.35) / 0.65);
+  if (k3 > 0) {
+    for (const s of pj.snap) s.holder.visible = false;
+    for (const rs of pj.runnerSnap) rs.root.visible = false;
+    const e3 = easeInOut(k3);
+    const sh = SHELF[pj.key];
+    const tray = kitBoxes[pj.key].tray;
+    const scale = 1 + (SHELF_SCALE - 1) * e3;
+    tray.position.lerpVectors(BOX_POS, sh.pos, e3);
+    tray.position.y += Math.sin(e3 * Math.PI) * 3;
+    tray.quaternion.slerpQuaternions(
+      new THREE.Quaternion().setFromEuler(new THREE.Euler(0, BOX_ROT_Y, 0)),
+      new THREE.Quaternion().setFromEuler(new THREE.Euler(0, sh.yaw, 0)),
+      e3
+    );
+    tray.scale.setScalar(scale);
+    pj.lid.position.copy(tray.position).add(new THREE.Vector3(0, (BOX_H / 2 + 0.38) * scale, 0));
+    pj.lid.quaternion.copy(tray.quaternion);
+    pj.lid.scale.setScalar(scale);
+  }
+  if (T >= PACK_DUR - 0.001) finalizePack();
 }
 
-// ---------------------------------------------------------------- build animation
+function finalizePack() {
+  const pj = packJob;
+  if (!pj) return;
+  setBoxPose(pj.key, SHELF[pj.key].pos, SHELF[pj.key].yaw, SHELF_SCALE);
+  for (const s of pj.snap) content.remove(s.holder);
+  for (const rs of pj.runnerSnap) content.remove(rs.root);
+  content.remove(pj.state.tankRoot);
+  packJob = null;
+}
+
+// 꺼내기: 선반의 박스를 작업 위치로
+function applyFetch(T) {
+  if (!state) return;
+  const f = clamp01((T - state.packDur) / FETCH_DUR);
+  if (state.fetched && f >= 1) return;
+  const e = easeInOut(f);
+  const sh = SHELF[tankKey];
+  const tray = state.tray;
+  const scale = SHELF_SCALE + (1 - SHELF_SCALE) * e;
+  tray.position.lerpVectors(sh.pos, BOX_POS, e);
+  tray.position.y += Math.sin(e * Math.PI) * 4.5;
+  tray.quaternion.slerpQuaternions(
+    new THREE.Quaternion().setFromEuler(new THREE.Euler(0, sh.yaw, 0)),
+    new THREE.Quaternion().setFromEuler(new THREE.Euler(0, BOX_ROT_Y, 0)),
+    e
+  );
+  tray.scale.setScalar(scale);
+  state.lid.position.copy(tray.position).add(new THREE.Vector3(0, (BOX_H / 2 + 0.38) * scale, 0));
+  state.lid.quaternion.copy(tray.quaternion);
+  state.lid.scale.setScalar(scale);
+  state.fetched = f >= 1;
+}
+
+// 마스터 프레임: pack → fetch → build
+function applyFrame(T) {
+  if (!state) return;
+  if (packJob) applyPack(T);
+  applyFetch(T);
+  const bT = T - state.fetchEnd;
+  if (bT >= 0) {
+    contentsVisible(true);
+    state.tray.position.copy(BOX_POS);
+    state.tray.rotation.set(0, BOX_ROT_Y, 0);
+    state.tray.scale.setScalar(1);
+    applyBuild(bT);
+  } else {
+    contentsVisible(false);
+    nipper.visible = glassFile.visible = false;
+    snapPool.forEach((r) => (r.visible = false));
+    setCaption(packJob ? '🧹 만들던 파츠를 박스에 고이 담는 중…' : '📦 새 박스 꺼내는 중…');
+    document.getElementById('scrub').value = '0';
+  }
+}
+
+// ---------------------------------------------------------------- build 타임라인 (t=0: 박스 개봉)
 const _m = new THREE.Matrix4();
 const _q = new THREE.Quaternion();
 
@@ -590,11 +709,6 @@ function worldPose(root, pos, rot) {
   return { p, q: q2 };
 }
 
-const easeInOut = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
-const easeOut = (t) => 1 - Math.pow(1 - t, 3);
-const clamp01 = (v) => Math.min(1, Math.max(0, v));
-
-// 니퍼: 게이트로 접근 → 날 닫힘(커팅) → 후퇴. 원점 = 날 끝.
 function poseNipper(gate, normal, k) {
   nipper.visible = true;
   let d;
@@ -613,7 +727,6 @@ function poseNipper(gate, normal, k) {
   nipper.userData.setJaw(jaw);
 }
 
-// 유리사포: 파츠 가장자리를 왕복하며 게이트 자국을 다듬는다
 function poseFile(partPos, normal, k) {
   glassFile.visible = true;
   const up = new THREE.Vector3(0, 1, 0);
@@ -631,7 +744,6 @@ function poseFile(partPos, normal, k) {
 
 function applyBuild(t) {
   if (!state) return;
-  // 박스/런너 연출 포즈 (파츠 계산 전에 반영)
   poseLid(t);
   for (const rk of RUNNER_KEYS) {
     if (state.runnerEvents) evalPose(state.runnerEvents[rk], t, state.runnerRoots[rk]);
@@ -669,7 +781,6 @@ function applyBuild(t) {
     const sandPos = popPos.clone().addScaledVector(normal, 1.0);
     sandPos.y += 0.9;
 
-    // ── ① 니퍼 커팅
     if (local < CUT) {
       setStubs(h.part, 1);
       const k = local / CUT;
@@ -690,7 +801,6 @@ function applyBuild(t) {
       return;
     }
 
-    // ── ② 유리사포 다듬기 (게이트 자국 제거)
     if (local < CUT + SAND) {
       const k = (local - CUT) / SAND;
       const move = easeOut(clamp01(k / 0.22));
@@ -707,7 +817,6 @@ function applyBuild(t) {
       return;
     }
 
-    // ── ③ 비행 + 착지
     if (local < CUT + SAND + FLY) {
       const k = easeInOut((local - CUT - SAND) / FLY);
       setStubs(h.part, 0, false);
@@ -724,7 +833,6 @@ function applyBuild(t) {
       return;
     }
 
-    // ── 착지 완료 (+ 딸깍 스냅 링)
     h.holder.position.copy(endPose.p);
     h.holder.quaternion.copy(endPose.q);
     h.holder.scale.setScalar(1);
@@ -743,39 +851,125 @@ function applyBuild(t) {
 
   if (!nipperSet) nipper.visible = false;
   if (!fileSet) glassFile.visible = false;
-  if (t >= state.duration && !captionText) captionText = '조립 완료!';
+  if (t >= state.buildDur && !captionText) captionText = '✅ 조립 완료! ▶ 시작을 누르면 출격';
   setCaption(captionText || '');
-  document.getElementById('scrub').value = String(
-    Math.min(1, t / (state ? state.duration : 1))
-  );
+  document.getElementById('scrub').value = String(clamp01(t / state.buildDur));
 }
 
-// ---------------------------------------------------------------- GLTF 내보내기
-function exportGlb(download = true) {
-  return new Promise((resolve, reject) => {
-    const s = buildState(tankKey);
-    const root = new THREE.Group();
-    for (const h of s.holders) {
-      placeAssembled(h);
-      root.add(h.holder);
+// ---------------------------------------------------------------- modes
+function setView(nextTank, nextMode) {
+  tankKey = nextTank;
+  mode = nextMode;
+  clearContentAll();
+
+  if (mode === 'lineup') {
+    const xs = { ft: -16.5, mk4: -5.5, t34: 5.5, tiger: 16.5 };
+    for (const k of TANK_KEYS) {
+      const s = buildState(k);
+      s.tankRoot.position.set(xs[k], 0, 0);
+      s.tankRoot.rotation.y = 0.5;
+      for (const h of s.holders) {
+        placeAssembled(h);
+        s.tankRoot.add(h.holder);
+      }
+      content.add(s.tankRoot);
     }
-    new GLTFExporter().parse(
-      root,
-      (result) => {
-        if (download) {
-          const blob = new Blob([result], { type: 'model/gltf-binary' });
-          const a = document.createElement('a');
-          a.href = URL.createObjectURL(blob);
-          a.download = `puratank-${tankKey}.glb`;
-          a.click();
-          setTimeout(() => URL.revokeObjectURL(a.href), 5000);
-        }
-        resolve(result.byteLength ?? 0);
-      },
-      (err) => reject(err),
-      { binary: true }
-    );
-  });
+    frameCamera(new THREE.Vector3(0, 3.4, 0), 45, [0.12, 0.5, 1.0]);
+    updateUI();
+    return;
+  }
+
+  if (mode === 'build') {
+    ensureKitBoxes();
+    scene.add(shelfGroup);
+    frameCamera(new THREE.Vector3(0, 2, -16), 42, [0.28, 0.52, 0.8]);
+    if (tankKey) {
+      const k = tankKey;
+      tankKey = null;
+      chooseTank(k);
+    } else {
+      setCaption('🛒 전차 박스를 선택하세요 (상단 버튼)');
+    }
+    updateUI();
+    return;
+  }
+
+  const useKey = tankKey || 't34';
+  state = buildState(useKey);
+  const rd = state.runnerData;
+
+  if (mode === 'runner') {
+    const gap = 2.2;
+    const totalW = rd.A.w + rd.B.w + gap;
+    let x = -totalW / 2;
+    let maxH = 0;
+    for (const rk of RUNNER_KEYS) {
+      state.runnerRoots[rk].position.set(x + rd[rk].w / 2, rd[rk].h / 2 + 1.4, 0);
+      x += rd[rk].w + gap;
+      maxH = Math.max(maxH, rd[rk].h);
+      content.add(state.runnerRoots[rk]);
+    }
+    for (const h of state.holders) {
+      placeOnRunner(h);
+      state.runnerRoots[h.runnerKey].add(h.holder);
+    }
+    const dist = Math.max(totalW * 1.05, maxH * 1.7) + 6;
+    frameCamera(new THREE.Vector3(0, maxH / 2 + 1.6, 0), dist, [0.25, 0.28, 1.0]);
+  } else if (mode === 'done') {
+    for (const h of state.holders) {
+      placeAssembled(h);
+      state.tankRoot.add(h.holder);
+    }
+    content.add(state.tankRoot);
+    frameCamera(new THREE.Vector3(0, 3.6, 0), 22);
+  }
+  updateUI();
+}
+
+function clearContentAll() {
+  content.clear();
+  content.rotation.set(0, 0, 0);
+  scene.remove(shelfGroup);
+  nipper.visible = glassFile.visible = false;
+  snapPool.forEach((r) => (r.visible = false));
+  setCaption('');
+  packJob = null;
+  state = null;
+  playing = false;
+  if (kitBoxesReady) {
+    for (const k of TANK_KEYS) setBoxPose(k, SHELF[k].pos, SHELF[k].yaw, SHELF_SCALE);
+  }
+}
+
+function frameCamera(target, dist, dirArr = [0.62, 0.42, 0.78]) {
+  controls.target.copy(target);
+  const dir = new THREE.Vector3(...dirArr).normalize();
+  camera.position.copy(target.clone().addScaledVector(dir, dist));
+}
+
+// ---------------------------------------------------------------- 게임 시작 핸드오프
+async function startGame() {
+  if (!tankKey || !state) {
+    setCaption('먼저 전차 박스를 선택하세요!');
+    return;
+  }
+  const detail = { tank: tankKey };
+  window.dispatchEvent(new CustomEvent('puratank:start', { detail }));
+  if (window.parent !== window) {
+    window.parent.postMessage({ type: 'puratank:start', ...detail }, '*');
+  }
+  if (typeof window.__pt.onStart === 'function') {
+    window.__pt.onStart(tankKey);
+    return;
+  }
+  try {
+    const res = await fetch('game/index.html', { method: 'HEAD' });
+    if (res.ok) {
+      location.href = `game/index.html?tank=${tankKey}`;
+      return;
+    }
+  } catch (e) { /* 게임 미설치 */ }
+  setCaption(`🎮 게임 시작! (tank=${tankKey}) — game/index.html 연동 지점`);
 }
 
 // ---------------------------------------------------------------- UI
@@ -790,24 +984,61 @@ function updateUI() {
     b.classList.toggle('on', b.dataset.tank === tankKey && mode !== 'lineup'));
   document.querySelectorAll('[data-mode]').forEach((b) =>
     b.classList.toggle('on', b.dataset.mode === mode));
+  document.getElementById('scrub-wrap').style.display =
+    mode === 'build' && state ? 'flex' : 'none';
 }
 
 document.querySelectorAll('[data-tank]').forEach((b) =>
-  b.addEventListener('click', () => setView(b.dataset.tank, mode === 'lineup' ? 'done' : mode)));
+  b.addEventListener('click', () => {
+    if (mode === 'build') chooseTank(b.dataset.tank);
+    else setView(b.dataset.tank, mode === 'lineup' ? 'done' : mode);
+  }));
 document.querySelectorAll('[data-mode]').forEach((b) =>
   b.addEventListener('click', () => setView(tankKey, b.dataset.mode)));
 document.getElementById('replay').addEventListener('click', () => {
-  if (mode !== 'build') setView(tankKey, 'build');
-  else { animT = 0; playing = true; }
+  if (mode !== 'build') { setView(tankKey || 't34', 'build'); return; }
+  if (!state) { setCaption('🛒 전차 박스를 선택하세요'); return; }
+  animT = state.fetchEnd;
+  playing = true;
 });
+document.getElementById('start').addEventListener('click', startGame);
 document.getElementById('export').addEventListener('click', () => exportGlb(true));
 const scrub = document.getElementById('scrub');
 scrub.addEventListener('input', () => {
   if (mode !== 'build' || !state) return;
   playing = false;
-  animT = parseFloat(scrub.value) * state.duration;
-  applyBuild(animT);
+  animT = state.fetchEnd + parseFloat(scrub.value) * state.buildDur;
+  applyFrame(animT);
 });
+
+// ---------------------------------------------------------------- GLTF 내보내기
+function exportGlb(download = true) {
+  return new Promise((resolve, reject) => {
+    const k = tankKey || 't34';
+    const s = buildState(k);
+    const root = new THREE.Group();
+    for (const h of s.holders) {
+      placeAssembled(h);
+      root.add(h.holder);
+    }
+    new GLTFExporter().parse(
+      root,
+      (result) => {
+        if (download) {
+          const blob = new Blob([result], { type: 'model/gltf-binary' });
+          const a = document.createElement('a');
+          a.href = URL.createObjectURL(blob);
+          a.download = `puratank-${k}.glb`;
+          a.click();
+          setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+        }
+        resolve(result.byteLength ?? 0);
+      },
+      (err) => reject(err),
+      { binary: true }
+    );
+  });
+}
 
 // ---------------------------------------------------------------- loop
 const clock = new THREE.Clock();
@@ -816,7 +1047,7 @@ function tick() {
   const dt = Math.min(clock.getDelta(), 0.05);
   if (mode === 'build' && playing && state) {
     animT = Math.min(animT + dt, state.duration + 0.5);
-    applyBuild(animT);
+    applyFrame(animT);
     if (animT >= state.duration + 0.5) playing = false;
   }
   if ((mode === 'done' || mode === 'lineup') && spin) {
@@ -834,7 +1065,7 @@ function resize() {
 }
 addEventListener('resize', resize);
 resize();
-setView(tankKey, mode);
+setView(null, 'build');
 tick();
 
 // ---------------------------------------------------------------- 스크린샷/테스트 API
@@ -845,23 +1076,43 @@ window.__pt = {
     content.rotation.y = 0;
     if (m === 'build' && at !== null && state) {
       playing = false;
-      animT = at * state.duration;
-      applyBuild(animT);
+      animT = state.fetchEnd + at * state.buildDur;
+      applyFrame(animT);
     }
     renderer.render(scene, camera);
     return 'ok';
   },
   buildAtSec: (t, sec) => {
     spin = false;
-    setView(t, 'build');
-    content.rotation.y = 0;
+    if (mode !== 'build') setView(null, 'build');
+    if (tankKey !== t || !state) chooseTank(t, true);
     playing = false;
-    animT = sec;
-    applyBuild(animT);
+    animT = state.fetchEnd + sec;
+    applyFrame(animT);
+    renderer.render(scene, camera);
+    return 'ok';
+  },
+  garage: () => {
+    spin = false;
+    setView(null, 'build');
+    renderer.render(scene, camera);
+    return 'ok';
+  },
+  selectTank: (k) => {
+    if (mode !== 'build') setView(null, 'build');
+    chooseTank(k);
+    renderer.render(scene, camera);
+    return 'ok';
+  },
+  setT: (T) => {
+    playing = false;
+    animT = T;
+    applyFrame(T);
     renderer.render(scene, camera);
     return 'ok';
   },
   exportGlb: () => exportGlb(false),
+  onStart: null,
   orbit: (azimuth, polar, dist) => {
     const t = controls.target;
     camera.position.set(
