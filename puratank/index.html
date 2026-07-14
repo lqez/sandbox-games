@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>PURATANK — SD 탱크 프라모델 뷰어</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; font-family: 'Pretendard', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif; }
+  #view { width: 100%; height: 100%; display: block; }
+  .bar {
+    position: fixed; left: 50%; transform: translateX(-50%);
+    display: flex; gap: 8px; align-items: center;
+    background: rgba(255,255,255,.82); backdrop-filter: blur(8px);
+    border-radius: 999px; padding: 8px 14px;
+    box-shadow: 0 4px 18px rgba(60,50,30,.14);
+  }
+  #topbar { top: 16px; }
+  #modebar { bottom: 18px; }
+  .logo { font-weight: 900; letter-spacing: .5px; color: #4a4032; padding-right: 6px; border-right: 2px solid #ddd4c4; }
+  .logo small { color: #a09480; font-weight: 700; }
+  button {
+    border: 0; border-radius: 999px; padding: 8px 14px;
+    background: #eee7d9; color: #5c5140; font-weight: 700; font-size: 13px;
+    cursor: pointer; transition: all .15s;
+  }
+  button:hover { background: #e2d8c4; }
+  button.on { background: #5c8f3e; color: #fff; }
+  #replay { background: #f0b23e; color: #5a4008; }
+  #caption {
+    position: fixed; bottom: 76px; left: 50%; transform: translateX(-50%);
+    background: rgba(70,60,45,.85); color: #fff; font-weight: 800; font-size: 15px;
+    padding: 8px 18px; border-radius: 999px; opacity: 0; transition: opacity .2s;
+    pointer-events: none;
+  }
+  #scrub-wrap { display: none; align-items: center; }
+  #scrub { width: 150px; accent-color: #5c8f3e; }
+</style>
+<script type="importmap">
+{ "imports": {
+    "three": "./lib/three.module.js",
+    "three/addons/controls/OrbitControls.js": "./lib/OrbitControls.js"
+} }
+</script>
+</head>
+<body>
+<canvas id="view"></canvas>
+
+<div class="bar" id="topbar">
+  <span class="logo">PURATANK <small>프라탱크</small></span>
+  <button data-tank="ft">르노 FT</button>
+  <button data-tank="mk4">Mark IV</button>
+  <button data-tank="t34">T-34</button>
+  <button data-tank="tiger">티거 I</button>
+</div>
+
+<div class="bar" id="modebar">
+  <button data-mode="runner">런너</button>
+  <button data-mode="build">조립 애니메이션</button>
+  <button data-mode="done">완성</button>
+  <button data-mode="lineup">라인업</button>
+  <button id="replay">↻ 다시 조립</button>
+  <span id="scrub-wrap"><input type="range" id="scrub" min="0" max="1" step="0.001" value="0" /></span>
+</div>
+
+<div id="caption"></div>
+
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
