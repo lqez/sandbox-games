@@ -66,7 +66,7 @@ let animT = 0;
 let playing = false;
 let spin = true;
 
-const POP = 0.32, FLY = 0.85, STAGGER = 0.42;
+const POP = 0.28, FLY = 0.8, STAGGER = 0.3;
 
 function euler(arr) { return new THREE.Euler(arr[0], arr[1], arr[2]); }
 
@@ -82,7 +82,7 @@ function buildState(keyName) {
   for (const rk of RUNNER_KEYS) {
     const subset = def.parts.filter((p) => p.runner === rk);
     if (!subset.length) continue;
-    runnerData[rk] = buildRunner(subset, runnerMat, { width: def.runnerWidths[rk] });
+    runnerData[rk] = buildRunner(subset, runnerMat, { width: def.runnerWidths[rk], label: rk });
     runnerRoots[rk] = new THREE.Group();
     runnerRoots[rk].add(runnerData[rk].group);
   }

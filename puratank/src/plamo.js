@@ -348,17 +348,14 @@ export function beltOutlinePoints(circles, inset, spacing) {
   return out;
 }
 
-// 링크&렝스(link & length) 궤도: 벨트를 "원호+직선" 피스로 분할해
-// 런너에 평면 파츠로 몰드하고 서로 끼워 조립하는 스냅킷 방식.
-// 각 피스 = 바퀴 i를 감는 원호 + 다음 바퀴까지의 직선 런. 끝에 연결 탭(수 페그).
-// 반환: 피스 그룹 배열 (벨트 로컬 좌표 — 호출측에서 centered() 후 배치)
-export function trackPieces(circles, w, t, mat, opts = {}) {
+// ---------------------------------------------------------------- 링크&렝스 궤도
+// 실킷 방식: 직선 "렝스"와 개별 "링크"가 런너에 평면으로 눕고,
+// 곡선부는 조립 시 링크가 각도를 나눠 다각형으로 바퀴를 감싼다.
+
+// 궤도 경로 분해: circles(CCW)에서 직선 런과 원호(링크 분할) 세그먼트 목록 생성.
+// 반환: [{ kind:'length'|'link', len, pos:[z,y], theta }] — theta = 진행 방향 각도(z-y 평면)
+export function trackLayout(circles, t, linkLen = 1.15) {
   const n = circles.length;
-  const cleatSpacing = opts.cleatSpacing ?? 0.62;
-  const cleatOut = opts.cleatOut ?? 0.3;
-  const cleatWide = opts.cleatWide ?? 0.44;
-  const bevel = 0.09;
-  // 각 (i → i+1) 외접 탄젠트 각도
   const tang = [];
   for (let i = 0; i < n; i++) {
     const c1 = circles[i], c2 = circles[(i + 1) % n];
@@ -366,77 +363,96 @@ export function trackPieces(circles, w, t, mat, opts = {}) {
     const base = Math.atan2(c2.y - c1.y, c2.z - c1.z);
     tang.push(base - Math.acos(Math.min(1, Math.max(-1, (c1.r - c2.r) / L))));
   }
-  const pieces = [];
+  const segs = [];
   for (let i = 0; i < n; i++) {
     const cur = circles[i], nxt = circles[(i + 1) % n];
+    // 원호 → 링크들 (다각형 페이싯)
     let aIn = tang[(i - 1 + n) % n], aOut = tang[i];
     while (aOut < aIn) aOut += Math.PI * 2;
-    const outer = [], inner = [];
-    const steps = Math.max(3, Math.ceil((aOut - aIn) / 0.16));
-    for (let k = 0; k <= steps; k++) {
-      const a = aIn + ((aOut - aIn) * k) / steps;
-      outer.push(new THREE.Vector2(cur.z + cur.r * Math.cos(a), cur.y + cur.r * Math.sin(a)));
-      inner.push(new THREE.Vector2(cur.z + (cur.r - t) * Math.cos(a), cur.y + (cur.r - t) * Math.sin(a)));
+    const rc = cur.r - t / 2;
+    const arcLen = (aOut - aIn) * rc;
+    const m = Math.max(1, Math.round(arcLen / linkLen));
+    for (let k = 0; k < m; k++) {
+      const aMid = aIn + ((k + 0.5) / m) * (aOut - aIn);
+      const chord = 2 * rc * Math.sin((aOut - aIn) / (2 * m));
+      segs.push({
+        kind: 'link',
+        len: chord,
+        pos: [cur.z + rc * Math.cos(aMid), cur.y + rc * Math.sin(aMid)],
+        theta: aMid + Math.PI / 2,
+      });
     }
-    // 다음 바퀴 탄젠트 포인트까지 직선 런
-    outer.push(new THREE.Vector2(nxt.z + nxt.r * Math.cos(tang[i]), nxt.y + nxt.r * Math.sin(tang[i])));
-    inner.push(new THREE.Vector2(nxt.z + (nxt.r - t) * Math.cos(tang[i]), nxt.y + (nxt.r - t) * Math.sin(tang[i])));
-
-    const shape = new THREE.Shape();
-    shape.setFromPoints(
-      [...outer, ...inner.slice().reverse()].map((p) => new THREE.Vector2(-p.x, p.y))
-    );
-    const geo = new THREE.ExtrudeGeometry(shape, {
-      depth: w - bevel * 2,
-      bevelEnabled: true,
-      bevelThickness: bevel,
-      bevelSize: bevel,
-      bevelSegments: 2,
-      curveSegments: 4,
+    // 직선 런 → 렝스 1피스
+    const p1 = [cur.z + rc * Math.cos(tang[i]), cur.y + rc * Math.sin(tang[i])];
+    const rc2 = nxt.r - t / 2;
+    const p2 = [nxt.z + rc2 * Math.cos(tang[i]), nxt.y + rc2 * Math.sin(tang[i])];
+    const len = Math.hypot(p2[0] - p1[0], p2[1] - p1[1]);
+    segs.push({
+      kind: 'length',
+      len,
+      pos: [(p1[0] + p2[0]) / 2, (p1[1] + p2[1]) / 2],
+      theta: Math.atan2(p2[1] - p1[1], p2[0] - p1[0]),
     });
-    geo.rotateY(Math.PI / 2);
-    geo.translate(-(w - bevel * 2) / 2, 0, 0);
-    const g = new THREE.Group();
-    const mesh = new THREE.Mesh(geo, mat);
-    mesh.castShadow = mesh.receiveShadow = true;
-    g.add(mesh);
-
-    // 클리트(트랙 슈) — 통통하게, 옆으로 튀어나오게
-    const lens = [0];
-    for (let k = 1; k < outer.length; k++) lens.push(lens[k - 1] + outer[k].distanceTo(outer[k - 1]));
-    const total = lens[lens.length - 1];
-    const cCount = Math.max(2, Math.round(total / cleatSpacing));
-    for (let k = 0; k < cCount; k++) {
-      const target = total * ((k + 0.5) / cCount);
-      let m = 1;
-      while (m < lens.length - 1 && lens[m] < target) m++;
-      const t01 = (target - lens[m - 1]) / Math.max(1e-6, lens[m] - lens[m - 1]);
-      const p = outer[m - 1].clone().lerp(outer[m], t01);
-      const dir = outer[m].clone().sub(outer[m - 1]).normalize();
-      const normal = new THREE.Vector2(dir.y, -dir.x);
-      const cleat = new THREE.Mesh(
-        new THREE.BoxGeometry(w + cleatWide, cleatOut + 0.18, cleatSpacing * 0.52),
-        mat
-      );
-      cleat.castShadow = true;
-      cleat.position.set(0, p.y + normal.y * cleatOut * 0.3, p.x + normal.x * cleatOut * 0.3);
-      cleat.rotation.x = -Math.atan2(dir.y, dir.x);
-      g.add(cleat);
-    }
-
-    // 연결 탭(수 페그) — 피스 끝단에서 진행 방향으로 돌출
-    const oe = outer[outer.length - 1], ie = inner[inner.length - 1];
-    const emid = oe.clone().add(ie).multiplyScalar(0.5);
-    // 진행 방향 = 직선 런의 방향
-    const p1 = outer[steps], p2 = outer[steps + 1];
-    const sdir = p2.clone().sub(p1).normalize();
-    const tab = new THREE.Mesh(new THREE.BoxGeometry(w * 0.5, t * 0.7, 0.5), mat);
-    tab.position.set(0, emid.y + sdir.y * 0.2, emid.x + sdir.x * 0.2);
-    tab.rotation.x = -Math.atan2(sdir.y, sdir.x);
-    g.add(tab);
-    pieces.push(g);
   }
-  return pieces;
+  return segs;
+}
+
+// 트랙 밴드 피스 공통: 베이스 밴드(z 방향 len) + 클리트(-y) + 가이드 스터드(+y) + 연결 탭(±z)
+function trackBand(len, w, t, mat, cleatCount, opts = {}) {
+  const g = new THREE.Group();
+  const base = chamferBox(w, t, len, Math.min(0.08, t * 0.3), mat);
+  g.add(base);
+  const cleatOut = opts.cleatOut ?? 0.3;
+  const cleatWide = opts.cleatWide ?? 0.44;
+  for (let i = 0; i < cleatCount; i++) {
+    const z = cleatCount === 1 ? 0 : -len / 2 + ((i + 0.5) / cleatCount) * len;
+    const cleat = new THREE.Mesh(
+      new THREE.BoxGeometry(w + cleatWide, cleatOut, Math.min(0.34, len * 0.42)),
+      mat
+    );
+    cleat.castShadow = true;
+    cleat.position.set(0, -t / 2 - cleatOut / 2 + 0.06, z);
+    g.add(cleat);
+    // 가이드 스터드 (안쪽면)
+    const stud = new THREE.Mesh(new THREE.BoxGeometry(w * 0.22, 0.16, 0.22), mat);
+    stud.position.set(0, t / 2 + 0.07, z);
+    g.add(stud);
+  }
+  // 연결 탭: +z 끝에 수 페그, -z 끝은 소켓 블록
+  const peg = new THREE.Mesh(new THREE.BoxGeometry(w * 0.4, t * 0.55, 0.3), mat);
+  peg.position.set(0, 0, len / 2 + 0.13);
+  g.add(peg);
+  return g;
+}
+
+// 직선 렝스 (여러 슈가 이어진 평면 파츠)
+export function trackLengthPiece(len, w, t, mat, opts = {}) {
+  return trackBand(len, w, t, mat, Math.max(2, Math.round(len / 0.6)), opts);
+}
+// 개별 링크 (슈 1~2개) — 다각형 이음새가 벌어지지 않게 약간 겹치는 길이로
+export function trackLinkPiece(len, w, t, mat, opts = {}) {
+  const l = len * 1.16;
+  return trackBand(l, w, t, mat, Math.max(1, Math.round(l / 0.62)), opts);
+}
+
+// ---------------------------------------------------------------- 회전체 쉘
+// (r,y) 프로파일(바닥→정점, r은 0으로 끝남)을 두께 t의 쉘로 회전 —
+// 바닥이 뚫려 있어 런너 위에서 캐비티와 판 두께가 보인다 (사출 파츠 느낌).
+export function revolveShell(profile, t, mat, seg = 40) {
+  const pts = [];
+  for (const [r, y] of profile) pts.push(new THREE.Vector2(r, y));
+  const inner = [];
+  for (const [r, y] of profile) {
+    if (r > t * 1.2) inner.push(new THREE.Vector2(r - t, y));
+    else inner.push(new THREE.Vector2(Math.max(0.001, r * 0.5), y - t));
+  }
+  inner.reverse();
+  pts.push(...inner);
+  pts.push(new THREE.Vector2(profile[0][0], profile[0][1])); // 바닥 림 닫기
+  const geo = new THREE.LatheGeometry(pts, seg);
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.castShadow = mesh.receiveShadow = true;
+  return mesh;
 }
 
 // 로드휠: 축이 X방향인 통통한 바퀴 + 허브캡 + 육각 볼트 링

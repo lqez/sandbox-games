@@ -4,8 +4,8 @@
 import * as THREE from 'three';
 import {
   makeMats, chamferBox, profileY, cylX, cylY, cylZ, domeRivet,
-  panelLine, panelRect, fastenerRow, grooveRing, trackPieces, beltSolid,
-  beltOutlinePoints, centered, definePart,
+  panelLine, panelRect, fastenerRow, grooveRing, beltSolid,
+  beltOutlinePoints, trackLayout, trackLengthPiece, trackLinkPiece, definePart,
 } from '../plamo.js';
 
 const CIRCLES = [
@@ -14,7 +14,6 @@ const CIRCLES = [
   { z: 2.95, y: 3.65, r: 1.5 },
   { z: -1.95, y: 3.75, r: 1.2 },
 ];
-const PIECE_NAMES = ['하부', '전부', '상부', '후부'];
 
 export function buildMark4() {
   const color = 0xa08d5f; // 카키 브라운 런너
@@ -53,26 +52,29 @@ export function buildMark4() {
     P(id, name, g, { pos: [sx * 2.45, 0, 0], lieRot: [0, Math.PI / 2, 0], order });
   }
 
-  // ---- B4~B11 트랙 (링크&렝스 4피스/측 — 마름모 4변)
+  // ---- B4~ 트랙 (링크&렝스 — 평면 파츠, 마름모 일주)
+  let idNum = 4;
   {
-    let idNum = 4, order = 4;
+    let order = 4;
     for (const [side, sx] of [['좌', -1], ['우', 1]]) {
-      const pieces = trackPieces(CIRCLES, 1.8, 0.55, M.main, { cleatOut: 0.32, cleatWide: 0.5 });
-      pieces.forEach((piece, i) => {
-        const { mesh, center } = centered(piece);
-        P(`B${idNum}`, `${side} 트랙 ${PIECE_NAMES[i]}`, mesh, {
-          pos: [sx * 2.5 + center.x, center.y, center.z],
-          lieRot: [0, Math.PI / 2, 0],
+      for (const seg of trackLayout(CIRCLES, 0.5, 1.35)) {
+        const mesh = seg.kind === 'length'
+          ? trackLengthPiece(seg.len, 1.8, 0.5, M.main, { cleatOut: 0.3 })
+          : trackLinkPiece(seg.len, 1.8, 0.5, M.main, { cleatOut: 0.3 });
+        P(`B${idNum}`, `${side} 트랙 ${seg.kind === 'length' ? '렝스' : '링크'}`, mesh, {
+          pos: [sx * 2.5, seg.pos[1], seg.pos[0]],
+          rot: [-seg.theta, 0, 0],
+          lieRot: [-Math.PI / 2, Math.PI / 2, 0],
           order: order++,
           runner: 'B',
         });
         idNum++;
-      });
+      }
     }
   }
 
-  // ---- B12/B13 스폰슨 (측면 포탑실 — 큼직하게)
-  for (const [id, name, sx, order] of [['B12', '좌 스폰슨', -1, 12], ['B13', '우 스폰슨', 1, 13]]) {
+  // ---- 스폰슨 (측면 포탑실 — 큼직하게)
+  for (const [name, sx, order] of [['좌 스폰슨', -1, 32], ['우 스폰슨', 1, 33]]) {
     const g = new THREE.Group();
     const pts = [
       [sx * 1.5, -1.45], [sx * 3.95, -1.05], [sx * 3.95, 0.75], [sx * 2.75, 1.75], [sx * 1.5, 1.75],
@@ -82,11 +84,12 @@ export function buildMark4() {
     fastenerRow(g, [sx * 4.12, -0.82, -0.85], [sx * 4.12, -0.82, 0.6], 4, 0.13, [sx, 0, 0], M.main);
     fastenerRow(g, [sx * 4.12, 0.82, -0.85], [sx * 4.12, 0.82, 0.6], 4, 0.13, [sx, 0, 0], M.main);
     panelRect(g, [sx * 4.12, 0, -0.15], [0, 0, 1], [0, 1, 0], 0.72, 0.62, [sx, 0, 0], M.groove, 0.14);
-    P(id, name, g, { pos: [0, 2.9, 0.1], lieRot: [Math.PI / 2, 0, 0], order });
+    P(`B${idNum}`, name, g, { pos: [0, 2.9, 0.1], lieRot: [Math.PI / 2, 0, 0], order });
+    idNum++;
   }
 
-  // ---- B14/B15 6파운더 포 (스터비 + 뚱뚱)
-  for (const [id, name, sx, order] of [['B14', '좌 6파운더', -1, 14], ['B15', '우 6파운더', 1, 15]]) {
+  // ---- 6파운더 포 (스터비 + 뚱뚱)
+  for (const [name, sx, order] of [['좌 6파운더', -1, 34], ['우 6파운더', 1, 35]]) {
     const g = new THREE.Group();
     const shield = cylZ(0.7, 0.78, 0.5, M.main, 18);
     const barrel = cylZ(0.42, 0.52, 1.4, M.main, 16);
@@ -94,16 +97,17 @@ export function buildMark4() {
     const muzzle = cylZ(0.6, 0.6, 0.3, M.main, 16);
     muzzle.position.z = 1.6;
     g.add(shield, barrel, muzzle);
-    P(id, name, g, {
+    P(`B${idNum}`, name, g, {
       pos: [sx * 3.4, 2.9, 1.6],
       rot: [0, sx * 0.3, 0],
       lieRot: [Math.PI / 2, Math.PI / 2, 0],
       order,
       runner: 'B',
     });
+    idNum++;
   }
 
-  // ---- B16 조종실 캡
+  // ---- 조종실 캡
   {
     const g = new THREE.Group();
     g.add(chamferBox(2.4, 1.5, 2.4, 0.2, M.main));
@@ -115,10 +119,11 @@ export function buildMark4() {
     }
     fastenerRow(g, [-1.21, -0.15, -0.95], [-1.21, -0.15, 0.95], 4, 0.11, [-1, 0, 0], M.main);
     fastenerRow(g, [1.21, -0.15, -0.95], [1.21, -0.15, 0.95], 4, 0.11, [1, 0, 0], M.main);
-    P('B16', '조종실 캡', g, { pos: [0, 5.2, 1.15], lieRot: [Math.PI / 2, 0, 0], order: 16, runner: 'B' });
+    P(`B${idNum}`, '조종실 캡', g, { pos: [0, 5.2, 1.15], lieRot: [Math.PI / 2, 0, 0], order: 36, runner: 'B' });
+    idNum++;
   }
 
-  // ---- B17 언디칭 레일
+  // ---- 언디칭 레일
   {
     const g = new THREE.Group();
     for (const sx of [-1.25, 1.25]) {
@@ -131,10 +136,11 @@ export function buildMark4() {
       beam.position.set(0, -0.14, bz);
       g.add(beam);
     }
-    P('B17', '언디칭 레일', g, { pos: [0, 5.9, -0.3], lieRot: [Math.PI / 2, Math.PI / 2, 0], order: 17, runner: 'B' });
+    P(`B${idNum}`, '언디칭 레일', g, { pos: [0, 5.9, -0.3], lieRot: [Math.PI / 2, Math.PI / 2, 0], order: 37, runner: 'B' });
+    idNum++;
   }
 
-  // ---- B18 배기 머플러
+  // ---- 배기 머플러
   {
     const g = new THREE.Group();
     const muf = cylX(0.55, 0.55, 2.4, M.main, 16);
@@ -148,11 +154,11 @@ export function buildMark4() {
     const pipe = cylY(0.22, 0.22, 0.9, M.main, 10);
     pipe.position.set(0, 0.6, 0);
     g.add(pipe);
-    P('B18', '배기 머플러', g, { pos: [0, 5.3, -1.7], lieRot: [0, 0, 0], order: 18, runner: 'B' });
+    P(`B${idNum}`, '배기 머플러', g, { pos: [0, 5.3, -1.7], lieRot: [0, 0, 0], order: 38, runner: 'B' });
   }
 
   return {
     key: 'mk4', label: 'Mark IV', sub: 'WWI · 영국', color,
-    runnerWidths: { A: 21, B: 21 }, parts,
+    runnerWidths: { A: 21, B: 24 }, parts,
   };
 }

@@ -4,15 +4,14 @@
 import * as THREE from 'three';
 import {
   makeMats, chamferBox, profileX, tub, cylY, cylZ, sphere,
-  panelLine, panelRect, fastenerRow, grooveRing, trackPieces, roadWheel, wheelHoles,
-  centered, definePart,
+  panelLine, panelRect, fastenerRow, grooveRing, revolveShell,
+  trackLayout, trackLengthPiece, trackLinkPiece, roadWheel, wheelHoles, definePart,
 } from '../plamo.js';
 
 const CIRCLES = [
-  { z: -2.75, y: 1.5, r: 1.5 },
-  { z: 2.75, y: 1.5, r: 1.5 },
+  { z: -2.75, y: 1.35, r: 1.35 },
+  { z: 2.75, y: 1.35, r: 1.35 },
 ];
-const PIECE_NAMES = ['후부', '전부'];
 
 export function buildT34() {
   const color = 0x7d9b4e; // 올리브 그린 런너
@@ -58,30 +57,32 @@ export function buildT34() {
     panelRect(g, [0, 2.43, -0.35], [1, 0, 0], [0, 0, 1], 0.9, 0.55, [0, 1, 0], M.groove, 0.15);
     panelLine(g, [-2.85, 2.43, -2.9], [-2.85, 2.43, 1.2], [0, 1, 0], M.groove, 0.14);
     panelLine(g, [2.85, 2.43, -2.9], [2.85, 2.43, 1.2], [0, 1, 0], M.groove, 0.14);
-    P('C2', '상부 차체', g, { pos: [0, 2.5, 0], lieRot: [Math.PI / 2, Math.PI / 2, 0], order: 8 });
+    P('C2', '상부 차체', g, { pos: [0, 2.5, 0], lieRot: [Math.PI / 2, Math.PI / 2, 0], order: 22 });
   }
 
-  // ---- C3 포탑 (주조 달걀형 — 차체급 오버사이즈)
+  // ---- C3 포탑 (주조 달걀형 — 바닥 뚫린 회전체 쉘)
   {
     const g = new THREE.Group();
-    const ring = cylY(1.95, 2.1, 0.5, M.main, 30);
-    ring.position.y = 0.25;
-    const egg = sphere(2.05, M.main, 32, 22);
-    egg.scale.set(1.05, 0.66, 1.2);
-    egg.position.y = 1.05;
-    g.add(ring, egg);
-    const seam = grooveRing(2.06, 0.07, M.groove, 52);
+    const d2r = Math.PI / 180;
+    const prof = [[2.15, 0], [2.15, 0.4], [2.02, 0.5]];
+    for (let a = 8; a <= 90; a += 8) {
+      prof.push([2.02 * Math.cos(a * d2r), 0.5 + 1.35 * Math.sin(a * d2r)]);
+    }
+    const shell = revolveShell(prof, 0.28, M.main, 40);
+    shell.scale.set(1.05, 1, 1.2);
+    g.add(shell);
+    const seam = grooveRing(2.04, 0.07, M.groove, 52);
     seam.scale.set(1.05, 1.2, 1);
-    seam.position.y = 1.12;
+    seam.position.y = 0.95;
     g.add(seam);
     for (const sx of [-1, 1]) {
       const rail = new THREE.Mesh(new THREE.TorusGeometry(0.6, 0.09, 8, 14, Math.PI), M.main);
-      rail.position.set(sx * 2.18, 1.1, -0.4);
+      rail.position.set(sx * 2.14, 0.95, -0.4);
       rail.rotation.y = sx * Math.PI / 2;
       rail.castShadow = true;
       g.add(rail);
     }
-    P('C3', '포탑', g, { pos: [0, 4.5, 0.45], lieRot: [Math.PI / 2, 0, 0], order: 9 });
+    P('C3', '포탑', g, { pos: [0, 4.5, 0.45], lieRot: [Math.PI / 2, 0, 0], order: 24 });
   }
 
   // ---- C4 큐폴라
@@ -96,7 +97,7 @@ export function buildT34() {
     const seam = grooveRing(0.86, 0.055, M.groove);
     seam.position.y = 0.62;
     g.add(seam);
-    P('C4', '큐폴라', g, { pos: [-0.95, 6.65, 0.1], lieRot: [Math.PI / 2, 0, 0], order: 11, runner: 'B' });
+    P('C4', '큐폴라', g, { pos: [-0.95, 6.12, 0.1], lieRot: [Math.PI / 2, 0, 0], order: 26, runner: 'B' });
   }
 
   // ---- C5 장전수 해치
@@ -108,7 +109,7 @@ export function buildT34() {
     hinge.position.set(0.62, 0.02, 0);
     g.add(hinge);
     fastenerRow(g, [-0.35, 0.12, -0.32], [-0.35, 0.12, 0.32], 2, 0.1, [0, 1, 0], M.main, 'hex');
-    P('C5', '장전수 해치', g, { pos: [1.0, 6.68, 0.1], lieRot: [0, 0, 0], order: 12, runner: 'B' });
+    P('C5', '장전수 해치', g, { pos: [1.0, 6.16, 0.1], lieRot: [0, 0, 0], order: 27, runner: 'B' });
   }
 
   // ---- C6 주포 (85mm — 뚱뚱+길게)
@@ -123,44 +124,55 @@ export function buildT34() {
     tip.position.z = 4.2;
     g.add(mantlet, collar, barrel, tip);
     fastenerRow(g, [-0.7, 0.55, 0.51], [0.7, 0.55, 0.51], 3, 0.12, [0, 0, 1], M.main, 'hex');
-    P('C6', '주포', g, { pos: [0, 5.5, 2.55], lieRot: [Math.PI / 2, Math.PI / 2, 0], order: 10 });
+    P('C6', '주포', g, { pos: [0, 5.4, 2.45], lieRot: [Math.PI / 2, Math.PI / 2, 0], order: 25 });
   }
 
-  // ---- C7~C10 트랙 (링크&렝스 2피스/측)
+  // ---- C7~ 트랙 (링크&렝스 — 평면 파츠)
+  let idNum = 7;
   {
-    let idNum = 7, order = 4;
+    let order = 4;
     for (const [side, sx] of [['좌', -1], ['우', 1]]) {
-      const pieces = trackPieces(CIRCLES, 1.7, 0.42, M.main, { cleatOut: 0.34, cleatWide: 0.5 });
-      pieces.forEach((piece, i) => {
-        const { mesh, center } = centered(piece);
-        P(`C${idNum}`, `${side} 트랙 ${PIECE_NAMES[i]}`, mesh, {
-          pos: [sx * 3.05 + center.x, center.y, center.z],
-          lieRot: [0, Math.PI / 2, 0],
+      for (const seg of trackLayout(CIRCLES, 0.42, 1.2)) {
+        const mesh = seg.kind === 'length'
+          ? trackLengthPiece(seg.len, 1.7, 0.42, M.main, { cleatOut: 0.32 })
+          : trackLinkPiece(seg.len, 1.7, 0.42, M.main, { cleatOut: 0.32 });
+        P(`C${idNum}`, `${side} 트랙 ${seg.kind === 'length' ? '렝스' : '링크'}`, mesh, {
+          pos: [sx * 3.05, seg.pos[1], seg.pos[0]],
+          rot: [-seg.theta, 0, 0],
+          lieRot: [-Math.PI / 2, Math.PI / 2, 0],
           order: order++,
           runner: 'B',
         });
         idNum++;
-      });
+      }
     }
   }
 
-  // ---- C11/C12 로드휠 세트 (거대 크리스티 휠 3개 일체 몰드)
-  for (const [id, name, sx, order] of [['C11', '좌 로드휠', -1, 2], ['C12', '우 로드휠', 1, 3]]) {
+  // ---- 로드휠 세트 (크리스티 휠 3개 — 평면 일렬 + 보이는 연결 탭)
+  for (const [name, sx, order] of [['좌 로드휠', -1, 2], ['우 로드휠', 1, 3]]) {
     const g = new THREE.Group();
-    const beam = chamferBox(0.5, 0.6, 4.6, 0.12, M.main);
-    beam.position.x = sx * -0.5;
-    g.add(beam);
-    for (const wz of [-1.85, 0, 1.85]) {
-      const w = roadWheel(1.05, 1.35, M.main, M.groove, { bolts: 6 });
-      wheelHoles(w, 1.05, 1.35, M.groove, 5);
+    for (const wz of [-2.15, 0, 2.15]) {
+      const w = roadWheel(0.98, 1.3, M.main, M.groove, { bolts: 6 });
+      wheelHoles(w, 0.98, 1.3, M.groove, 5);
       w.position.z = wz;
       g.add(w);
     }
-    P(id, name, g, { pos: [sx * 3.05, 1.5, 0], lieRot: [0, Math.PI / 2, 0], order, runner: 'B' });
+    for (const wz of [-2.75, 2.75]) {
+      const w = roadWheel(0.72, 1.0, M.main, M.groove, { bolts: 5 });
+      w.position.set(0, 0, wz);
+      g.add(w);
+    }
+    for (const tz of [-1.08, 1.08, -2.5, 2.5]) {
+      const tab = chamferBox(0.34, 0.3, 0.44, 0.06, M.main);
+      tab.position.set(0, 0, tz);
+      g.add(tab);
+    }
+    P(`C${idNum}`, name, g, { pos: [sx * 3.05, 1.35, 0], lieRot: [0, Math.PI / 2, 0], order, runner: 'B' });
+    idNum++;
   }
 
-  // ---- C13/C14 사이드 연료탱크
-  for (const [id, name, sx, order] of [['C13', '좌 연료탱크', -1, 13], ['C14', '우 연료탱크', 1, 14]]) {
+  // ---- 사이드 연료탱크
+  for (const [name, sx, order] of [['좌 연료탱크', -1, 28], ['우 연료탱크', 1, 29]]) {
     const g = new THREE.Group();
     const drumT = cylZ(0.62, 0.62, 2.0, M.main, 18);
     g.add(drumT);
@@ -169,10 +181,11 @@ export function buildT34() {
       strap.position.z = bz;
       g.add(strap);
     }
-    P(id, name, g, { pos: [sx * 3.1, 3.7, -2.0], lieRot: [Math.PI / 2, 0, 0], order, runner: 'B' });
+    P(`C${idNum}`, name, g, { pos: [sx * 3.1, 3.6, -2.0], lieRot: [Math.PI / 2, 0, 0], order, runner: 'B' });
+    idNum++;
   }
 
-  // ---- C15 후면 배기
+  // ---- 후면 배기
   {
     const g = new THREE.Group();
     const plate = chamferBox(2.4, 1.4, 0.26, 0.1, M.main);
@@ -193,11 +206,11 @@ export function buildT34() {
         new THREE.Vector3(0, 0.64, -0.76).normalize()
       )
     );
-    P('C15', '후면 배기', g, { pos: [0, 4.44, -3.66], rot: [e.x, e.y, e.z], lieRot: [0, 0, 0], order: 15, runner: 'B' });
+    P(`C${idNum}`, '후면 배기', g, { pos: [0, 4.44, -3.66], rot: [e.x, e.y, e.z], lieRot: [0, 0, 0], order: 30, runner: 'B' });
   }
 
   return {
     key: 't34', label: 'T-34', sub: 'WWII · 소련', color,
-    runnerWidths: { A: 20, B: 20 }, parts,
+    runnerWidths: { A: 20, B: 22 }, parts,
   };
 }
