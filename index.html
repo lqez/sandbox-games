@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sandbox Games</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🕹</text></svg>">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Segoe UI', 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif;
+    min-height: 100vh;
+    background: linear-gradient(160deg, #9cc8ee, #dbeafe);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 28px;
+    padding: 40px 20px;
+    color: #2b3445;
+  }
+  h1 { font-size: 32px; letter-spacing: 1px; }
+  p.sub { color: #55607a; }
+  .games {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px;
+    justify-content: center;
+  }
+  a.card {
+    display: block;
+    width: 260px;
+    background: rgba(255, 255, 255, 0.92);
+    border: 3px solid #2b3445;
+    border-radius: 16px;
+    box-shadow: 0 6px 0 rgba(43, 52, 69, 0.35);
+    padding: 22px;
+    text-decoration: none;
+    color: inherit;
+    transition: transform 0.08s;
+  }
+  a.card:hover { transform: translateY(-3px); }
+  a.card:active { transform: translateY(2px); box-shadow: 0 2px 0 rgba(43, 52, 69, 0.35); }
+  .card .emoji { font-size: 40px; }
+  .card h2 { font-size: 20px; margin: 10px 0 6px; }
+  .card p { font-size: 13px; color: #55607a; line-height: 1.5; }
+</style>
+</head>
+<body>
+  <h1>🕹 Sandbox Games</h1>
+  <p class="sub">미니 게임 실험실 — 하나씩 늘려갑니다.</p>
+  <div class="games">
+    <a class="card" href="./puratank/">
+      <div class="emoji">🛠🔧</div>
+      <h2>PURATANK</h2>
+      <p>SD 플라모델 스타일 턴제 탱크 전투. 이동하고, 조준하고, 적 탱크를 부품 단위로 분해하세요!</p>
+    </a>
+  </div>
+</body>
+</html>
