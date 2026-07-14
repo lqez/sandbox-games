@@ -1,4 +1,4 @@
-// main.js — PURATANK 파츠/런너/조립 애니메이션 뷰어
+// main.js — PURATANK 파츠/런너/조립 애니메이션 뷰어 (런너 A/B 2장 체제)
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { plasticMaterial } from './plamo.js';
@@ -9,6 +9,7 @@ import { buildT34 } from './tanks/t34.js';
 import { buildTiger1 } from './tanks/tiger1.js';
 
 const BUILDERS = { ft: buildRenaultFT, mk4: buildMark4, t34: buildT34, tiger: buildTiger1 };
+const RUNNER_KEYS = ['A', 'B'];
 
 // ---------------------------------------------------------------- renderer
 const canvas = document.getElementById('view');
@@ -20,7 +21,7 @@ renderer.toneMapping = THREE.ACESFilmicToneMapping;
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0xf1efe9);
-scene.fog = new THREE.Fog(0xf1efe9, 70, 140);
+scene.fog = new THREE.Fog(0xf1efe9, 80, 160);
 
 const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 300);
 camera.position.set(15, 10, 19);
@@ -35,8 +36,8 @@ const key = new THREE.DirectionalLight(0xfff1de, 2.4);
 key.position.set(9, 16, 8);
 key.castShadow = true;
 key.shadow.mapSize.set(2048, 2048);
-key.shadow.camera.left = key.shadow.camera.bottom = -26;
-key.shadow.camera.right = key.shadow.camera.top = 26;
+key.shadow.camera.left = key.shadow.camera.bottom = -30;
+key.shadow.camera.right = key.shadow.camera.top = 30;
 key.shadow.bias = -0.0004;
 scene.add(key);
 const fill = new THREE.DirectionalLight(0xd7e4ff, 0.7);
@@ -47,7 +48,7 @@ rim.position.set(-4, 9, -12);
 scene.add(rim);
 
 const floor = new THREE.Mesh(
-  new THREE.CircleGeometry(70, 48),
+  new THREE.CircleGeometry(80, 48),
   new THREE.MeshStandardMaterial({ color: 0xe6e1d6, roughness: 0.95 })
 );
 floor.rotation.x = -Math.PI / 2;
@@ -58,14 +59,14 @@ scene.add(floor);
 const content = new THREE.Group(); // 현재 표시물 전체
 scene.add(content);
 
-let state = null; // { def, holders, runnerRoot, tankRoot, duration }
+let state = null; // { def, holders, runnerRoots, runnerData, tankRoot, duration }
 let mode = 'done';
 let tankKey = 't34';
 let animT = 0;
 let playing = false;
 let spin = true;
 
-const POP = 0.32, FLY = 0.85, STAGGER = 0.5;
+const POP = 0.32, FLY = 0.85, STAGGER = 0.42;
 
 function euler(arr) { return new THREE.Euler(arr[0], arr[1], arr[2]); }
 
@@ -77,10 +78,14 @@ function clearContent() {
 function buildState(keyName) {
   const def = BUILDERS[keyName]();
   const runnerMat = plasticMaterial(def.color);
-  const runnerData = buildRunner(def.parts, runnerMat, { width: def.runnerWidth });
-
-  const runnerRoot = new THREE.Group();
-  runnerRoot.add(runnerData.group);
+  const runnerData = {}, runnerRoots = {};
+  for (const rk of RUNNER_KEYS) {
+    const subset = def.parts.filter((p) => p.runner === rk);
+    if (!subset.length) continue;
+    runnerData[rk] = buildRunner(subset, runnerMat, { width: def.runnerWidths[rk] });
+    runnerRoots[rk] = new THREE.Group();
+    runnerRoots[rk].add(runnerData[rk].group);
+  }
   const tankRoot = new THREE.Group();
 
   const holders = def.parts
@@ -89,12 +94,12 @@ function buildState(keyName) {
     .map((part) => {
       const holder = new THREE.Group();
       holder.add(part.mesh);
-      const slot = runnerData.slots.get(part.id);
-      return { part, holder, slot };
+      const slot = runnerData[part.runner].slots.get(part.id);
+      return { part, holder, slot, runnerKey: part.runner };
     });
 
   const duration = STAGGER * (holders.length - 1) + POP + FLY;
-  return { def, holders, runnerRoot, tankRoot, runnerData, duration };
+  return { def, holders, runnerRoots, runnerData, tankRoot, duration };
 }
 
 function placeOnRunner(h) {
@@ -117,7 +122,7 @@ function setView(nextTank, nextMode) {
   setCaption('');
 
   if (mode === 'lineup') {
-    const xs = { ft: -17.5, mk4: -6, t34: 5.5, tiger: 17 };
+    const xs = { ft: -16.5, mk4: -5.5, t34: 5.5, tiger: 16.5 };
     for (const k of ['ft', 'mk4', 't34', 'tiger']) {
       const s = buildState(k);
       s.tankRoot.position.set(xs[k], 0, 0);
@@ -129,41 +134,52 @@ function setView(nextTank, nextMode) {
       content.add(s.tankRoot);
     }
     state = null;
-    frameCamera(new THREE.Vector3(0, 3.2, 0), 47, [0.12, 0.5, 1.0]);
+    frameCamera(new THREE.Vector3(0, 3.4, 0), 45, [0.12, 0.5, 1.0]);
     updateUI();
     return;
   }
 
   state = buildState(tankKey);
+  const rd = state.runnerData;
 
   if (mode === 'runner') {
-    state.runnerRoot.position.set(0, state.runnerData.h / 2 + 1.4, 0);
-    state.runnerRoot.rotation.y = 0.0;
+    // A/B 런너를 나란히 세워 표시
+    const gap = 2.2;
+    const totalW = rd.A.w + rd.B.w + gap;
+    let x = -totalW / 2;
+    let maxH = 0;
+    for (const rk of RUNNER_KEYS) {
+      state.runnerRoots[rk].position.set(x + rd[rk].w / 2, rd[rk].h / 2 + 1.4, 0);
+      x += rd[rk].w + gap;
+      maxH = Math.max(maxH, rd[rk].h);
+      content.add(state.runnerRoots[rk]);
+    }
     for (const h of state.holders) {
       placeOnRunner(h);
-      state.runnerRoot.add(h.holder);
+      state.runnerRoots[h.runnerKey].add(h.holder);
     }
-    content.add(state.runnerRoot);
-    const rd = Math.max(state.runnerData.w * 1.25, state.runnerData.h * 1.6) + 6;
-    frameCamera(new THREE.Vector3(0, state.runnerData.h / 2 + 1.4, 0), rd, [0.3, 0.3, 1.0]);
+    const dist = Math.max(totalW * 1.05, maxH * 1.7) + 6;
+    frameCamera(new THREE.Vector3(0, maxH / 2 + 1.6, 0), dist, [0.25, 0.28, 1.0]);
   } else if (mode === 'done') {
     for (const h of state.holders) {
       placeAssembled(h);
       state.tankRoot.add(h.holder);
     }
     content.add(state.tankRoot);
-    frameCamera(new THREE.Vector3(0, 3.4, 0), 23);
+    frameCamera(new THREE.Vector3(0, 3.6, 0), 22);
   } else if (mode === 'build') {
-    state.runnerRoot.position.set(-11.5, state.runnerData.h / 2 + 1.2, -3);
-    state.runnerRoot.rotation.y = 0.55;
-    state.tankRoot.position.set(5.5, 0, 0);
+    state.runnerRoots.A.position.set(-16, rd.A.h / 2 + 1.2, -4);
+    state.runnerRoots.A.rotation.y = 0.5;
+    state.runnerRoots.B.position.set(-6.5, rd.B.h / 2 + 1.2, -7.5);
+    state.runnerRoots.B.rotation.y = 0.5;
+    state.tankRoot.position.set(7, 0, 0.5);
     state.tankRoot.rotation.y = -0.35;
-    content.add(state.runnerRoot, state.tankRoot);
+    content.add(state.runnerRoots.A, state.runnerRoots.B, state.tankRoot);
     for (const h of state.holders) content.add(h.holder);
     animT = 0;
     playing = true;
     applyBuild(0);
-    frameCamera(new THREE.Vector3(-2.5, 4.5, 0), 33);
+    frameCamera(new THREE.Vector3(-2, 4.8, -1), 36);
   }
   updateUI();
 }
@@ -196,14 +212,14 @@ function applyBuild(t) {
   state.holders.forEach((h, i) => {
     const start = i * STAGGER;
     const local = t - start;
-    const startPose = worldPose(state.runnerRoot, h.slot.pos, h.slot.rot);
+    const runnerRoot = state.runnerRoots[h.runnerKey];
+    const startPose = worldPose(runnerRoot, h.slot.pos, h.slot.rot);
     const endPose = worldPose(
       state.tankRoot,
       new THREE.Vector3(...h.part.assembled.pos),
       euler(h.part.assembled.rot)
     );
-    const runnerNormal = new THREE.Vector3(0, 0, 1)
-      .applyQuaternion(state.runnerRoot.quaternion);
+    const runnerNormal = new THREE.Vector3(0, 0, 1).applyQuaternion(runnerRoot.quaternion);
 
     if (local <= 0) {
       h.holder.position.copy(startPose.p);
@@ -225,7 +241,7 @@ function applyBuild(t) {
       const a = startPose.p.clone().addScaledVector(runnerNormal, 1.7);
       const b = endPose.p;
       const ctrl = a.clone().lerp(b, 0.5);
-      ctrl.y = Math.max(a.y, b.y) + 3.2;
+      ctrl.y = Math.max(a.y, b.y) + 3.0;
       // 2차 베지어
       const p1 = a.clone().lerp(ctrl, k), p2 = ctrl.clone().lerp(b, k);
       h.holder.position.copy(p1.lerp(p2, k));

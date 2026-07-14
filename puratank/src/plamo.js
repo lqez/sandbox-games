@@ -348,6 +348,97 @@ export function beltOutlinePoints(circles, inset, spacing) {
   return out;
 }
 
+// 링크&렝스(link & length) 궤도: 벨트를 "원호+직선" 피스로 분할해
+// 런너에 평면 파츠로 몰드하고 서로 끼워 조립하는 스냅킷 방식.
+// 각 피스 = 바퀴 i를 감는 원호 + 다음 바퀴까지의 직선 런. 끝에 연결 탭(수 페그).
+// 반환: 피스 그룹 배열 (벨트 로컬 좌표 — 호출측에서 centered() 후 배치)
+export function trackPieces(circles, w, t, mat, opts = {}) {
+  const n = circles.length;
+  const cleatSpacing = opts.cleatSpacing ?? 0.62;
+  const cleatOut = opts.cleatOut ?? 0.3;
+  const cleatWide = opts.cleatWide ?? 0.44;
+  const bevel = 0.09;
+  // 각 (i → i+1) 외접 탄젠트 각도
+  const tang = [];
+  for (let i = 0; i < n; i++) {
+    const c1 = circles[i], c2 = circles[(i + 1) % n];
+    const L = Math.hypot(c2.z - c1.z, c2.y - c1.y);
+    const base = Math.atan2(c2.y - c1.y, c2.z - c1.z);
+    tang.push(base - Math.acos(Math.min(1, Math.max(-1, (c1.r - c2.r) / L))));
+  }
+  const pieces = [];
+  for (let i = 0; i < n; i++) {
+    const cur = circles[i], nxt = circles[(i + 1) % n];
+    let aIn = tang[(i - 1 + n) % n], aOut = tang[i];
+    while (aOut < aIn) aOut += Math.PI * 2;
+    const outer = [], inner = [];
+    const steps = Math.max(3, Math.ceil((aOut - aIn) / 0.16));
+    for (let k = 0; k <= steps; k++) {
+      const a = aIn + ((aOut - aIn) * k) / steps;
+      outer.push(new THREE.Vector2(cur.z + cur.r * Math.cos(a), cur.y + cur.r * Math.sin(a)));
+      inner.push(new THREE.Vector2(cur.z + (cur.r - t) * Math.cos(a), cur.y + (cur.r - t) * Math.sin(a)));
+    }
+    // 다음 바퀴 탄젠트 포인트까지 직선 런
+    outer.push(new THREE.Vector2(nxt.z + nxt.r * Math.cos(tang[i]), nxt.y + nxt.r * Math.sin(tang[i])));
+    inner.push(new THREE.Vector2(nxt.z + (nxt.r - t) * Math.cos(tang[i]), nxt.y + (nxt.r - t) * Math.sin(tang[i])));
+
+    const shape = new THREE.Shape();
+    shape.setFromPoints(
+      [...outer, ...inner.slice().reverse()].map((p) => new THREE.Vector2(-p.x, p.y))
+    );
+    const geo = new THREE.ExtrudeGeometry(shape, {
+      depth: w - bevel * 2,
+      bevelEnabled: true,
+      bevelThickness: bevel,
+      bevelSize: bevel,
+      bevelSegments: 2,
+      curveSegments: 4,
+    });
+    geo.rotateY(Math.PI / 2);
+    geo.translate(-(w - bevel * 2) / 2, 0, 0);
+    const g = new THREE.Group();
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.castShadow = mesh.receiveShadow = true;
+    g.add(mesh);
+
+    // 클리트(트랙 슈) — 통통하게, 옆으로 튀어나오게
+    const lens = [0];
+    for (let k = 1; k < outer.length; k++) lens.push(lens[k - 1] + outer[k].distanceTo(outer[k - 1]));
+    const total = lens[lens.length - 1];
+    const cCount = Math.max(2, Math.round(total / cleatSpacing));
+    for (let k = 0; k < cCount; k++) {
+      const target = total * ((k + 0.5) / cCount);
+      let m = 1;
+      while (m < lens.length - 1 && lens[m] < target) m++;
+      const t01 = (target - lens[m - 1]) / Math.max(1e-6, lens[m] - lens[m - 1]);
+      const p = outer[m - 1].clone().lerp(outer[m], t01);
+      const dir = outer[m].clone().sub(outer[m - 1]).normalize();
+      const normal = new THREE.Vector2(dir.y, -dir.x);
+      const cleat = new THREE.Mesh(
+        new THREE.BoxGeometry(w + cleatWide, cleatOut + 0.18, cleatSpacing * 0.52),
+        mat
+      );
+      cleat.castShadow = true;
+      cleat.position.set(0, p.y + normal.y * cleatOut * 0.3, p.x + normal.x * cleatOut * 0.3);
+      cleat.rotation.x = -Math.atan2(dir.y, dir.x);
+      g.add(cleat);
+    }
+
+    // 연결 탭(수 페그) — 피스 끝단에서 진행 방향으로 돌출
+    const oe = outer[outer.length - 1], ie = inner[inner.length - 1];
+    const emid = oe.clone().add(ie).multiplyScalar(0.5);
+    // 진행 방향 = 직선 런의 방향
+    const p1 = outer[steps], p2 = outer[steps + 1];
+    const sdir = p2.clone().sub(p1).normalize();
+    const tab = new THREE.Mesh(new THREE.BoxGeometry(w * 0.5, t * 0.7, 0.5), mat);
+    tab.position.set(0, emid.y + sdir.y * 0.2, emid.x + sdir.x * 0.2);
+    tab.rotation.x = -Math.atan2(sdir.y, sdir.x);
+    g.add(tab);
+    pieces.push(g);
+  }
+  return pieces;
+}
+
 // 로드휠: 축이 X방향인 통통한 바퀴 + 허브캡 + 육각 볼트 링
 export function roadWheel(r, w, mat, grooveMat, opts = {}) {
   const g = new THREE.Group();
@@ -398,6 +489,8 @@ export function definePart(id, name, mesh, opts) {
     id,
     name,
     mesh,
+    // 소속 런너 (A/B)
+    runner: opts.runner ?? 'A',
     // 런너 위에 눕히는 회전 (기본: 그대로)
     lieRot: opts.lieRot ?? [0, 0, 0],
     // 완성 시 로컬 트랜스폼
