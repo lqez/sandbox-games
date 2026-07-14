@@ -29,20 +29,13 @@
   }
   #hud {
     top: 14px; left: 14px;
-    min-width: 230px;
+    min-width: 210px;
     pointer-events: none;
   }
-  #hud h1 {
-    font-size: 20px;
-    letter-spacing: 1px;
-    display: flex;
-    align-items: baseline;
-    gap: 8px;
-  }
-  #hud h1 small { font-size: 11px; font-weight: 600; color: #6b7688; }
-  #turn-label { margin-top: 6px; font-size: 14px; font-weight: 700; color: #1d4ed8; }
-  #hint { margin-top: 4px; font-size: 13px; line-height: 1.45; }
-  #player-hp { margin-top: 8px; font-size: 12px; font-weight: 700; }
+  #hud h1 { font-size: 16px; letter-spacing: 1px; }
+  #turn-label { margin-top: 4px; font-size: 14px; font-weight: 700; color: #1d4ed8; }
+  #hint { margin-top: 3px; font-size: 12px; font-weight: 600; color: #b0452c; min-height: 15px; }
+  #player-hp { margin-top: 6px; font-size: 12px; font-weight: 700; }
   #player-hp .bar {
     margin-top: 3px;
     width: 100%; height: 10px;
@@ -79,14 +72,22 @@
   button:active { transform: translateY(3px); box-shadow: 0 1px 0 #2b3445; }
   button.secondary { background: #8b95a8; }
   button:disabled { background: #b9c0cc; cursor: default; box-shadow: 0 4px 0 #7c8494; }
+  button.mode { background: #8b95a8; }
+  #btn-move-mode.on { background: #2f7ee0; }
+  #btn-fire-mode.on { background: #d0342c; }
 
-  #help {
-    bottom: 14px; right: 14px;
-    font-size: 11px;
-    color: #4a5568;
-    padding: 8px 12px;
-    pointer-events: none;
+  #perf {
+    top: 14px; right: 14px;
+    font-family: 'Consolas', 'Menlo', monospace;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 7px 11px;
+    cursor: pointer;
+    text-align: right;
+    min-width: 74px;
   }
+  #perf .row { color: #55607a; margin-top: 2px; display: none; }
+  #perf.open .row { display: block; }
 
   #overlay {
     position: fixed; inset: 0;
@@ -119,26 +120,29 @@
   <div id="app"></div>
 
   <div id="hud" class="panel">
-    <h1>🛠 PURATANK <small>SD 플라모델 턴제 탱크</small></h1>
-    <div id="turn-label">턴 1 — 아군 차례</div>
-    <div id="hint">행동력 2 — 이동과 포격을 자유 순서로.</div>
+    <h1>🛠 PURATANK</h1>
+    <div id="turn-label">턴 1</div>
+    <div id="hint"></div>
     <div id="player-hp">
-      내 탱크 HP <span id="player-hp-num">140 / 140</span>
+      HP <span id="player-hp-num">140 / 140</span>
       <div class="bar"><div class="fill" id="player-hp-fill"></div></div>
       <div id="level-label" style="margin-top:5px; font-weight:600; color:#55607a;"></div>
     </div>
   </div>
 
-  <div id="controls" class="panel">
-    <button id="btn-action">턴 종료 (행동력 2)</button>
-    <button id="btn-restart" class="secondary">다시 시작</button>
-    <button id="btn-garage" class="secondary">🛠 차고</button>
+  <div id="perf" class="panel">
+    <div id="perf-fps">-- FPS</div>
+    <div class="row" id="perf-ms">-- ms</div>
+    <div class="row" id="perf-dc">DC --</div>
+    <div class="row" id="perf-tri">TRI --</div>
   </div>
 
-  <div id="help" class="panel">
-    드래그: 카메라 회전 · 휠/핀치: 줌 · 우클릭 드래그: 이동<br>
-    지형 속도: 풀 &gt; 흙 &gt; 모래 &gt; 진흙 &gt; 강(도하)<br>
-    수목·건물·장애물·지형 전부 포격으로 파괴 가능
+  <div id="controls" class="panel">
+    <button id="btn-move-mode" class="mode on">🚚 이동</button>
+    <button id="btn-fire-mode" class="mode">🎯 포격</button>
+    <button id="btn-wait" class="secondary">⏸ 대기</button>
+    <button id="btn-restart" class="secondary">↻</button>
+    <button id="btn-garage" class="secondary">🛠</button>
   </div>
 
   <div id="overlay">

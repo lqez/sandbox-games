@@ -964,6 +964,25 @@ function computeShot(attacker, target, fromCell = null) {
   return { ok: true, chance, distCells, pitch, cover };
 }
 
+// 사격 가능한 모든 셀 스캔: 사거리·부앙각·사선(LoS)이 유효한 셀만 반환.
+// 셀에 유닛/프랍이 있으면 그것을 조준한 판정, 빈 칸이면 지면 판정.
+function computeFireCells(unit) {
+  const out = new Map();
+  const R = Math.ceil(unit.fireRange);
+  for (let gx = unit.gx - R; gx <= unit.gx + R; gx++) {
+    for (let gz = unit.gz - R; gz <= unit.gz + R; gz++) {
+      if (!inBounds(gx, gz)) continue;
+      if (gx === unit.gx && gz === unit.gz) continue;
+      const occ = units.find((t) => t.alive && t !== unit && t.gx === gx && t.gz === gz);
+      const prop = props.get(cellKey(gx, gz));
+      const target = occ ? { unit: occ } : prop ? { prop } : { gx, gz };
+      const shot = computeShot(unit, target);
+      if (shot.ok) out.set(cellKey(gx, gz), { gx, gz, shot });
+    }
+  }
+  return out;
+}
+
 // ---------------------------------------------------------------------------
 // 트윈
 // ---------------------------------------------------------------------------
@@ -1357,13 +1376,18 @@ async function fireSequence(attacker, target, shot) {
 // ---------------------------------------------------------------------------
 const moveHighlightGroup = new THREE.Group();
 scene.add(moveHighlightGroup);
+// 이동(파랑)/포격(빨강) 필드 재질 — 활성 모드는 채움+굵은 외곽선,
+// 비활성 모드는 얇은 외곽선만 그려 두 영역이 겹쳐도 읽기 쉽게 한다
 const moveFillMat = new THREE.MeshBasicMaterial({
   color: 0x4da3ff, transparent: true, opacity: 0.26, side: THREE.DoubleSide, depthWrite: false,
 });
 const moveEdgeMat = new THREE.MeshBasicMaterial({ color: 0x2f7fe0, transparent: true, opacity: 0.9, depthWrite: false });
-const fireRingMat = new THREE.MeshBasicMaterial({
-  color: 0xff5544, transparent: true, opacity: 0.55, side: THREE.DoubleSide, depthWrite: false,
+const moveEdgeThinMat = new THREE.MeshBasicMaterial({ color: 0x2f7fe0, transparent: true, opacity: 0.3, depthWrite: false });
+const fireFillMat = new THREE.MeshBasicMaterial({
+  color: 0xff5544, transparent: true, opacity: 0.16, side: THREE.DoubleSide, depthWrite: false,
 });
+const fireEdgeMat = new THREE.MeshBasicMaterial({ color: 0xd0342c, transparent: true, opacity: 0.9, depthWrite: false });
+const fireEdgeThinMat = new THREE.MeshBasicMaterial({ color: 0xd0342c, transparent: true, opacity: 0.32, depthWrite: false });
 
 const groundY = (x, z) => Math.max(sampleHeight(x, z), WATER_Y);
 
@@ -1446,62 +1470,57 @@ function loopTube(pts, lift, radius, mat) {
   return new THREE.Mesh(geo, mat);
 }
 
-// 이동 가능 영역: 콘벡스헐 느낌의 범위 필드 (부드러운 경계 + 지형 밀착 채움)
-function showMoveField(cells) {
-  if (!cells.size) return;
-  const set = new Set(cells.keys());
-  set.add(cellKey(player.gx, player.gz)); // 자기 칸 포함해 구멍 방지
+// 셀 집합 → 콘벡스헐 느낌의 범위 필드 (차이킨 스무딩 경계 + 지형 밀착 채움)
+// fill=false면 얇은 외곽선만 (비활성 모드 표시용)
+function showCellField(cellKeys, { fillMat, edgeMat, fill = true, edgeRadius = 0.09 }) {
+  const set = cellKeys instanceof Set ? cellKeys : new Set(cellKeys);
+  if (!set.size) return;
   const loops = boundaryLoops(set).map((l) => chaikin(l, 2));
-
-  // 채움: 0.5 간격 서브셀 래스터 → 지형 굴곡을 따라가는 쿼드
-  const step = 0.5;
-  const verts = [];
-  let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
-  for (const loop of loops) {
-    for (const [x, z] of loop) {
-      minX = Math.min(minX, x); maxX = Math.max(maxX, x);
-      minZ = Math.min(minZ, z); maxZ = Math.max(maxZ, z);
+  if (fill) {
+    // 채움: 0.5 간격 서브셀 래스터 → 지형 굴곡을 따라가는 쿼드
+    const step = 0.5;
+    const verts = [];
+    let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+    for (const loop of loops) {
+      for (const [x, z] of loop) {
+        minX = Math.min(minX, x); maxX = Math.max(maxX, x);
+        minZ = Math.min(minZ, z); maxZ = Math.max(maxZ, z);
+      }
     }
-  }
-  for (let x = minX; x < maxX; x += step) {
-    for (let z = minZ; z < maxZ; z += step) {
-      if (!insideLoops(loops, x + step / 2, z + step / 2)) continue;
-      const y00 = groundY(x, z) + 0.05, y10 = groundY(x + step, z) + 0.05;
-      const y01 = groundY(x, z + step) + 0.05, y11 = groundY(x + step, z + step) + 0.05;
-      verts.push(x, y00, z, x, y01, z + step, x + step, y10, z);
-      verts.push(x + step, y10, z, x, y01, z + step, x + step, y11, z + step);
+    for (let x = minX; x < maxX; x += step) {
+      for (let z = minZ; z < maxZ; z += step) {
+        if (!insideLoops(loops, x + step / 2, z + step / 2)) continue;
+        const y00 = groundY(x, z) + 0.05, y10 = groundY(x + step, z) + 0.05;
+        const y01 = groundY(x, z + step) + 0.05, y11 = groundY(x + step, z + step) + 0.05;
+        verts.push(x, y00, z, x, y01, z + step, x + step, y10, z);
+        verts.push(x + step, y10, z, x, y01, z + step, x + step, y11, z + step);
+      }
     }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(verts), 3));
+    moveHighlightGroup.add(new THREE.Mesh(geo, fillMat));
   }
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(verts), 3));
-  moveHighlightGroup.add(new THREE.Mesh(geo, moveFillMat));
-  for (const loop of loops) moveHighlightGroup.add(loopTube(loop, 0.09, 0.09, moveEdgeMat));
+  for (const loop of loops) moveHighlightGroup.add(loopTube(loop, 0.09, fill ? edgeRadius : edgeRadius * 0.55, edgeMat));
 }
 
-// 사격 가능 범위: 지형을 따라가는 링 밴드 (맵 밖 구간은 생략)
-function showFireRange(unit) {
-  const c = cellToWorld(unit.gx, unit.gz);
-  const R = unit.fireRange * TILE;
-  const SEG = 160;
-  const half = 0.14;
-  const verts = [];
-  const inMap = (x, z) => Math.abs(x) <= HALF + 0.6 && Math.abs(z) <= HALF + 0.6;
-  for (let i = 0; i < SEG; i++) {
-    const a0 = (i / SEG) * Math.PI * 2;
-    const a1 = ((i + 1) / SEG) * Math.PI * 2;
-    const p = (a, r) => [c.x + Math.sin(a) * r, c.z + Math.cos(a) * r];
-    const [x0i, z0i] = p(a0, R - half), [x0o, z0o] = p(a0, R + half);
-    const [x1i, z1i] = p(a1, R - half), [x1o, z1o] = p(a1, R + half);
-    if (!inMap((x0i + x1o) / 2, (z0i + z1o) / 2)) continue;
-    const y0i = groundY(x0i, z0i) + 0.08, y0o = groundY(x0o, z0o) + 0.08;
-    const y1i = groundY(x1i, z1i) + 0.08, y1o = groundY(x1o, z1o) + 0.08;
-    verts.push(x0i, y0i, z0i, x0o, y0o, z0o, x1i, y1i, z1i);
-    verts.push(x0o, y0o, z0o, x1o, y1o, z1o, x1i, y1i, z1i);
-  }
-  if (!verts.length) return;
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(verts), 3));
-  moveHighlightGroup.add(new THREE.Mesh(geo, fireRingMat));
+function showMoveField(cells, active) {
+  const set = new Set(cells.keys());
+  set.add(cellKey(player.gx, player.gz)); // 자기 칸 포함해 구멍 방지
+  showCellField(set, {
+    fillMat: moveFillMat,
+    edgeMat: active ? moveEdgeMat : moveEdgeThinMat,
+    fill: active,
+  });
+}
+
+// 사격 가능 필드: 부앙각/사거리/사선이 전부 유효한 셀만 포함 —
+// 못 쏘는 구역(너무 가까움·능선 차폐 등)은 애초에 영역에서 빠진다
+function showFireField(cells, active) {
+  showCellField(new Set(cells.keys()), {
+    fillMat: fireFillMat,
+    edgeMat: active ? fireEdgeMat : fireEdgeThinMat,
+    fill: active,
+  });
 }
 const targetRings = [];
 const targetRingGeo = new THREE.RingGeometry(1.0, 1.3, 28);
@@ -1600,7 +1619,9 @@ function sfx(kind) {
 // ---------------------------------------------------------------------------
 const turnLabel = document.getElementById('turn-label');
 const hintEl = document.getElementById('hint');
-const btnAction = document.getElementById('btn-action');
+const btnMoveMode = document.getElementById('btn-move-mode');
+const btnFireMode = document.getElementById('btn-fire-mode');
+const btnWait = document.getElementById('btn-wait');
 const btnRestart = document.getElementById('btn-restart');
 const overlay = document.getElementById('overlay');
 const overlayTitle = document.getElementById('overlay-title');
@@ -1611,112 +1632,235 @@ const playerHpFill = document.getElementById('player-hp-fill');
 const levelLabel = document.getElementById('level-label');
 if (levelLabel) levelLabel.textContent = `${KIT_INFO[playerKit].label} · 차체 Lv${player.hullLv} · 조종 Lv${player.driverLv} · 기동 ${player.mp} · 사거리 ${player.fireRange}`;
 
-const setHint = (t) => { hintEl.innerHTML = t; };
+// 상태 메시지: 짧게 표시 후 자동 소거 (포격 불가 사유 등 값만)
+let hintTimer = 0;
+const setHint = (t) => {
+  hintEl.textContent = t;
+  clearTimeout(hintTimer);
+  if (t) hintTimer = setTimeout(() => { hintEl.textContent = ''; }, 2600);
+};
 btnRestart.addEventListener('click', () => location.reload());
 const btnGarage = document.getElementById('btn-garage');
 if (btnGarage) btnGarage.addEventListener('click', () => { location.href = './index.html'; });
 btnAgain.addEventListener('click', () => location.reload());
 
+// 성능 표시: 기본 FPS만, 클릭하면 프레임타임/드로콜/트라이앵글 펼침
+const perfEl = document.getElementById('perf');
+const perfFps = document.getElementById('perf-fps');
+const perfMs = document.getElementById('perf-ms');
+const perfDc = document.getElementById('perf-dc');
+const perfTri = document.getElementById('perf-tri');
+perfEl.addEventListener('click', () => perfEl.classList.toggle('open'));
+renderer.info.autoReset = false; // 컴포저 다중 패스 합산을 위해 수동 리셋
+let perfFrames = 0;
+let perfT0 = performance.now();
+function updatePerf(now) {
+  perfFrames++;
+  if (now - perfT0 < 500) return;
+  const fps = (perfFrames * 1000) / (now - perfT0);
+  perfFps.textContent = `${fps.toFixed(0)} FPS`;
+  perfMs.textContent = `${(1000 / fps).toFixed(1)} ms`;
+  perfDc.textContent = `DC ${renderer.info.render.calls}`;
+  perfTri.textContent = `TRI ${renderer.info.render.triangles.toLocaleString('en-US')}`;
+  perfFrames = 0;
+  perfT0 = now;
+}
+
 // ---------------------------------------------------------------------------
 // 턴 상태 머신
 // ---------------------------------------------------------------------------
-// 행동력(AP) 시스템 (이슈 #6): 턴마다 AP 2.
-// 이동(턴당 1회)과 포격이 각각 AP 1 — 순서 자유.
-// 이동 없이 2연속 포격, 포격 후 이동, 이동 후 포격 모두 가능.
-const AP_PER_TURN = 2;
+// 동시 턴제(WeGo): 턴마다 모든 차량이 행동 1개(AP 1)를 고르고 한꺼번에 진행.
+// 행동은 이동 또는 포격 — 포격은 "셀"을 조준하는 예측 사격이라
+// 목표가 그 턴에 움직이면 빗나간다. 플레이어가 행동을 고르는 즉시
+// 적들도 행동을 계획하고 전원 동시에 해결된다.
+const COLLISION_DMG = 16; // 같은 칸 진입 충돌 시 상호 피해
 let turnNo = 1;
-let phase = 'player-action';
+let phase = 'plan'; // plan | resolve | gameover
 let busy = false;
-let ap = AP_PER_TURN;
-let movedThisTurn = false;
+let planMode = 'move'; // move | fire
 let currentMoveCells = new Map();
-let currentTargets = [];
+let currentFireCells = new Map();
 
-function updateActionButton() {
-  if (phase === 'player-action') { btnAction.textContent = `턴 종료 (행동력 ${ap})`; btnAction.disabled = busy; }
-  else { btnAction.textContent = '적 턴...'; btnAction.disabled = true; }
+function setPlanMode(mode) {
+  planMode = mode;
+  btnMoveMode.classList.toggle('on', mode === 'move');
+  btnFireMode.classList.toggle('on', mode === 'fire');
+  if (phase === 'plan' && !busy) renderFields();
 }
 
-function refreshActionUI() {
+// 겹침 해법: 활성 모드의 필드만 채워 그리고, 비활성 필드는 얇은 외곽선으로만
+// 남긴다 — 두 영역이 겹치는 곳에서도 항상 한 가지 의미(현재 모드)로 읽힌다
+function renderFields() {
   clearHighlights();
-  currentMoveCells = !movedThisTurn && ap > 0 ? reachableCells(player) : new Map();
-  currentTargets = ap > 0
-    ? enemies
-        .filter((e) => e.alive)
-        .map((e) => ({ unit: e, shot: computeShot(player, { unit: e }) }))
-        .filter((t) => t.shot.ok)
-    : [];
-  if (currentMoveCells.size) showMoveField(currentMoveCells);
-  if (ap > 0) showFireRange(player);
-  showTargets(currentTargets);
-  const acts = [];
-  if (!movedThisTurn && ap > 0) acts.push('파란 영역 클릭 = 이동');
-  if (ap > 0) acts.push(currentTargets.length ? `적 클릭 = 포격 (가능 ${currentTargets.length}대)` : '적/지면 클릭 = 포격 (빨간 링 = 사거리)');
-  setHint(
-    `행동력 <b>${ap}</b> — ${acts.join(' · ')}<br>` +
-    '이동 없이 2연속 포격도, 포격 후 이동도 가능합니다. 포신 각도는 목표에 맞춰 자동 조준.'
-  );
-  updateActionButton();
+  if (phase !== 'plan') return;
+  if (planMode === 'move') {
+    showMoveField(currentMoveCells, true);
+    showFireField(currentFireCells, false);
+  } else {
+    showFireField(currentFireCells, true);
+    showMoveField(currentMoveCells, false);
+    showTargets(
+      enemies
+        .filter((e) => e.alive && currentFireCells.has(cellKey(e.gx, e.gz)))
+        .map((e) => ({ unit: e, shot: currentFireCells.get(cellKey(e.gx, e.gz)).shot }))
+    );
+  }
 }
 
-function startPlayerTurn() {
+function startPlanning() {
   if (checkGameEnd()) return;
-  phase = 'player-action';
+  phase = 'plan';
   busy = false;
-  ap = AP_PER_TURN;
-  movedThisTurn = false;
-  turnLabel.textContent = `턴 ${turnNo} — 아군 차례`;
-  refreshActionUI();
+  turnLabel.textContent = `턴 ${turnNo}`;
+  currentMoveCells = reachableCells(player);
+  currentFireCells = computeFireCells(player);
+  renderFields();
 }
 
-// 행동 1회 소비 래퍼: 실행 → AP 차감 → 남으면 계속, 다 쓰면 턴 종료
-async function spendAction(run) {
-  busy = true;
-  clearHighlights();
-  updateActionButton();
-  await run();
-  ap -= 1;
-  if (checkGameEnd()) return;
-  if (ap <= 0) { await endPlayerTurn(); return; }
-  busy = false;
-  refreshActionUI();
+async function submitPlayerPlan(plan) {
+  if (phase !== 'plan' || busy) return;
+  player.plan = plan;
+  planEnemies();
+  await resolveTurn();
 }
 
-async function endPlayerTurn() {
-  clearHighlights();
-  phase = 'enemy';
-  busy = true;
-  turnLabel.textContent = `턴 ${turnNo} — 적 차례`;
-  setHint('적 탱크가 움직이는 중...');
-  updateActionButton();
-
+// 적 AI 계획: 현재 위치에서 명중 기대가 있으면 플레이어의 "현재 칸"을 예측 사격,
+// 아니면 사격 가능 지점으로 재배치/접근
+function planEnemies() {
   for (const enemy of enemies) {
-    if (!player.alive) break;
     if (!enemy.alive) continue;
-    await delay(260);
-    let shot = computeShot(enemy, { unit: player });
-    if (!(shot.ok && shot.chance >= 35)) {
-      // 재배치: 사격 가능한 위치 또는 접근
-      const cells = reachableCells(enemy);
-      let best = null;
-      for (const [key, info] of cells) {
-        const [gx, gz] = key.split(',').map(Number);
-        const s = computeShot(enemy, { unit: player }, { gx, gz });
-        const distP = Math.hypot(gx - player.gx, gz - player.gz);
-        const score = s.ok ? 200 + s.chance - info.cost * 2 : 100 - distP * 5 - info.cost;
-        if (!best || score > best.score) best = { score, info };
-      }
-      if (best && best.info.path.length) await moveUnit(enemy, best.info.path);
-      shot = computeShot(enemy, { unit: player });
+    const shot = computeShot(enemy, { unit: player });
+    if (shot.ok && shot.chance >= 30) {
+      enemy.plan = { type: 'fire', cell: { gx: player.gx, gz: player.gz }, shot };
+      continue;
     }
-    if (shot.ok && shot.chance >= 12) {
-      await fireSequence(enemy, { unit: player }, shot);
+    const cells = reachableCells(enemy);
+    let best = null;
+    for (const [key, info] of cells) {
+      const [gx, gz] = key.split(',').map(Number);
+      const s = computeShot(enemy, { unit: player }, { gx, gz });
+      const distP = Math.hypot(gx - player.gx, gz - player.gz);
+      const score = s.ok ? 200 + s.chance - info.cost * 2 : 100 - distP * 5 - info.cost;
+      if (!best || score > best.score) best = { score, info };
+    }
+    if (best && best.info.path.length) enemy.plan = { type: 'move', path: best.info.path.slice() };
+    else if (shot.ok && shot.chance >= 12) enemy.plan = { type: 'fire', cell: { gx: player.gx, gz: player.gz }, shot };
+    else enemy.plan = { type: 'wait' };
+  }
+}
+
+// 이동 충돌 시뮬레이션: 스텝 단위로 동시 진행.
+// 같은 칸 진입·자리 맞바꿈·비켜나지 않는 점유자와의 접촉은 충돌 —
+// 이동자는 직전 타일에서 멈추고(경로 절단) 양쪽 모두 피해를 입는다.
+function simulateMoves() {
+  const movers = units.filter((u) => u.alive && u.plan?.type === 'move' && u.plan.path.length);
+  const cellOf = new Map();
+  const cur = new Map();
+  for (const u of units) {
+    if (!u.alive) continue;
+    cellOf.set(cellKey(u.gx, u.gz), u);
+    cur.set(u, { gx: u.gx, gz: u.gz });
+  }
+  const stopped = new Set();
+  const cut = new Map();
+  const hits = [];
+  const maxLen = Math.max(0, ...movers.map((u) => u.plan.path.length));
+  for (let k = 0; k < maxLen; k++) {
+    const intents = movers
+      .filter((u) => !stopped.has(u) && u.plan.path.length > k)
+      .map((u) => ({ u, to: u.plan.path[k] }));
+    let changed = true;
+    while (changed) {
+      changed = false;
+      const active = intents.filter((it) => !stopped.has(it.u));
+      for (const it of active) {
+        const tk = cellKey(it.to.gx, it.to.gz);
+        const rival = active.find((o) => o !== it && cellKey(o.to.gx, o.to.gz) === tk);
+        const swap = active.find((o) => {
+          if (o === it) return false;
+          const oc = cur.get(o.u), ic = cur.get(it.u);
+          return o.to.gx === ic.gx && o.to.gz === ic.gz && it.to.gx === oc.gx && it.to.gz === oc.gz;
+        });
+        const occ = cellOf.get(tk);
+        const occLeaves = occ && active.some((o) => o.u === occ);
+        if (rival || swap || (occ && occ !== it.u && !occLeaves)) {
+          const other = rival?.u ?? swap?.u ?? occ;
+          stopped.add(it.u);
+          cut.set(it.u, k);
+          if (rival) { stopped.add(rival.u); cut.set(rival.u, k); }
+          if (swap) { stopped.add(swap.u); cut.set(swap.u, k); }
+          hits.push({ a: it.u, b: other });
+          changed = true;
+          break;
+        }
+      }
+    }
+    // 두 패스 적용: 동시 이동 시 방금 비운 칸을 다른 유닛이 차지해도
+    // 점유 맵이 깨지지 않도록 삭제를 먼저 전부 처리한다
+    const winners = intents.filter((it) => !stopped.has(it.u));
+    for (const it of winners) {
+      const c = cur.get(it.u);
+      cellOf.delete(cellKey(c.gx, c.gz));
+    }
+    for (const it of winners) {
+      const c = cur.get(it.u);
+      c.gx = it.to.gx;
+      c.gz = it.to.gz;
+      cellOf.set(cellKey(c.gx, c.gz), it.u);
     }
   }
+  for (const u of movers) if (cut.has(u)) u.plan.path = u.plan.path.slice(0, cut.get(u));
+  // 같은 쌍 중복 제거
+  const seen = new Set();
+  return hits.filter((h) => {
+    const key = [units.indexOf(h.a), units.indexOf(h.b)].sort((x, y) => x - y).join('-');
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
 
+// 계획된 포격 해결: 조준한 셀에 지금 무엇이 있는지로 판정 (예측 사격)
+async function resolvePlannedShot(u) {
+  const { gx, gz } = u.plan.cell;
+  const occ = units.find((t) => t.alive && t !== u && t.gx === gx && t.gz === gz);
+  let target = occ ? { unit: occ } : null;
+  let shot = target ? computeShot(u, target) : null;
+  if (!shot?.ok) {
+    const prop = props.get(cellKey(gx, gz));
+    if (prop) { target = { prop }; shot = computeShot(u, target); }
+  }
+  if (!shot?.ok) { target = { gx, gz }; shot = computeShot(u, target); }
+  if (!shot.ok) { target = { gx, gz }; shot = u.plan.shot; } // 지형 변화 등 — 계획값으로 발사
+  await fireSequence(u, target, shot);
+}
+
+async function resolveTurn() {
+  phase = 'resolve';
+  busy = true;
+  clearHighlights();
+  turnLabel.textContent = `턴 ${turnNo} ▶`;
+  const collisions = simulateMoves();
+  // 1) 전 차량 동시 이동
+  const movers = units.filter((u) => u.alive && u.plan?.type === 'move' && u.plan.path.length);
+  await Promise.all(movers.map((u) => moveUnit(u, u.plan.path)));
+  // 2) 충돌 정산: 스파크 + 상호 피해
+  for (const h of collisions) {
+    if (!h.a.alive || !h.b.alive) continue;
+    const mid = h.a.group.position.clone().lerp(h.b.group.position, 0.5);
+    mid.y += 0.8;
+    sfx('hit');
+    spawnDebris(mid, [0xffd24d, 0x8b95a8], 8, 4);
+    popText(mid, '충돌!', '#ffd24d');
+    await Promise.all([applyUnitDamage(h.a, COLLISION_DMG), applyUnitDamage(h.b, COLLISION_DMG)]);
+  }
+  // 3) 전원 동시 포격
+  const shooters = units.filter((u) => u.alive && u.plan?.type === 'fire');
+  await Promise.all(shooters.map((u) => resolvePlannedShot(u)));
+  for (const u of units) u.plan = null;
   if (checkGameEnd()) return;
   turnNo++;
-  startPlayerTurn();
+  startPlanning();
 }
 
 function checkGameEnd() {
@@ -1737,9 +1881,10 @@ function checkGameEnd() {
   return false;
 }
 
-btnAction.addEventListener('click', async () => {
-  if (busy) return;
-  if (phase === 'player-action') await endPlayerTurn();
+btnMoveMode.addEventListener('click', () => setPlanMode('move'));
+btnFireMode.addEventListener('click', () => setPlanMode('fire'));
+btnWait.addEventListener('click', async () => {
+  if (phase === 'plan' && !busy) await submitPlayerPlan({ type: 'wait' });
 });
 
 // ---------------------------------------------------------------------------
@@ -1760,48 +1905,44 @@ renderer.domElement.addEventListener('pointerup', async (e) => {
   pointer.y = -(e.clientY / window.innerHeight) * 2 + 1;
   raycaster.setFromCamera(pointer, camera);
 
-  if (phase !== 'player-action') return;
+  if (phase !== 'plan') return;
 
-  // 1) 적 유닛 포격
+  // 1) 적 클릭 = 그 적의 "현재 칸"을 예측 사격 (모드 무관)
   const enemyHits = raycaster.intersectObjects(
     enemies.filter((e) => e.alive).map((e) => e.hitbox)
   );
   if (enemyHits.length) {
-    if (ap <= 0) return;
     const unit = enemyHits[0].object.userData.unit;
-    const t = currentTargets.find((t) => t.unit === unit);
-    if (!t) {
-      const shot = computeShot(player, { unit });
-      setHint(`포격 불가 — ${shot.reason}`);
-      return;
-    }
-    await spendAction(() => fireSequence(player, { unit }, t.shot));
+    const f = currentFireCells.get(cellKey(unit.gx, unit.gz));
+    if (!f) { setHint(computeShot(player, { unit }).reason ?? '포격 불가'); return; }
+    await submitPlayerPlan({ type: 'fire', cell: { gx: unit.gx, gz: unit.gz }, shot: f.shot });
     return;
   }
-  // 2) 프랍 포격
+  // 2) 프랍 클릭 = 포격
   const propHits = raycaster.intersectObjects([...props.values()].map((p) => p.hit));
-  if (propHits.length && ap > 0) {
+  if (propHits.length) {
     const prop = propHits[0].object.userData.prop;
-    const shot = computeShot(player, { prop });
-    if (!shot.ok) { setHint(`${prop.def.name} 포격 불가 — ${shot.reason}`); return; }
-    await spendAction(() => fireSequence(player, { prop }, shot));
+    const f = currentFireCells.get(cellKey(prop.gx, prop.gz));
+    if (!f) { setHint(computeShot(player, { prop }).reason ?? '포격 불가'); return; }
+    await submitPlayerPlan({ type: 'fire', cell: { gx: prop.gx, gz: prop.gz }, shot: f.shot });
     return;
   }
-  // 3) 지면: 이동 영역 안이면 이동, 밖이면 지면 포격
+  // 3) 지면: 현재 모드에 따라 이동 또는 예측 포격
   const cell = raycastGroundCell(raycaster);
   if (!cell) return;
-  const info = currentMoveCells.get(cellKey(cell.gx, cell.gz));
-  if (info) {
-    await spendAction(async () => {
-      movedThisTurn = true;
-      await moveUnit(player, info.path);
-    });
-    return;
+  const ck = cellKey(cell.gx, cell.gz);
+  if (planMode === 'move') {
+    const info = currentMoveCells.get(ck);
+    if (!info) {
+      if (currentFireCells.has(ck)) setHint('이동 불가 — 🎯 포격 모드로 조준 가능');
+      return;
+    }
+    await submitPlayerPlan({ type: 'move', path: info.path });
+  } else {
+    const f = currentFireCells.get(ck);
+    if (!f) { setHint(computeShot(player, cell).reason ?? '포격 불가'); return; }
+    await submitPlayerPlan({ type: 'fire', cell: { gx: cell.gx, gz: cell.gz }, shot: f.shot });
   }
-  if (ap <= 0) return;
-  const shot = computeShot(player, cell);
-  if (!shot.ok) { setHint(`포격 불가 — ${shot.reason}`); return; }
-  await spendAction(() => fireSequence(player, cell, shot));
 });
 
 // ---------------------------------------------------------------------------
@@ -1810,7 +1951,7 @@ renderer.domElement.addEventListener('pointerup', async (e) => {
 let hoverAim = null;
 let lastHoverCheck = 0;
 renderer.domElement.addEventListener('pointermove', (e) => {
-  if (phase !== 'player-action' || busy) { hoverAim = null; return; }
+  if (phase !== 'plan' || busy) { hoverAim = null; return; }
   const now = performance.now();
   if (now - lastHoverCheck < 60) return;
   lastHoverCheck = now;
@@ -1828,7 +1969,7 @@ renderer.domElement.addEventListener('pointermove', (e) => {
   hoverAim = ground ? aimPointOf(worldToCell(ground.point)) : null;
 });
 function updateAimPreview(dt) {
-  if (!player.alive || phase !== 'player-action' || busy || !hoverAim) return;
+  if (!player.alive || phase !== 'plan' || busy || !hoverAim) return;
   const k = 1 - Math.exp(-dt * 9);
   const aim = hoverAim;
   const targetYaw = Math.atan2(aim.x - player.group.position.x, aim.z - player.group.position.z);
@@ -1866,10 +2007,12 @@ function animate(now) {
   const pulse = 1 + Math.sin(now * 0.006) * 0.08;
   for (const ring of targetRings) ring.scale.setScalar(pulse);
   controls.update();
+  renderer.info.reset();
   composer.render();
+  updatePerf(now);
 }
 updatePlayerHpUI();
-startPlayerTurn();
+startPlanning();
 requestAnimationFrame(animate);
 
 // ---------------------------------------------------------------------------
@@ -1883,7 +2026,7 @@ window.__puratank = {
   playerUnit: player,
   get state() {
     return {
-      turnNo, phase, busy, ap, movedThisTurn,
+      turnNo, phase, busy, planMode,
       player: { gx: player.gx, gz: player.gz, hp: player.hp, alive: player.alive, hullLv: player.hullLv, driverLv: player.driverLv },
       enemies: enemies.map((e) => ({ gx: e.gx, gz: e.gz, hp: e.hp, alive: e.alive, hullLv: e.hullLv, driverLv: e.driverLv })),
       props: props.size,
@@ -1892,6 +2035,25 @@ window.__puratank = {
   heightAt: (gx, gz) => heightAt(gx, gz),
   terrainAt: (gx, gz) => TERRAIN_NAME[terrainAt(gx, gz)],
   reachable: () => [...reachableCells(player).keys()],
+  fireCells: () => [...computeFireCells(player).keys()],
+  setPlanMode,
+  planMoveTo(gx, gz) {
+    const info = currentMoveCells.get(cellKey(gx, gz));
+    if (!info || phase !== 'plan' || busy) return false;
+    submitPlayerPlan({ type: 'move', path: info.path });
+    return true;
+  },
+  planFireAt(gx, gz) {
+    const f = currentFireCells.get(cellKey(gx, gz));
+    if (!f || phase !== 'plan' || busy) return false;
+    submitPlayerPlan({ type: 'fire', cell: { gx, gz }, shot: f.shot });
+    return true;
+  },
+  planWait() {
+    if (phase !== 'plan' || busy) return false;
+    submitPlayerPlan({ type: 'wait' });
+    return true;
+  },
   shotAt: (gx, gz) => {
     const enemy = enemies.find((e) => e.alive && e.gx === gx && e.gz === gz);
     return computeShot(player, enemy ? { unit: enemy } : { gx, gz });
