@@ -2,6 +2,12 @@
 import * as THREE from 'three';
 import { OrbitControls } from './vendor/OrbitControls.js';
 import { RoundedBoxGeometry } from './vendor/RoundedBoxGeometry.js';
+import { buildKitTank, KIT_INFO, KIT_KEYS } from './src/kit-tank.js';
+
+// 차고에서 선택한 기체 (?tank=ft|mk4|t34|tiger)
+const kitParam = new URLSearchParams(location.search).get('tank');
+const playerKit = KIT_KEYS.includes(kitParam) ? kitParam : 't34';
+const enemyKits = KIT_KEYS.filter((k) => k !== playerKit);
 
 // ---------------------------------------------------------------------------
 // 상수
@@ -14,7 +20,7 @@ const MAX_CLIMB = 1.0;      // 궤도로 오를 수 있는 최대 단차
 const PITCH_MIN = -14;      // 포신 내림각 한계(도)
 const PITCH_MAX = 20;       // 포신 올림각 한계(도)
 
-const PLAYER_STATS = { mp: 8, fireRange: 9, damage: 45, hullLv: 2, driverLv: 2 };
+const PLAYER_STATS = KIT_INFO[playerKit].stats;
 const ENEMY_BASE   = { mp: 6, fireRange: 7, damage: 24 };
 
 const PLAYER_SPAWN = { gx: 10, gz: 17 };
@@ -611,7 +617,10 @@ function updateHpBar(unit) {
 // ---------------------------------------------------------------------------
 const units = [];
 function spawnUnit(isPlayer, gx, gz, facing) {
-  const model = isPlayer ? buildTank(0x3b82f6, 0xffd24d) : buildTank(0xe2574c, 0xf2e6c8);
+  // 차고에서 조립한 SD 킷 모델 사용 — 플레이어는 선택 기체, 적은 나머지 기체
+  const model = isPlayer
+    ? buildKitTank(playerKit)
+    : buildKitTank(enemyKits[units.filter((u) => !u.isPlayer).length % enemyKits.length]);
   const hullLv = isPlayer ? PLAYER_STATS.hullLv : 1 + Math.floor(rng() * 3);
   const driverLv = isPlayer ? PLAYER_STATS.driverLv : 1 + Math.floor(rng() * 3);
   const base = isPlayer ? PLAYER_STATS : ENEMY_BASE;
@@ -1312,10 +1321,12 @@ const btnAgain = document.getElementById('btn-again');
 const playerHpNum = document.getElementById('player-hp-num');
 const playerHpFill = document.getElementById('player-hp-fill');
 const levelLabel = document.getElementById('level-label');
-if (levelLabel) levelLabel.textContent = `차체 Lv${player.hullLv} · 조종 Lv${player.driverLv} · 기동력 ${player.mp}`;
+if (levelLabel) levelLabel.textContent = `${KIT_INFO[playerKit].label} · 차체 Lv${player.hullLv} · 조종 Lv${player.driverLv} · 기동 ${player.mp} · 사거리 ${player.fireRange}`;
 
 const setHint = (t) => { hintEl.innerHTML = t; };
 btnRestart.addEventListener('click', () => location.reload());
+const btnGarage = document.getElementById('btn-garage');
+if (btnGarage) btnGarage.addEventListener('click', () => { location.href = './index.html'; });
 btnAgain.addEventListener('click', () => location.reload());
 
 // ---------------------------------------------------------------------------

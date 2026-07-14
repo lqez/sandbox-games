@@ -962,14 +962,8 @@ async function startGame() {
     window.__pt.onStart(tankKey);
     return;
   }
-  try {
-    const res = await fetch('game/index.html', { method: 'HEAD' });
-    if (res.ok) {
-      location.href = `game/index.html?tank=${tankKey}`;
-      return;
-    }
-  } catch (e) { /* 게임 미설치 */ }
-  setCaption(`🎮 게임 시작! (tank=${tankKey}) — game/index.html 연동 지점`);
+  setCaption(`🎮 ${tankKey.toUpperCase()} 출격!`);
+  location.href = `game.html?tank=${tankKey}`;
 }
 
 // ---------------------------------------------------------------- UI
