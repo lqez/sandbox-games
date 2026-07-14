@@ -6,9 +6,10 @@ import { RoundedBoxGeometry } from './vendor/RoundedBoxGeometry.js';
 // ---------------------------------------------------------------------------
 // 상수
 // ---------------------------------------------------------------------------
-const GRID = 20;            // 20x20 하이트맵
+const GRID = 20;            // 20x20 그리드
 const TILE = 2;             // 한 칸의 월드 크기
-const H_STEP = 0.5;         // 지형 높이 계단 단위
+const VRES = 4;             // 타일당 하이트필드 분할 수
+const WATER_Y = -0.12;      // 수면 높이
 const MAX_CLIMB = 1.0;      // 궤도로 오를 수 있는 최대 단차
 const PITCH_MIN = -14;      // 포신 내림각 한계(도)
 const PITCH_MAX = 20;       // 포신 올림각 한계(도)
@@ -147,133 +148,196 @@ function worldToCell(p) {
 }
 
 // ---------------------------------------------------------------------------
-// 지형 생성 (하이트맵 + 하천 + 지형 종류)
+// 지형 생성: 부드러운 하이트필드 + 하천 + 지형 종류
 // ---------------------------------------------------------------------------
-const heights = [];       // heights[gx][gz]
-const terrain = [];       // terrain[gx][gz]
+const VN = GRID * VRES;               // 하이트필드 분할 수
+const HALF = (GRID * TILE) / 2;
+const VSTEP = TILE / VRES;
+
+const hNoise = makeNoise(5);
+const hNoise2 = makeNoise(2.4);
+const tNoise = makeNoise(4);
+
+// 하천 경로: 스폰 지점과 겹치지 않을 때까지 리샘플링
+let riverCx, riverAmp, riverPhase;
 {
-  const hNoise = makeNoise(5);
-  const hNoise2 = makeNoise(2.4);
-  const tNoise = makeNoise(4);
-
-  for (let gx = 0; gx < GRID; gx++) {
-    heights.push([]);
-    terrain.push([]);
-    for (let gz = 0; gz < GRID; gz++) {
-      const n = hNoise(gx, gz) * 0.75 + hNoise2(gx, gz) * 0.25;
-      let h = Math.round((n * 5.2 - 0.9) / H_STEP) * H_STEP;
-      h = Math.max(0, Math.min(2.5, h));
-      heights[gx].push(h);
-      const tn = tNoise(gx + 7, gz + 3);
-      terrain[gx].push(tn > 0.68 ? T.DIRT : tn < 0.24 ? T.SAND : T.GRASS);
-    }
+  let tries = 0;
+  do {
+    riverCx = 4 + rng() * 12;
+    riverAmp = 2.4 + rng() * 1.8;
+    riverPhase = rng() * Math.PI * 2;
+    tries++;
+  } while (
+    tries < 40 &&
+    [PLAYER_SPAWN, ...ENEMY_SPAWNS].some((s) => {
+      const rx = riverCx + Math.sin(s.gz * 0.42 + riverPhase) * riverAmp;
+      return Math.abs(rx - s.gx) < (s === PLAYER_SPAWN ? 4 : 3);
+    })
+  );
+}
+const riverPoints = [];
+for (let zw = -HALF; zw <= HALF; zw += 0.5) {
+  const gzf = zw / TILE + (GRID - 1) / 2;
+  const rx = riverCx + Math.sin(gzf * 0.42 + riverPhase) * riverAmp;
+  riverPoints.push({ x: (rx - (GRID - 1) / 2) * TILE, z: zw });
+}
+function distToRiver(wx, wz) {
+  let d = Infinity;
+  for (const p of riverPoints) {
+    const dd = Math.hypot(wx - p.x, wz - p.z);
+    if (dd < d) d = dd;
   }
+  return d;
+}
 
-  // 하천: 북→남으로 굽이치며 흐름 (폭 2)
-  const phase = rng() * Math.PI * 2;
-  const amp = 2.6 + rng() * 1.6;
-  const cx = 6 + rng() * 8;
+const smooth01 = (x) => { const t = THREE.MathUtils.clamp(x, 0, 1); return t * t * (3 - 2 * t); };
+function baseHeight(wx, wz) {
+  // 노이즈 좌표는 0 이상이어야 함 (격자 인덱스)
+  const fx = (wx + HALF) / TILE;
+  const fz = (wz + HALF) / TILE;
+  const n = hNoise(fx, fz) * 0.72 + hNoise2(fx, fz) * 0.28;
+  return THREE.MathUtils.clamp(n * 5.2 - 1.0, 0, 2.6);
+}
+const spawnTargets = [PLAYER_SPAWN, ...ENEMY_SPAWNS].map((s) => {
+  const p = cellToWorld(s.gx, s.gz);
+  return { x: p.x, z: p.z, h: Math.max(baseHeight(p.x, p.z), 0.15) };
+});
+function fieldHeight(wx, wz) {
+  let h = baseHeight(wx, wz);
+  // 스폰 주변 완만화
+  for (const s of spawnTargets) {
+    const d = Math.hypot(wx - s.x, wz - s.z);
+    if (d < 5) h = THREE.MathUtils.lerp(s.h, h, smooth01((d - 1.5) / 3.5));
+  }
+  // 하천 카빙 (부드러운 강바닥)
+  const dr = distToRiver(wx, wz);
+  if (dr < 5.5) h = THREE.MathUtils.lerp(-0.45, h, smooth01((dr - 1.3) / 4.2));
+  return h;
+}
+
+// 하이트필드 메시 (정점 색으로 지형 표현)
+const TERRAIN_COLORS = {
+  [T.GRASS]: [0x9ecf7f, 0x93c775],
+  [T.DIRT]: [0xc4a577, 0xbb9d6f],
+  [T.SAND]: [0xe3d3a1, 0xdccb98],
+  [T.MUD]: [0x9d7f5e, 0x957758],
+  [T.WATER]: [0xb59e77, 0xac9670], // 강바닥
+};
+const terrainGeo = new THREE.PlaneGeometry(GRID * TILE, GRID * TILE, VN, VN);
+terrainGeo.rotateX(-Math.PI / 2);
+{
+  const pos = terrainGeo.attributes.position;
+  for (let i = 0; i < pos.count; i++) pos.setY(i, fieldHeight(pos.getX(i), pos.getZ(i)));
+}
+const vIndex = (ix, iz) => iz * (VN + 1) + ix;
+function sampleHeight(wx, wz) {
+  const fx = THREE.MathUtils.clamp((wx + HALF) / VSTEP, 0, VN - 1e-6);
+  const fz = THREE.MathUtils.clamp((wz + HALF) / VSTEP, 0, VN - 1e-6);
+  const ix = Math.floor(fx), iz = Math.floor(fz);
+  const tx = fx - ix, tz = fz - iz;
+  const pos = terrainGeo.attributes.position;
+  const a = pos.getY(vIndex(ix, iz)), b = pos.getY(vIndex(ix + 1, iz));
+  const c = pos.getY(vIndex(ix, iz + 1)), d = pos.getY(vIndex(ix + 1, iz + 1));
+  return a + (b - a) * tx + (c - a) * tz + (a - b - c + d) * tx * tz;
+}
+
+// 셀 단위 캐시: 높이 / 지형 종류
+const cellH = [];
+const terrain = [];
+for (let gx = 0; gx < GRID; gx++) {
+  cellH.push([]);
+  terrain.push([]);
   for (let gz = 0; gz < GRID; gz++) {
-    const rx = Math.round(cx + Math.sin(gz * 0.42 + phase) * amp);
-    for (const x of [rx, rx + 1]) {
-      if (!inBounds(x, gz)) continue;
-      terrain[x][gz] = T.WATER;
-      heights[x][gz] = -H_STEP;
+    const p = cellToWorld(gx, gz);
+    const h = sampleHeight(p.x, p.z);
+    cellH[gx].push(h);
+    let type;
+    if (h < WATER_Y - 0.03) type = T.WATER;
+    else if (distToRiver(p.x, p.z) < 3.2) type = T.MUD;
+    else {
+      const tn = tNoise(gx + 7, gz + 3);
+      type = tn > 0.68 ? T.DIRT : tn < 0.24 ? T.SAND : T.GRASS;
     }
-    // 강둑: 진흙 + 낮은 지대로 정리
-    for (const x of [rx - 1, rx + 2]) {
-      if (!inBounds(x, gz)) continue;
-      if (terrain[x][gz] !== T.WATER) {
-        terrain[x][gz] = T.MUD;
-        heights[x][gz] = Math.min(heights[x][gz], H_STEP);
-      }
-    }
-  }
-
-  // 스폰 지점 정리: 물/절벽 금지
-  for (const s of [PLAYER_SPAWN, ...ENEMY_SPAWNS]) {
-    for (let dx = -1; dx <= 1; dx++) {
-      for (let dz = -1; dz <= 1; dz++) {
-        const x = s.gx + dx, z = s.gz + dz;
-        if (!inBounds(x, z)) continue;
-        if (terrain[x][z] === T.WATER) continue; // 물은 유지(스폰 셀 자체만 보정)
-        heights[x][z] = Math.min(heights[x][z], heights[s.gx][s.gz] + H_STEP);
-      }
-    }
-    if (terrain[s.gx][s.gz] === T.WATER || terrain[s.gx][s.gz] === T.MUD) {
-      terrain[s.gx][s.gz] = T.GRASS;
-      heights[s.gx][s.gz] = Math.max(0, heights[s.gx][s.gz]);
-    }
+    terrain[gx].push(type);
   }
 }
-const heightAt = (gx, gz) => heights[gx][gz];
+for (const s of [PLAYER_SPAWN, ...ENEMY_SPAWNS]) {
+  if (terrain[s.gx][s.gz] === T.WATER) terrain[s.gx][s.gz] = T.GRASS;
+}
+const heightAt = (gx, gz) => cellH[gx][gz];
 const terrainAt = (gx, gz) => terrain[gx][gz];
 
 // ---------------------------------------------------------------------------
-// 타일 렌더링 (크레이터로 갱신 가능)
+// 지형 렌더링: 스무스 메시 + 수면 + 지면을 따라가는 그리드 라인
 // ---------------------------------------------------------------------------
-const TERRAIN_COLORS = {
-  [T.GRASS]: [0x9ecf7f, 0x8fc471],
-  [T.DIRT]: [0xc4a577, 0xb8996c],
-  [T.SAND]: [0xe3d3a1, 0xd8c793],
-  [T.MUD]: [0x9d7f5e, 0x927455],
-  [T.WATER]: [0x8a704f, 0x8a704f], // 강바닥 색
-};
-const columnGeoCache = new Map();
-function columnGeo(h) {
-  const key = h.toFixed(2);
-  if (!columnGeoCache.has(key)) {
-    columnGeoCache.set(key, new RoundedBoxGeometry(TILE - 0.12, h + 1.2, TILE - 0.12, 2, 0.07));
+{
+  const pos = terrainGeo.attributes.position;
+  const colors = new Float32Array(pos.count * 3);
+  const col = new THREE.Color();
+  for (let i = 0; i < pos.count; i++) {
+    const c = worldToCell({ x: pos.getX(i), z: pos.getZ(i) });
+    col.set(TERRAIN_COLORS[terrain[c.gx][c.gz]][(c.gx + c.gz) % 2]);
+    colors[i * 3] = col.r;
+    colors[i * 3 + 1] = col.g;
+    colors[i * 3 + 2] = col.b;
   }
-  return columnGeoCache.get(key);
+  terrainGeo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
 }
-const waterMat = new THREE.MeshToonMaterial({
-  color: 0x6fb7e8,
-  gradientMap,
-  transparent: true,
-  opacity: 0.75,
-});
-const tiles = []; // tiles[gx][gz] = { mesh, water }
+terrainGeo.computeVertexNormals();
+const terrainMesh = new THREE.Mesh(
+  terrainGeo,
+  new THREE.MeshToonMaterial({ vertexColors: true, gradientMap })
+);
+terrainMesh.receiveShadow = true;
+terrainMesh.castShadow = true;
+scene.add(terrainMesh);
+
+// 수면
+const waterMesh = new THREE.Mesh(
+  new THREE.PlaneGeometry(GRID * TILE, GRID * TILE),
+  new THREE.MeshToonMaterial({ color: 0x6fb7e8, gradientMap, transparent: true, opacity: 0.72 })
+);
+waterMesh.rotation.x = -Math.PI / 2;
+waterMesh.position.y = WATER_Y;
+scene.add(waterMesh);
+
+// 받침대
 {
   const baseSize = GRID * TILE + 2.2;
-  const base = part(new RoundedBoxGeometry(baseSize, 1.0, baseSize, 4, 0.3), 0x5c667a, { outline: false });
-  base.position.y = -1.7;
+  const base = part(new RoundedBoxGeometry(baseSize, 1.6, baseSize, 4, 0.3), 0x5c667a, { outline: false });
+  base.position.y = -1.35;
   scene.add(base);
+}
 
-  for (let gx = 0; gx < GRID; gx++) {
-    tiles.push([]);
-    for (let gz = 0; gz < GRID; gz++) {
-      tiles[gx].push({ mesh: null, water: null });
-      buildTile(gx, gz);
+// 그리드 라인 (지면 굴곡을 따라감, 크레이터 후 재생성)
+let gridLines = null;
+function rebuildGridLines() {
+  if (gridLines) {
+    scene.remove(gridLines);
+    gridLines.geometry.dispose();
+  }
+  const pts = [];
+  const step = 0.5;
+  const yAt = (x, z) => Math.max(sampleHeight(x, z), WATER_Y) + 0.035;
+  for (let i = 0; i <= GRID; i++) {
+    const c = -HALF + i * TILE;
+    for (let s = -HALF; s < HALF - 1e-6; s += step) {
+      pts.push(c, yAt(c, s), s, c, yAt(c, s + step), s + step);
+      pts.push(s, yAt(s, c), c, s + step, yAt(s + step, c), c);
     }
   }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(pts), 3));
+  gridLines = new THREE.LineSegments(
+    geo,
+    new THREE.LineBasicMaterial({ color: 0x2b3445, transparent: true, opacity: 0.2 })
+  );
+  scene.add(gridLines);
 }
-function buildTile(gx, gz) {
-  const t = tiles[gx][gz];
-  if (t.mesh) scene.remove(t.mesh);
-  if (t.water) scene.remove(t.water);
-  const h = heightAt(gx, gz);
-  const type = terrainAt(gx, gz);
-  const shade = (gx + gz) % 2;
-  const mesh = new THREE.Mesh(columnGeo(h), toonMat(TERRAIN_COLORS[type][shade]));
-  const p = cellToWorld(gx, gz);
-  mesh.position.set(p.x, h - (h + 1.2) / 2, p.z); // 윗면이 y=h
-  mesh.receiveShadow = true;
-  mesh.castShadow = h > 0;
-  scene.add(mesh);
-  t.mesh = mesh;
-  if (type === T.WATER) {
-    const w = new THREE.Mesh(new THREE.BoxGeometry(TILE, 0.3, TILE), waterMat);
-    w.position.set(p.x, -0.15, p.z); // 수면 y=0
-    scene.add(w);
-    t.water = w;
-  } else {
-    t.water = null;
-  }
-}
-// 유닛이 서는 높이 (물이면 수면 살짝 아래 = 도하 연출)
-const standHeight = (gx, gz) =>
-  terrainAt(gx, gz) === T.WATER ? -0.18 : heightAt(gx, gz);
+rebuildGridLines();
+
+// 유닛이 서는 높이 (강이면 바닥 = 도하 연출)
+const standHeight = (gx, gz) => heightAt(gx, gz);
 
 // ---------------------------------------------------------------------------
 // 프랍 (WW 시대 오브젝트, 전부 파괴 가능)
@@ -440,20 +504,10 @@ function placeProp(type, gx, gz) {
 }
 
 // ---------------------------------------------------------------------------
-// 클릭 판정용 투명 바닥판 (지면 클릭 → 셀 계산)
+// 지면 클릭 → 셀 계산 (하이트필드 직접 레이캐스트)
 // ---------------------------------------------------------------------------
-const clickPlane = new THREE.Mesh(
-  new THREE.PlaneGeometry(GRID * TILE, GRID * TILE),
-  new THREE.MeshBasicMaterial({ visible: false })
-);
-clickPlane.rotation.x = -Math.PI / 2;
-clickPlane.position.y = 0.01;
-scene.add(clickPlane);
-// 높은 지형 클릭 보정: 타일 메시를 직접 레이캐스트하는 배열
 function raycastGroundCell(raycaster) {
-  const meshes = [];
-  for (let gx = 0; gx < GRID; gx++) for (let gz = 0; gz < GRID; gz++) meshes.push(tiles[gx][gz].mesh);
-  const hit = raycaster.intersectObjects(meshes, false)[0];
+  const hit = raycaster.intersectObject(terrainMesh, false)[0];
   if (!hit) return null;
   return worldToCell(hit.point);
 }
@@ -572,7 +626,9 @@ function spawnUnit(isPlayer, gx, gz, facing) {
   };
   const p = cellToWorld(gx, gz);
   unit.group.position.set(p.x, standHeight(gx, gz), p.z);
+  unit.group.rotation.order = 'YXZ';
   unit.group.rotation.y = facing;
+  unit.group.rotation.x = groundPitch(unit);
   unit.hpBar = makeHpBar();
   unit.group.add(unit.hpBar.sprite);
   unit.hitbox.userData.unit = unit;
@@ -697,7 +753,7 @@ function aimPointOf(target) {
     return new THREE.Vector3(p.x, heightAt(pr.gx, pr.gz) + 0.7, p.z);
   }
   const p = cellToWorld(target.gx, target.gz);
-  return new THREE.Vector3(p.x, Math.max(heightAt(target.gx, target.gz), 0) + 0.15, p.z);
+  return new THREE.Vector3(p.x, Math.max(heightAt(target.gx, target.gz), WATER_Y) + 0.15, p.z);
 }
 
 // 반환 { ok, reason, chance, distCells, pitch, cover }
@@ -731,10 +787,10 @@ function computeShot(attacker, target, fromCell = null) {
     const c = worldToCell(pt);
     const ck = cellKey(c.gx, c.gz);
     if (ck === attackerKey || ck === targetKey) continue;
-    const groundH = heightAt(c.gx, c.gz);
-    if (groundH > pt.y + 0.05) return { ok: false, reason: '지형(능선)에 사선이 막힘' };
+    if (sampleHeight(pt.x, pt.z) > pt.y + 0.05) return { ok: false, reason: '지형(능선)에 사선이 막힘' };
     const prop = props.get(ck);
     if (prop) {
+      const groundH = heightAt(c.gx, c.gz);
       if (prop.def.blockShotH > 0 && pt.y < groundH + prop.def.blockShotH) {
         return { ok: false, reason: `${prop.def.name}에 사선이 막힘` };
       }
@@ -788,21 +844,33 @@ async function rotateTo(unit, targetRot, dur = 130) {
   if (Math.abs(diff) < 0.01) return;
   await tween(dur, (e) => { unit.group.rotation.y = from + diff * e; });
 }
+// 차체가 지면 경사를 따라 기울어지는 각도
+function groundPitch(unit) {
+  const ry = unit.group.rotation.y;
+  const fx = Math.sin(ry), fz = Math.cos(ry);
+  const p = unit.group.position;
+  const hF = sampleHeight(p.x + fx * 0.7, p.z + fz * 0.7);
+  const hB = sampleHeight(p.x - fx * 0.7, p.z - fz * 0.7);
+  return THREE.MathUtils.clamp(Math.atan2(hB - hF, 1.4), -0.45, 0.45);
+}
+
 async function moveUnit(unit, path) {
   for (const cell of path) {
     const from = unit.group.position.clone();
     const to = cellToWorld(cell.gx, cell.gz);
-    to.y = standHeight(cell.gx, cell.gz);
     await rotateTo(unit, Math.atan2(to.x - from.x, to.z - from.z), 110);
     sfx(terrainAt(cell.gx, cell.gz) === T.WATER ? 'splash' : 'step');
-    await tween(170, (e) => {
-      unit.group.position.lerpVectors(from, to, e);
-      unit.group.position.y = THREE.MathUtils.lerp(from.y, to.y, e) + Math.sin(e * Math.PI) * 0.2;
+    await tween(180, (e) => {
+      const x = THREE.MathUtils.lerp(from.x, to.x, e);
+      const z = THREE.MathUtils.lerp(from.z, to.z, e);
+      unit.group.position.set(x, sampleHeight(x, z) + Math.sin(e * Math.PI) * 0.12, z);
+      unit.group.rotation.x = groundPitch(unit);
     });
-    unit.group.position.copy(to);
     unit.gx = cell.gx;
     unit.gz = cell.gz;
+    unit.group.position.y = sampleHeight(to.x, to.z);
   }
+  unit.group.rotation.x = groundPitch(unit);
 }
 
 // ---------------------------------------------------------------------------
@@ -887,21 +955,54 @@ function breakApartGroup(group, power = 8) {
   }, linear).then(() => pieces.forEach((p) => scene.remove(p.mesh)));
 }
 
-// 크레이터: 지형 파괴
+// 크레이터: 하이트필드를 부드럽게 함몰시켜 지형 파괴
 function crater(gx, gz) {
   if (!inBounds(gx, gz)) return;
   if (terrainAt(gx, gz) === T.WATER) return;
-  if (heightAt(gx, gz) <= 0) { terrain[gx][gz] = T.DIRT; buildTile(gx, gz); return; }
-  heights[gx][gz] = Math.max(0, heightAt(gx, gz) - H_STEP);
+  const c = cellToWorld(gx, gz);
+  const R = 2.1, DEPTH = 0.5;
+  const pos = terrainGeo.attributes.position;
+  const colAttr = terrainGeo.attributes.color;
+  const dirtCol = new THREE.Color();
+  for (let i = 0; i < pos.count; i++) {
+    const d = Math.hypot(pos.getX(i) - c.x, pos.getZ(i) - c.z);
+    if (d >= R) continue;
+    const dep = DEPTH * (0.5 + 0.5 * Math.cos((d / R) * Math.PI));
+    pos.setY(i, Math.max(pos.getY(i) - dep, WATER_Y + 0.04));
+    if (d < R * 0.72) {
+      const vc = worldToCell({ x: pos.getX(i), z: pos.getZ(i) });
+      if (terrain[vc.gx][vc.gz] !== T.WATER) {
+        dirtCol.set(TERRAIN_COLORS[T.DIRT][(vc.gx + vc.gz) % 2]).multiplyScalar(0.86);
+        colAttr.setXYZ(i, dirtCol.r, dirtCol.g, dirtCol.b);
+      }
+    }
+  }
+  pos.needsUpdate = true;
+  colAttr.needsUpdate = true;
+  terrainGeo.computeVertexNormals();
   terrain[gx][gz] = T.DIRT;
-  buildTile(gx, gz);
-  // 그 위에 있던 프랍/유닛 높이 보정
-  const prop = props.get(cellKey(gx, gz));
-  if (prop) prop.group.position.y = heightAt(gx, gz);
+  // 주변 셀 높이 캐시 갱신 + 프랍 높이 보정
+  for (let dx = -1; dx <= 1; dx++) {
+    for (let dz = -1; dz <= 1; dz++) {
+      const x = gx + dx, z = gz + dz;
+      if (!inBounds(x, z)) continue;
+      const p = cellToWorld(x, z);
+      cellH[x][z] = sampleHeight(p.x, p.z);
+      const prop = props.get(cellKey(x, z));
+      if (prop) prop.group.position.y = heightAt(x, z);
+    }
+  }
+  rebuildGridLines();
+  // 근처 유닛 높이/기울기 보정
   for (const u of units) {
-    if (u.alive && u.gx === gx && u.gz === gz) {
-      const y = standHeight(gx, gz);
-      tween(220, (e) => { u.group.position.y = THREE.MathUtils.lerp(u.group.position.y, y, e); });
+    if (!u.alive) continue;
+    const d = Math.hypot(u.group.position.x - c.x, u.group.position.z - c.z);
+    if (d < R + 1) {
+      const y = sampleHeight(u.group.position.x, u.group.position.z);
+      tween(220, (e) => {
+        u.group.position.y = THREE.MathUtils.lerp(u.group.position.y, y, e);
+        u.group.rotation.x = groundPitch(u);
+      });
     }
   }
 }
@@ -1053,8 +1154,7 @@ async function fireSequence(attacker, target, shot) {
     const r = TILE * (0.8 + Math.random() * 1.0);
     impact.x += Math.sin(a) * r;
     impact.z += Math.cos(a) * r;
-    const ic = worldToCell(impact);
-    impact.y = Math.max(heightAt(ic.gx, ic.gz), 0) + 0.1;
+    impact.y = Math.max(sampleHeight(impact.x, impact.z), WATER_Y) + 0.1;
   }
 
   // 포탄 궤적
@@ -1084,10 +1184,22 @@ async function fireSequence(attacker, target, shot) {
 // ---------------------------------------------------------------------------
 const moveHighlightGroup = new THREE.Group();
 scene.add(moveHighlightGroup);
-const moveTileGeo = new THREE.PlaneGeometry(TILE - 0.3, TILE - 0.3);
 const moveTileMat = new THREE.MeshBasicMaterial({
   color: 0x4da3ff, transparent: true, opacity: 0.42, side: THREE.DoubleSide, depthWrite: false,
 });
+// 지면 굴곡을 따라가는 하이라이트 쿼드
+function conformQuad(gx, gz) {
+  const geo = new THREE.PlaneGeometry(TILE - 0.26, TILE - 0.26, 3, 3);
+  geo.rotateX(-Math.PI / 2);
+  const p = cellToWorld(gx, gz);
+  const pos = geo.attributes.position;
+  for (let i = 0; i < pos.count; i++) {
+    pos.setY(i, Math.max(sampleHeight(pos.getX(i) + p.x, pos.getZ(i) + p.z), WATER_Y) + 0.06);
+  }
+  const m = new THREE.Mesh(geo, moveTileMat);
+  m.position.set(p.x, 0, p.z);
+  return m;
+}
 const targetRings = [];
 const targetRingGeo = new THREE.RingGeometry(1.0, 1.3, 28);
 const targetRingMat = new THREE.MeshBasicMaterial({
@@ -1096,6 +1208,7 @@ const targetRingMat = new THREE.MeshBasicMaterial({
 const chanceSprites = [];
 
 function clearHighlights() {
+  for (const ch of moveHighlightGroup.children) ch.geometry.dispose();
   moveHighlightGroup.clear();
   for (const r of targetRings) scene.remove(r);
   targetRings.length = 0;
@@ -1105,11 +1218,7 @@ function clearHighlights() {
 function showMoveHighlights(cells) {
   for (const key of cells.keys()) {
     const [gx, gz] = key.split(',').map(Number);
-    const m = new THREE.Mesh(moveTileGeo, moveTileMat);
-    m.rotation.x = -Math.PI / 2;
-    const p = cellToWorld(gx, gz);
-    m.position.set(p.x, heightAt(gx, gz) + 0.07, p.z);
-    moveHighlightGroup.add(m);
+    moveHighlightGroup.add(conformQuad(gx, gz));
   }
 }
 function chanceSprite(text) {
@@ -1135,7 +1244,7 @@ function showTargets(targets) {
     const ring = new THREE.Mesh(targetRingGeo, targetRingMat);
     ring.rotation.x = -Math.PI / 2;
     const u = t.unit;
-    ring.position.set(u.group.position.x, standHeight(u.gx, u.gz) + 0.08, u.group.position.z);
+    ring.position.set(u.group.position.x, Math.max(standHeight(u.gx, u.gz), WATER_Y) + 0.12, u.group.position.z);
     scene.add(ring);
     targetRings.push(ring);
     const sp = chanceSprite(`${t.shot.chance}%`);
@@ -1426,6 +1535,12 @@ window.__puratank = {
   screenPos(gx, gz) {
     const p = cellToWorld(gx, gz);
     p.y = standHeight(gx, gz) + 0.8;
+    p.project(camera);
+    return { x: ((p.x + 1) / 2) * window.innerWidth, y: ((-p.y + 1) / 2) * window.innerHeight };
+  },
+  screenPosGround(gx, gz) {
+    const p = cellToWorld(gx, gz);
+    p.y = sampleHeight(p.x, p.z) + 0.02;
     p.project(camera);
     return { x: ((p.x + 1) / 2) * window.innerWidth, y: ((-p.y + 1) / 2) * window.innerHeight };
   },
