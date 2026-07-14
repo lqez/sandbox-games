@@ -5,7 +5,7 @@ import * as THREE from 'three';
 import {
   makeMats, chamferBox, profileX, tub, cylY, cylZ, sphere,
   panelLine, panelRect, fastenerRow, grooveRing, revolveShell,
-  trackLayout, trackLengthPiece, trackLinkPiece, roadWheel, wheelHoles, definePart,
+  trackLayout, trackLengthPiece, trackLinkPiece, assemblyPeg, assemblySocket, rimPegs, roadWheel, wheelHoles, definePart,
 } from '../plamo.js';
 
 const CIRCLES = [
@@ -24,6 +24,7 @@ export function buildT34() {
     const g = tub(4.6, 1.7, 7.6, 0.32, M.main);
     panelLine(g, [-2.31, 0.15, -3.5], [-2.31, 0.15, 3.5], [-1, 0, 0], M.groove, 0.15);
     panelLine(g, [2.31, 0.15, -3.5], [2.31, 0.15, 3.5], [1, 0, 0], M.groove, 0.15);
+    rimPegs(g, 4.6, 1.7, 7.6, M.main);
     P('C1', '하부 차체', g, { pos: [0, 1.75, 0], lieRot: [Math.PI / 2, Math.PI / 2, 0], order: 1 });
   }
 
@@ -57,6 +58,14 @@ export function buildT34() {
     panelRect(g, [0, 2.43, -0.35], [1, 0, 0], [0, 0, 1], 0.9, 0.55, [0, 1, 0], M.groove, 0.15);
     panelLine(g, [-2.85, 2.43, -2.9], [-2.85, 2.43, 1.2], [0, 1, 0], M.groove, 0.14);
     panelLine(g, [2.85, 2.43, -2.9], [2.85, 2.43, 1.2], [0, 1, 0], M.groove, 0.14);
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+      const so = assemblySocket(M.groove);
+      so.position.set(sx * 1.68, 0.03, sz * 2.95);
+      g.add(so);
+    }
+    const tSocket = grooveRing(1.85, 0.08, M.groove, 44);
+    tSocket.position.set(0, 2.44, 0.45);
+    g.add(tSocket);
     P('C2', '상부 차체', g, { pos: [0, 2.5, 0], lieRot: [Math.PI / 2, Math.PI / 2, 0], order: 22 });
   }
 
@@ -97,6 +106,9 @@ export function buildT34() {
     const seam = grooveRing(0.86, 0.055, M.groove);
     seam.position.y = 0.62;
     g.add(seam);
+    const cpeg = assemblyPeg(M.main, 0.16, 0.3);
+    cpeg.position.y = -0.1;
+    g.add(cpeg);
     P('C4', '큐폴라', g, { pos: [-0.95, 6.12, 0.1], lieRot: [Math.PI / 2, 0, 0], order: 26, runner: 'B' });
   }
 
@@ -124,6 +136,10 @@ export function buildT34() {
     tip.position.z = 4.2;
     g.add(mantlet, collar, barrel, tip);
     fastenerRow(g, [-0.7, 0.55, 0.51], [0.7, 0.55, 0.51], 3, 0.12, [0, 0, 1], M.main, 'hex');
+    const gpeg = assemblyPeg(M.main, 0.2, 0.34);
+    gpeg.rotation.x = Math.PI / 2;
+    gpeg.position.z = -0.6;
+    g.add(gpeg);
     P('C6', '주포', g, { pos: [0, 5.4, 2.45], lieRot: [Math.PI / 2, Math.PI / 2, 0], order: 25 });
   }
 
@@ -134,8 +150,8 @@ export function buildT34() {
     for (const [side, sx] of [['좌', -1], ['우', 1]]) {
       for (const seg of trackLayout(CIRCLES, 0.42, 1.2)) {
         const mesh = seg.kind === 'length'
-          ? trackLengthPiece(seg.len, 1.7, 0.42, M.main, { cleatOut: 0.32 })
-          : trackLinkPiece(seg.len, 1.7, 0.42, M.main, { cleatOut: 0.32 });
+          ? trackLengthPiece(seg.len, 1.7, 0.42, M.main, { cleatOut: 0.32, grooveMat: M.groove })
+          : trackLinkPiece(seg.len, 1.7, 0.42, M.main, { cleatOut: 0.32, grooveMat: M.groove });
         P(`C${idNum}`, `${side} 트랙 ${seg.kind === 'length' ? '렝스' : '링크'}`, mesh, {
           pos: [sx * 3.05, seg.pos[1], seg.pos[0]],
           rot: [-seg.theta, 0, 0],
@@ -166,6 +182,12 @@ export function buildT34() {
       const tab = chamferBox(0.34, 0.3, 0.44, 0.06, M.main);
       tab.position.set(0, 0, tz);
       g.add(tab);
+    }
+    for (const wz of [-2.15, 0, 2.15]) {
+      const peg = assemblyPeg(M.main, 0.17, 0.55);
+      peg.rotation.z = Math.PI / 2;
+      peg.position.set(sx * -0.75, 0, wz);
+      g.add(peg);
     }
     P(`C${idNum}`, name, g, { pos: [sx * 3.05, 1.35, 0], lieRot: [0, Math.PI / 2, 0], order, runner: 'B' });
     idNum++;

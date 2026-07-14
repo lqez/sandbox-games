@@ -21,11 +21,12 @@
   button {
     border: 0; border-radius: 999px; padding: 8px 14px;
     background: #eee7d9; color: #5c5140; font-weight: 700; font-size: 13px;
-    cursor: pointer; transition: all .15s;
+    cursor: pointer; transition: all .15s; white-space: nowrap;
   }
   button:hover { background: #e2d8c4; }
   button.on { background: #5c8f3e; color: #fff; }
   #replay { background: #f0b23e; color: #5a4008; }
+  #export { background: #7f9dbb; color: #fff; }
   #caption {
     position: fixed; bottom: 76px; left: 50%; transform: translateX(-50%);
     background: rgba(70,60,45,.85); color: #fff; font-weight: 800; font-size: 15px;
@@ -38,7 +39,8 @@
 <script type="importmap">
 { "imports": {
     "three": "./lib/three.module.js",
-    "three/addons/controls/OrbitControls.js": "./lib/OrbitControls.js"
+    "three/addons/controls/OrbitControls.js": "./lib/OrbitControls.js",
+    "three/addons/exporters/GLTFExporter.js": "./lib/exporters/GLTFExporter.js"
 } }
 </script>
 </head>
@@ -59,6 +61,7 @@
   <button data-mode="done">완성</button>
   <button data-mode="lineup">라인업</button>
   <button id="replay">↻ 다시 조립</button>
+  <button id="export">⬇ GLTF</button>
   <span id="scrub-wrap"><input type="range" id="scrub" min="0" max="1" step="0.001" value="0" /></span>
 </div>
 

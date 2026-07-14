@@ -21,6 +21,14 @@ function rail(from, to, mat, r = RAIL_R) {
   return mesh;
 }
 
+// 게이트 절단 자국(니퍼 흔적) — 파츠 가장자리에 남는 짧은 스텁
+function gateStub(mat) {
+  const geo = new THREE.CylinderGeometry(0.09, 0.135, 0.18, 8);
+  const m = new THREE.Mesh(geo, mat);
+  m.castShadow = true;
+  return m;
+}
+
 function gate(from, to, mat) {
   const a = new THREE.Vector3(...from), b = new THREE.Vector3(...to);
   const len = Math.max(0.05, a.distanceTo(b));
@@ -135,7 +143,25 @@ export function buildRunner(parts, mat, opts = {}) {
       slots.set(part.id, {
         pos: new THREE.Vector3(px - m.cx, cy - m.cy, 0),
         rot: new THREE.Euler(...part.lieRot),
+        // 니퍼가 찾아갈 게이트 위치 (런너 좌표계, slot.pos 기준 오프셋)
+        gate: new THREE.Vector3(m.cx + m.w / 2, m.cy, 0),
       });
+      // 게이트 스텁을 파츠 자체에 부착 (좌/우) — 커팅 후 절단 자국으로 남고 사포로 제거됨
+      {
+        const Rinv = new THREE.Matrix4()
+          .makeRotationFromEuler(new THREE.Euler(...part.lieRot))
+          .invert();
+        part.gateStubs = part.gateStubs || [];
+        for (const sgn of [-1, 1]) {
+          const local = new THREE.Vector3(m.cx + sgn * m.w / 2, m.cy, 0).applyMatrix4(Rinv);
+          const dir = new THREE.Vector3(sgn, 0, 0).transformDirection(Rinv);
+          const stub = gateStub(mat);
+          stub.position.copy(local).addScaledVector(dir, 0.06);
+          stub.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
+          part.mesh.add(stub);
+          part.gateStubs.push(stub);
+        }
+      }
       // 셀 오른쪽 세로 레일 (마지막 셀은 프레임이 대신)
       if (cellRight < hw - 0.5) {
         group.add(rail([cellRight, rowTop, 0], [cellRight, rowBottom, 0], mat, RAIL_R * 0.9));

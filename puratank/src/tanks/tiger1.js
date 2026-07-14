@@ -5,7 +5,8 @@ import * as THREE from 'three';
 import {
   makeMats, chamferBox, profileX, tub, cylY, cylZ, sphere,
   panelLine, panelRect, fastenerRow, grooveRing,
-  trackLayout, trackLengthPiece, trackLinkPiece, roadWheel, definePart,
+  trackLayout, trackLengthPiece, trackLinkPiece, roadWheel,
+  assemblyPeg, assemblySocket, rimPegs, definePart,
 } from '../plamo.js';
 
 const CIRCLES = [
@@ -26,6 +27,7 @@ export function buildTiger1() {
     panelLine(g, [2.61, 0.2, -3.8], [2.61, 0.2, 3.8], [1, 0, 0], M.groove, 0.16);
     fastenerRow(g, [-2.61, -0.45, -3.5], [-2.61, -0.45, 3.5], 6, 0.13, [-1, 0, 0], M.main, 'hex');
     fastenerRow(g, [2.61, -0.45, -3.5], [2.61, -0.45, 3.5], 6, 0.13, [1, 0, 0], M.main, 'hex');
+    rimPegs(g, 5.2, 1.8, 8.2, M.main);
     P('D1', '하부 차체', g, { pos: [0, 1.95, 0], lieRot: [Math.PI / 2, Math.PI / 2, 0], order: 1 });
   }
 
@@ -52,6 +54,14 @@ export function buildTiger1() {
     fastenerRow(g, [-2.9, 2.23, 3.9], [2.9, 2.23, 3.9], 6, 0.13, [0, 1, 0], M.main, 'hex');
     panelLine(g, [-3.7, 2.23, -3.9], [-3.7, 2.23, 3.8], [0, 1, 0], M.groove, 0.15);
     panelLine(g, [3.7, 2.23, -3.9], [3.7, 2.23, 3.8], [0, 1, 0], M.groove, 0.15);
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+      const so = assemblySocket(M.groove);
+      so.position.set(sx * 1.95, 0.03, sz * 3.25);
+      g.add(so);
+    }
+    const tSocket = grooveRing(2.3, 0.08, M.groove, 48);
+    tSocket.position.set(0, 2.24, 0.1);
+    g.add(tSocket);
     P('D2', '상부 차체', g, { pos: [0, 2.7, 0], lieRot: [Math.PI / 2, Math.PI / 2, 0], order: 22 });
   }
 
@@ -137,6 +147,9 @@ export function buildTiger1() {
     const knob = sphere(0.2, M.main, 10, 8);
     knob.position.set(0.5, 1.12, 0);
     g.add(knob);
+    const cpeg = assemblyPeg(M.main, 0.18, 0.3);
+    cpeg.position.y = -0.08;
+    g.add(cpeg);
     P('D4', '큐폴라', g, { pos: [-1.15, 7.15, -0.5], lieRot: [Math.PI / 2, 0, 0], order: 27, runner: 'B' });
   }
 
@@ -167,6 +180,10 @@ export function buildTiger1() {
     g.add(collar);
     fastenerRow(g, [-1.4, 0.75, 0.52], [1.4, 0.75, 0.52], 4, 0.13, [0, 0, 1], M.main, 'hex');
     fastenerRow(g, [-1.4, -0.75, 0.52], [1.4, -0.75, 0.52], 4, 0.13, [0, 0, 1], M.main, 'hex');
+    const mpeg = assemblyPeg(M.main, 0.22, 0.36);
+    mpeg.rotation.x = Math.PI / 2;
+    mpeg.position.z = -0.62;
+    g.add(mpeg);
     P('D6', '방순', g, { pos: [0, 5.85, 2.55], lieRot: [Math.PI / 2, 0, 0], order: 25 });
   }
 
@@ -177,8 +194,8 @@ export function buildTiger1() {
     for (const [side, sx] of [['좌', -1], ['우', 1]]) {
       for (const seg of trackLayout(CIRCLES, 0.45, 1.35)) {
         const mesh = seg.kind === 'length'
-          ? trackLengthPiece(seg.len, 2.1, 0.45, M.main, { cleatOut: 0.34, cleatWide: 0.55 })
-          : trackLinkPiece(seg.len, 2.1, 0.45, M.main, { cleatOut: 0.34, cleatWide: 0.55 });
+          ? trackLengthPiece(seg.len, 2.1, 0.45, M.main, { cleatOut: 0.34, cleatWide: 0.55, grooveMat: M.groove })
+          : trackLinkPiece(seg.len, 2.1, 0.45, M.main, { cleatOut: 0.34, cleatWide: 0.55, grooveMat: M.groove });
         P(`D${idNum}`, `${side} 트랙 ${seg.kind === 'length' ? '렝스' : '링크'}`, mesh, {
           pos: [sx * 3.35, seg.pos[1], seg.pos[0]],
           rot: [-seg.theta, 0, 0],
@@ -191,20 +208,38 @@ export function buildTiger1() {
     }
   }
 
-  // ---- D11/D12 로드휠 패널 (겹배열 3+2 일체 몰드)
-  for (const [id, name, sx, order] of [['D11', '좌 로드휠', -1, 2], ['D12', '우 로드휠', 1, 3]]) {
+  // ---- 로드휠 (겹배열 — 외측/내측 평면 열 파츠로 분할, 연결 탭 + 결합 축 페그)
+  for (const [name, sx, order, zs, xo] of [
+    ['좌 외측 로드휠', -1, 2, [-3.0, -2.3, 0, 2.3, 3.0], 0.38],
+    ['우 외측 로드휠', 1, 3, [-3.0, -2.3, 0, 2.3, 3.0], 0.38],
+    ['좌 내측 로드휠', -1, 20, [-1.15, 1.15], -0.38],
+    ['우 내측 로드휠', 1, 21, [-1.15, 1.15], -0.38],
+  ]) {
     const g = new THREE.Group();
-    for (const wz of [-2.3, 0, 2.3]) {
-      const w = roadWheel(1.15, 0.62, M.main, M.groove, { bolts: 8 });
-      w.position.set(sx * 0.38, 0, wz);
+    for (const wz of zs) {
+      const end = Math.abs(wz) > 2.9;
+      const w = roadWheel(end ? 0.78 : 1.05, 0.6, M.main, M.groove, { bolts: end ? 5 : 8 });
+      w.position.set(0, 0, wz);
       g.add(w);
     }
-    for (const wz of [-1.15, 1.15]) {
-      const w = roadWheel(1.15, 0.62, M.main, M.groove, { bolts: 8 });
-      w.position.set(sx * -0.38, 0, wz);
-      g.add(w);
+    for (let i = 0; i < zs.length - 1; i++) {
+      const tab = chamferBox(0.32, 0.28, 0.5, 0.05, M.main);
+      tab.position.set(0, 0, (zs[i] + zs[i + 1]) / 2);
+      g.add(tab);
     }
-    P(id, name, g, { pos: [sx * 3.35, 1.6, 0], lieRot: [0, Math.PI / 2, 0], order, runner: 'B' });
+    for (const wz of zs) {
+      const peg = assemblyPeg(M.main, 0.15, 0.5);
+      peg.rotation.z = Math.PI / 2;
+      peg.position.set(sx * -0.45, 0, wz);
+      g.add(peg);
+    }
+    P(`D${idNum}`, name, g, {
+      pos: [sx * (3.35 + xo * sx), 1.5, 0],
+      lieRot: [0, Math.PI / 2, 0],
+      order,
+      runner: 'B',
+    });
+    idNum++;
   }
 
   // ---- 후면 배기관 (실드 포함 2본)

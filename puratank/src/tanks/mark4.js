@@ -5,7 +5,8 @@ import * as THREE from 'three';
 import {
   makeMats, chamferBox, profileY, cylX, cylY, cylZ, domeRivet,
   panelLine, panelRect, fastenerRow, grooveRing, beltSolid,
-  beltOutlinePoints, trackLayout, trackLengthPiece, trackLinkPiece, definePart,
+  beltOutlinePoints, trackLayout, trackLengthPiece, trackLinkPiece,
+  assemblyPeg, assemblySocket, definePart,
 } from '../plamo.js';
 
 const CIRCLES = [
@@ -28,6 +29,17 @@ export function buildMark4() {
     panelLine(g, [0, 1.71, -2.6], [0, 1.71, 2.6], [0, 1, 0], M.groove, 0.15);
     fastenerRow(g, [-0.9, 1.71, -2.5], [-0.9, 1.71, 2.5], 6, 0.13, [0, 1, 0], M.main);
     fastenerRow(g, [0.9, 1.71, -2.5], [0.9, 1.71, 2.5], 6, 0.13, [0, 1, 0], M.main);
+    for (const px of [-0.6, 0.6]) {
+      const peg = assemblyPeg(M.main, 0.16, 0.4);
+      peg.position.set(px, 1.8, 1.05);
+      g.add(peg);
+    }
+    for (const sx of [-1, 1]) for (const pz of [-1.8, 1.8]) {
+      const so = assemblySocket(M.groove, 0.22);
+      so.rotation.z = Math.PI / 2;
+      so.position.set(sx * 1.62, 0, pz);
+      g.add(so);
+    }
     P('B1', '차체 코어', g, { pos: [0, 2.9, 0.1], lieRot: [Math.PI / 2, Math.PI / 2, 0], order: 1 });
   }
 
@@ -49,6 +61,12 @@ export function buildMark4() {
     portRing.rotation.z = Math.PI / 2;
     portRing.position.set(sx * 0.75, 2.45, -0.4);
     g.add(portRing);
+    for (const pz of [-1.8, 1.8]) {
+      const peg = assemblyPeg(M.main, 0.18, 0.5);
+      peg.rotation.z = Math.PI / 2;
+      peg.position.set(sx * -0.75, 2.45, pz);
+      g.add(peg);
+    }
     P(id, name, g, { pos: [sx * 2.45, 0, 0], lieRot: [0, Math.PI / 2, 0], order });
   }
 
@@ -59,8 +77,8 @@ export function buildMark4() {
     for (const [side, sx] of [['좌', -1], ['우', 1]]) {
       for (const seg of trackLayout(CIRCLES, 0.5, 1.35)) {
         const mesh = seg.kind === 'length'
-          ? trackLengthPiece(seg.len, 1.8, 0.5, M.main, { cleatOut: 0.3 })
-          : trackLinkPiece(seg.len, 1.8, 0.5, M.main, { cleatOut: 0.3 });
+          ? trackLengthPiece(seg.len, 1.8, 0.5, M.main, { cleatOut: 0.3, grooveMat: M.groove })
+          : trackLinkPiece(seg.len, 1.8, 0.5, M.main, { cleatOut: 0.3, grooveMat: M.groove });
         P(`B${idNum}`, `${side} 트랙 ${seg.kind === 'length' ? '렝스' : '링크'}`, mesh, {
           pos: [sx * 2.5, seg.pos[1], seg.pos[0]],
           rot: [-seg.theta, 0, 0],
@@ -97,6 +115,10 @@ export function buildMark4() {
     const muzzle = cylZ(0.6, 0.6, 0.3, M.main, 16);
     muzzle.position.z = 1.6;
     g.add(shield, barrel, muzzle);
+    const gpeg = assemblyPeg(M.main, 0.2, 0.34);
+    gpeg.rotation.x = Math.PI / 2;
+    gpeg.position.z = -0.38;
+    g.add(gpeg);
     P(`B${idNum}`, name, g, {
       pos: [sx * 3.4, 2.9, 1.6],
       rot: [0, sx * 0.3, 0],

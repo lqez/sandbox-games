@@ -418,10 +418,15 @@ function trackBand(len, w, t, mat, cleatCount, opts = {}) {
     stud.position.set(0, t / 2 + 0.07, z);
     g.add(stud);
   }
-  // 연결 탭: +z 끝에 수 페그, -z 끝은 소켓 블록
+  // 연결 탭: +z 끝에 수 페그, -z 끝에 암 소켓(어두운 홈)
   const peg = new THREE.Mesh(new THREE.BoxGeometry(w * 0.4, t * 0.55, 0.3), mat);
   peg.position.set(0, 0, len / 2 + 0.13);
   g.add(peg);
+  if (opts.grooveMat) {
+    const socket = new THREE.Mesh(new THREE.BoxGeometry(w * 0.44, t * 0.6, 0.12), opts.grooveMat);
+    socket.position.set(0, 0, -len / 2 + 0.02);
+    g.add(socket);
+  }
   return g;
 }
 
@@ -497,6 +502,27 @@ export function centered(obj) {
   const g = new THREE.Group();
   g.add(obj);
   return { mesh: g, center: c };
+}
+
+// ---------------------------------------------------------------- 조립 핀-홀 몰드
+// 수 페그 (파츠 결합용 — 런너 위에서 사출 킷임을 보여주는 디테일)
+export function assemblyPeg(mat, r = 0.15, h = 0.38) {
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.8, r, h, 10), mat);
+  m.castShadow = true;
+  return m;
+}
+// 암 소켓 (어두운 원형 홈)
+export function assemblySocket(grooveMat, r = 0.2, h = 0.12) {
+  return new THREE.Mesh(new THREE.CylinderGeometry(r, r, h, 12), grooveMat);
+}
+// 욕조형 하부 차체 림 위 4점 페그
+export function rimPegs(g, w, h, d, mat, insetW = 0.62, insetD = 0.85) {
+  for (const sx of [-1, 1])
+    for (const sz of [-1, 1]) {
+      const p = assemblyPeg(mat);
+      p.position.set(sx * (w / 2 - insetW), h / 2 + 0.12, sz * (d / 2 - insetD));
+      g.add(p);
+    }
 }
 
 // ---------------------------------------------------------------- part 등록 헬퍼

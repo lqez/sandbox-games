@@ -5,7 +5,7 @@ import * as THREE from 'three';
 import {
   makeMats, chamferBox, profileX, tub, cylY, cylZ, cylX, sphere,
   panelLine, panelRect, fastenerRow, grooveRing, revolveShell,
-  trackLayout, trackLengthPiece, trackLinkPiece, roadWheel, wheelHoles, definePart,
+  trackLayout, trackLengthPiece, trackLinkPiece, assemblyPeg, assemblySocket, rimPegs, roadWheel, wheelHoles, definePart,
 } from '../plamo.js';
 
 const CIRCLES = [
@@ -26,6 +26,7 @@ export function buildRenaultFT() {
     fastenerRow(g, [1.61, -0.35, -2.3], [1.61, -0.35, 2.3], 6, 0.13, [1, 0, 0], M.main);
     panelLine(g, [-1.61, 0.2, -2.5], [-1.61, 0.2, 2.5], [-1, 0, 0], M.groove, 0.16);
     panelLine(g, [1.61, 0.2, -2.5], [1.61, 0.2, 2.5], [1, 0, 0], M.groove, 0.16);
+    rimPegs(g, 3.2, 1.7, 5.4, M.main);
     P('A1', '하부 차체', g, { pos: [0, 1.85, 0], lieRot: [Math.PI / 2, Math.PI / 2, 0], order: 1 });
   }
 
@@ -41,6 +42,11 @@ export function buildRenaultFT() {
     fastenerRow(g, [-1.3, 1.35, 2.15], [1.3, 1.35, 2.15], 5, 0.13, [0, 0.77, 0.63], M.main);
     fastenerRow(g, [-1.61, 0.55, -2.4], [-1.61, 0.55, 2.2], 6, 0.12, [-1, 0, 0], M.main);
     fastenerRow(g, [1.61, 0.55, -2.4], [1.61, 0.55, 2.2], 6, 0.12, [1, 0, 0], M.main);
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+      const so = assemblySocket(M.groove);
+      so.position.set(sx * 0.98, 0.03, sz * 1.85);
+      g.add(so);
+    }
     P('A2', '상부 차체', g, { pos: [0, 2.7, 0], lieRot: [Math.PI / 2, Math.PI / 2, 0], order: 22 });
   }
 
@@ -107,8 +113,8 @@ export function buildRenaultFT() {
     for (const [side, sx] of [['좌', -1], ['우', 1]]) {
       for (const seg of trackLayout(CIRCLES, 0.45, 1.05)) {
         const mesh = seg.kind === 'length'
-          ? trackLengthPiece(seg.len, 1.5, 0.45, M.main, { cleatOut: 0.3 })
-          : trackLinkPiece(seg.len, 1.5, 0.45, M.main, { cleatOut: 0.3 });
+          ? trackLengthPiece(seg.len, 1.5, 0.45, M.main, { cleatOut: 0.3, grooveMat: M.groove })
+          : trackLinkPiece(seg.len, 1.5, 0.45, M.main, { cleatOut: 0.3, grooveMat: M.groove });
         P(`A${idNum}`, `${side} 트랙 ${seg.kind === 'length' ? '렝스' : '링크'}`, mesh, {
           pos: [sx * 2.35, seg.pos[1], seg.pos[0]],
           rot: [-seg.theta, 0, 0],
@@ -145,6 +151,13 @@ export function buildRenaultFT() {
     const sprocket = roadWheel(0.78, 0.65, M.main, M.groove, { bolts: 6 });
     sprocket.position.set(0, -0.4, -1.75);
     g.add(sprocket);
+    // 차체 결합 축 페그
+    for (const pz of [-1.0, 0.6]) {
+      const peg = assemblyPeg(M.main, 0.16, 0.5);
+      peg.rotation.z = Math.PI / 2;
+      peg.position.set(sx * -0.4, 0.15, pz);
+      g.add(peg);
+    }
     P(`A${idNum}`, name, g, { pos: [sx * 2.35, 1.55, -0.2], lieRot: [0, Math.PI / 2, 0], order, runner: 'B' });
     idNum++;
   }
