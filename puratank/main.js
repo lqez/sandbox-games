@@ -1539,6 +1539,7 @@ function groundPitch(unit) {
 
 async function moveUnit(unit, path, finalFacing = null, onStep = null) {
   for (const cell of path) {
+    if (!unit.alive) return; // 이동 중 경계 사격에 격파되면 그 자리에서 정지
     const from = unit.group.position.clone();
     const to = cellToWorld(cell.gx, cell.gz);
     await rotateTo(unit, Math.atan2(to.x - from.x, to.z - from.z), 80);
@@ -2534,11 +2535,8 @@ async function resolveTurn() {
   aimLine.visible = false;
   turnLabel.textContent = `턴 ${turnNo} ▶`;
   const playerStart = { gx: player.gx, gz: player.gz };
-  // A) 사격 (전원 동시) — 정지 표적(경계·조준 중인 적)에게 최고 명중
-  const shooters = units.filter((u) => u.alive && u.plan?.type === 'fire');
-  await Promise.all(shooters.map((u) => resolvePlannedShot(u)));
-  // B) 경계망 구성: 이동 스텝마다 상대편 경계자의 사선을 체크,
-  //    걸리면 즉시 스냅 사격 (경계자당 1회, 스냅 페널티)
+  // A) 경계망 구성: 이동 스텝마다 상대편 경계자의 사선을 체크,
+  //    걸리면 이동 중 "실시간" 스냅 사격 (경계자당 1회, 스냅 페널티)
   const overwatchers = units.filter((u) => u.alive && u.plan?.type === 'overwatch' && u.reloadLeft <= 0);
   for (const ow of overwatchers) ow._snapped = false;
   const snapShots = [];
@@ -2556,7 +2554,7 @@ async function resolveTurn() {
       snapShots.push(fireSequence(ow, { unit: mover }, shot));
     }
   };
-  // C) 전 차량 동시 이동 + 충돌
+  // B) 전 차량 동시 이동 + 충돌 — 경계 스냅은 이 단계에서 실시간 발동
   const collisions = simulateMoves();
   const movers = units.filter((u) => u.alive && u.plan?.type === 'move' && u.plan.path?.length);
   await Promise.all(movers.map((u) => moveUnit(u, u.plan.path, u.plan.facing, onStep)));
@@ -2570,6 +2568,10 @@ async function resolveTurn() {
     await Promise.all([applyUnitDamage(h.a, COLLISION_DMG), applyUnitDamage(h.b, COLLISION_DMG)]);
   }
   await Promise.all(snapShots);
+  // C) 일반 사격 — 모든 이동이 끝난 뒤 발사.
+  //    목적지를 맞게 예측한 셀 사격은 도착한 적을 정통으로 맞춘다.
+  const shooters = units.filter((u) => u.alive && u.plan?.type === 'fire');
+  await Promise.all(shooters.map((u) => resolvePlannedShot(u)));
   // D) 조준 스택: 허탕 경계 = 다음 사격 +15%, 기동은 스택 소실
   for (const u of units) {
     if (!u.alive) continue;
