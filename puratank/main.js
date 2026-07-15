@@ -1273,11 +1273,12 @@ const decorMeshes = []; // 풀/꽃/낙엽/잔가지 — 디버그 토글용
   if (pebMesh.instanceColor) pebMesh.instanceColor.needsUpdate = true;
   scene.add(pebMesh);
 
-  // 바위 노두: 급경사면에 반쯤 묻힌 각진 암석 (레퍼런스 절벽 톤)
-  const ROCK_N = 110;
+  // 바위 노두: 급경사면에 반쯤 묻힌 각진 화강암 (플랫 셰이딩 결정면).
+  // 일부는 큰 바위덩이로 솟아 레퍼런스의 암반 노두 느낌.
+  const ROCK_N = 150;
   const rockMesh = new THREE.InstancedMesh(
-    new THREE.DodecahedronGeometry(0.42, 0),
-    new THREE.MeshStandardMaterial({ roughness: 0.95 }),
+    new THREE.IcosahedronGeometry(0.42, 0),
+    new THREE.MeshStandardMaterial({ roughness: 0.96, flatShading: true }),
     ROCK_N
   );
   rockMesh.castShadow = true;
@@ -1289,13 +1290,17 @@ const decorMeshes = []; // 풀/꽃/낙엽/잔가지 — 디버그 토글용
     const h = sampleHeight(wx, wz);
     if (h < WATER_Y + 0.05) continue;
     const w = surfaceWeights(wx, wz, h);
-    if (w.rock < 0.3 || rng() > w.rock) continue;
+    if (w.rock < 0.28 || rng() > w.rock) continue;
     gq.setFromEuler(new THREE.Euler(rng() * Math.PI, rng() * Math.PI, rng() * Math.PI));
-    gs.set(0.6 + rng() * 1.3, 0.45 + rng() * 0.7, 0.6 + rng() * 1.3);
-    gv.set(wx, h - 0.12 + rng() * 0.1, wz);
+    // 25%는 큰 바위덩이
+    const big = rng() < 0.25;
+    const sc = big ? 1.7 + rng() * 1.5 : 0.55 + rng() * 1.0;
+    gs.set(sc, sc * (0.5 + rng() * 0.5), sc);
+    gv.set(wx, h - 0.16 + rng() * 0.12, wz);
     gm.compose(gv, gq, gs);
     rockMesh.setMatrixAt(placed, gm);
-    gCol.setHSL(0.1 + rng() * 0.03, 0.2 + rng() * 0.1, 0.4 + rng() * 0.13);
+    // 화강암: 탈색된 회갈색, 결마다 미묘한 명암
+    gCol.setHSL(0.08 + rng() * 0.05, 0.05 + rng() * 0.12, 0.36 + rng() * 0.16);
     rockMesh.setColorAt(placed, gCol);
     placed++;
   }
