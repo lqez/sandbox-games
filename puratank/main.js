@@ -1392,7 +1392,7 @@ function aimPointOf(target) {
 }
 
 // 반환 { ok, reason, chance, distCells, pitch, cover }
-function computeShot(attacker, target, fromCell = null, facingOverride = null) {
+function computeShot(attacker, target, fromCell = null, facingOverride = null, lob = false) {
   const from = muzzleApprox(attacker, fromCell);
   const aim = aimPointOf(target);
   const dx = aim.x - from.x, dz = aim.z - from.z;
@@ -1400,13 +1400,14 @@ function computeShot(attacker, target, fromCell = null, facingOverride = null) {
   const distCells = horiz / TILE;
   if (distCells > attacker.fireRange) return { ok: false, reason: `사거리 밖 (${distCells.toFixed(1)}/${attacker.fireRange}칸)` };
   if (distCells < 1.2) return { ok: false, reason: '너무 가까움' };
+  if (lob && distCells < 4) return { ok: false, reason: '곡사 최소 사거리(4칸) 미만' };
 
-  // 포신 부앙각 — 차종별 한계 (T-34는 내림각이 나쁘고, FT는 유연)
+  // 포신 부앙각 — 차종별 한계 (곡사는 포물선이라 부앙각 제약 없음)
   const pMin = attacker.gun?.pitchMin ?? PITCH_MIN;
   const pMax = attacker.gun?.pitchMax ?? PITCH_MAX;
   const pitch = (Math.atan2(aim.y - from.y, horiz) * 180) / Math.PI;
-  if (pitch < pMin) return { ok: false, reason: `목표가 너무 낮음 (포신 내림각 ${pMin}° 한계)` };
-  if (pitch > pMax) return { ok: false, reason: `목표가 너무 높음 (포신 올림각 +${pMax}° 한계)` };
+  if (!lob && pitch < pMin) return { ok: false, reason: `목표가 너무 낮음 (포신 내림각 ${pMin}° 한계)` };
+  if (!lob && pitch > pMax) return { ok: false, reason: `목표가 너무 높음 (포신 올림각 +${pMax}° 한계)` };
 
   // 고정 포신: 사각(arc) 검사. 스폰슨 부포(Mark IV)는 좌/우 측면(±90°) 중심,
   // 일반 고정포는 정면 중심. 가상 위치 평가(fromCell)는 이동으로 선회한다고 보고 스킵.
@@ -1425,14 +1426,14 @@ function computeShot(attacker, target, fromCell = null, facingOverride = null) {
     }
   }
 
-  // 사선 차폐 검사 (직선 샘플링)
+  // 사선 차폐 검사 (직선 샘플링) — 곡사는 능선/프랍을 넘겨 쏘므로 스킵
   const attackerKey = cellKey(fromCell ? fromCell.gx : attacker.gx, fromCell ? fromCell.gz : attacker.gz);
   const targetKey = target.unit
     ? cellKey(target.unit.gx, target.unit.gz)
     : target.prop
       ? cellKey(target.prop.gx, target.prop.gz)
       : cellKey(target.gx, target.gz);
-  const steps = Math.max(8, Math.ceil(distCells * 5));
+  const steps = lob ? 0 : Math.max(8, Math.ceil(distCells * 5));
   const coverCells = new Map();
   const pt = new THREE.Vector3();
   for (let i = 1; i < steps; i++) {
@@ -1468,13 +1469,14 @@ function computeShot(attacker, target, fromCell = null, facingOverride = null) {
     chance += attacker.movedLastTurn ? -8 : 12;
     // 조준 스택: 허탕 경계로 쌓은 조준 보너스
     if (attacker.aimStack) chance += 15;
-    // 헐다운: 능선 마루의 목표는 차체가 가려져 맞히기 어렵다
-    if (hullDownCells.has(cellKey(target.unit.gx, target.unit.gz))) chance -= 16;
+    // 헐다운: 능선 마루의 목표는 차체가 가려진다 — 단 곡사는 위에서 떨어져 무효
+    if (!lob && hullDownCells.has(cellKey(target.unit.gx, target.unit.gz))) chance -= 16;
+    if (lob) chance -= 12; // 곡사 페널티
     chance = THREE.MathUtils.clamp(Math.round(chance), 8, 97);
   } else {
-    chance = THREE.MathUtils.clamp(Math.round(90 - distCells * 2.25 - cover * 10), 20, 95);
+    chance = THREE.MathUtils.clamp(Math.round(90 - distCells * 2.25 - cover * 10 - (lob ? 12 : 0)), 20, 95);
   }
-  return { ok: true, chance, distCells, pitch, cover };
+  return { ok: true, chance, distCells, pitch, cover, lob };
 }
 
 // 사격 가능한 모든 셀 스캔: 사거리·부앙각·사선(LoS)이 유효한 셀만 반환.
@@ -1491,7 +1493,8 @@ function computeFireCells(unit, fromCell = null, facing = null) {
       const occ = units.find((t) => t.alive && t !== unit && t.gx === gx && t.gz === gz);
       const prop = props.get(cellKey(gx, gz));
       const target = occ ? { unit: occ } : prop ? { prop } : { gx, gz };
-      const shot = computeShot(unit, target, fromCell, facing);
+      let shot = computeShot(unit, target, fromCell, facing);
+      if (!shot.ok) shot = computeShot(unit, target, fromCell, facing, true); // 곡사 재시도
       if (shot.ok) out.set(cellKey(gx, gz), { gx, gz, shot });
     }
   }
@@ -1912,8 +1915,8 @@ function sfxOnce(attacker) { if (!attacker._trvSfx) { attacker._trvSfx = true; s
 
 async function fireSequence(attacker, target, shot) {
   const aim = aimPointOf(target);
-  // 포탑/차체 조준 + 포신 부앙각 자동 조절
-  const pitchRad = await aimAt(attacker, aim, shot.pitch);
+  // 포탑/차체 조준 + 포신 부앙각 자동 조절 (곡사는 포신을 크게 들어올림)
+  const pitchRad = await aimAt(attacker, aim, shot.lob ? 43 : shot.pitch);
 
   sfx('fire');
   const muzzlePos = new THREE.Vector3();
@@ -1931,8 +1934,8 @@ async function fireSequence(attacker, target, shot) {
   let impact = aim.clone();
   if (!hit) {
     const a = Math.random() * Math.PI * 2;
-    // 산포 반경도 거리에 비례 — 원거리 빗나감은 크게 벗어난다
-    const r = TILE * (1.0 + Math.random() * 1.6) * (0.7 + (shot.distCells ?? 8) * 0.055);
+    // 산포 반경도 거리에 비례 — 원거리 빗나감은 크게, 곡사는 1.6배
+    const r = TILE * (1.0 + Math.random() * 1.6) * (0.7 + (shot.distCells ?? 8) * 0.055) * (shot.lob ? 1.6 : 1);
     impact.x += Math.sin(a) * r;
     impact.z += Math.cos(a) * r;
     impact.y = Math.max(sampleHeight(impact.x, impact.z), WATER_Y) + 0.1;
@@ -1942,10 +1945,11 @@ async function fireSequence(attacker, target, shot) {
   const from = muzzlePos.clone();
   const dist = from.distanceTo(impact);
   const mid = from.clone().lerp(impact, 0.5);
-  mid.y = Math.max(from.y, impact.y) + 1.6 + dist * 0.12;
+  // 곡사는 하늘 높이 치솟는 포물선, 직사는 낮고 빠른 탄도
+  mid.y = Math.max(from.y, impact.y) + (shot.lob ? 7 + dist * 0.5 : 1.6 + dist * 0.12);
   const shell = new THREE.Mesh(shellGeo, shellMat);
   scene.add(shell);
-  await tween(Math.min(700, 260 + dist * 26), (e) => {
+  await tween(shot.lob ? Math.min(1400, 550 + dist * 34) : Math.min(700, 260 + dist * 26), (e) => {
     const a = from.clone().lerp(mid, e);
     const b = mid.clone().lerp(impact, e);
     shell.position.copy(a.lerp(b, e));
@@ -1977,6 +1981,12 @@ const fireFillMat = new THREE.MeshBasicMaterial({
 });
 const fireEdgeMat = new THREE.MeshBasicMaterial({ color: 0xd0342c, transparent: true, opacity: 0.9, depthWrite: false });
 const fireEdgeThinMat = new THREE.MeshBasicMaterial({ color: 0xd0342c, transparent: true, opacity: 0.32, depthWrite: false });
+// 곡사(주황) — 능선 너머로 넘겨 쏘는 셀
+const lobFillMat = new THREE.MeshBasicMaterial({
+  color: 0xff9430, transparent: true, opacity: 0.14, side: THREE.DoubleSide, depthWrite: false,
+});
+const lobEdgeMat = new THREE.MeshBasicMaterial({ color: 0xe07818, transparent: true, opacity: 0.85, depthWrite: false });
+const lobEdgeThinMat = new THREE.MeshBasicMaterial({ color: 0xe07818, transparent: true, opacity: 0.28, depthWrite: false });
 
 const groundY = (x, z) => Math.max(sampleHeight(x, z), WATER_Y);
 
@@ -2105,9 +2115,17 @@ function showMoveField(cells, active) {
 // 사격 가능 필드: 부앙각/사거리/사선이 전부 유효한 셀만 포함 —
 // 못 쏘는 구역(너무 가까움·능선 차폐 등)은 애초에 영역에서 빠진다
 function showFireField(cells, active) {
-  showCellField(new Set(cells.keys()), {
+  const direct = new Set();
+  const lob = new Set();
+  for (const [k, v] of cells) (v.shot.lob ? lob : direct).add(k);
+  showCellField(direct, {
     fillMat: fireFillMat,
     edgeMat: active ? fireEdgeMat : fireEdgeThinMat,
+    fill: active,
+  });
+  showCellField(lob, {
+    fillMat: lobFillMat,
+    edgeMat: active ? lobEdgeMat : lobEdgeThinMat,
     fill: active,
   });
 }
@@ -2311,23 +2329,68 @@ aimRing.rotation.x = -Math.PI / 2;
 aimRing.visible = false;
 scene.add(aimRing);
 
-// 사격 조준선: 내 차량에서 드래그하는 동안 표시
+// 활시위 조준 UI: 시위줄(당김 표시) + 탄도 곡선(직사=낮은 직선, 곡사=높은 포물선) + 레티클
 const aimLine = new THREE.Line(
   new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(new Float32Array(6), 3)),
-  new THREE.LineBasicMaterial({ color: 0xff5544, transparent: true, opacity: 0.95, depthTest: false })
+  new THREE.LineBasicMaterial({ color: 0xd8dde6, transparent: true, opacity: 0.8, depthTest: false })
 );
 aimLine.renderOrder = 15;
 aimLine.visible = false;
 scene.add(aimLine);
-function updateAimLine(toPoint, valid) {
-  const pos = aimLine.geometry.attributes.position;
+const trajLine = new THREE.Line(
+  new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(new Float32Array(33 * 3), 3)),
+  new THREE.LineBasicMaterial({ color: 0xff4433, transparent: true, opacity: 0.95, depthTest: false })
+);
+trajLine.renderOrder = 15;
+trajLine.visible = false;
+scene.add(trajLine);
+const bowReticle = new THREE.Mesh(
+  new THREE.RingGeometry(0.55, 0.78, 26),
+  new THREE.MeshBasicMaterial({ color: 0xff4433, transparent: true, opacity: 0.9, side: THREE.DoubleSide, depthWrite: false })
+);
+bowReticle.rotation.x = -Math.PI / 2;
+bowReticle.visible = false;
+scene.add(bowReticle);
+function updateBowUI(pullPoint, aimPoint, shot) {
   const p = player.group.position;
-  pos.setXYZ(0, p.x, p.y + 1.3, p.z);
-  pos.setXYZ(1, toPoint.x, toPoint.y + 0.15, toPoint.z);
-  pos.needsUpdate = true;
-  aimLine.material.color.set(valid ? 0xff5544 : 0x8b95a8);
+  const sp = aimLine.geometry.attributes.position;
+  sp.setXYZ(0, p.x, p.y + 0.6, p.z);
+  sp.setXYZ(1, pullPoint.x, p.y + 0.35, pullPoint.z);
+  sp.needsUpdate = true;
   aimLine.visible = true;
+  const valid = !!shot;
+  const lob = valid && !!shot.lob;
+  const from = new THREE.Vector3(p.x, p.y + 1.4, p.z);
+  const to = aimPoint;
+  const dist = from.distanceTo(to);
+  const mid = from.clone().lerp(to, 0.5);
+  mid.y = Math.max(from.y, to.y) + (lob ? 7 + dist * 0.5 : 0.5 + dist * 0.04);
+  const tp = trajLine.geometry.attributes.position;
+  const a = new THREE.Vector3();
+  const b = new THREE.Vector3();
+  for (let i = 0; i <= 32; i++) {
+    const e = i / 32;
+    a.lerpVectors(from, mid, e);
+    b.lerpVectors(mid, to, e);
+    a.lerp(b, e);
+    tp.setXYZ(i, a.x, a.y, a.z);
+  }
+  tp.needsUpdate = true;
+  const col = !valid ? 0x8b95a8 : lob ? 0xff9430 : 0xff4433;
+  trajLine.material.color.set(col);
+  trajLine.visible = true;
+  bowReticle.position.set(to.x, groundY(to.x, to.z) + 0.12, to.z);
+  bowReticle.material.color.set(col);
+  bowReticle.visible = true;
 }
+function hideBowUI() {
+  aimLine.visible = false;
+  trajLine.visible = false;
+  bowReticle.visible = false;
+}
+const bowPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+const BOW_GAIN = 2.0;     // 당김 1유닛 → 조준 2유닛
+const BOW_DEADZONE = 0.9; // 이보다 덜 당기면 취소
 
 // 동시 턴제(WeGo): 턴마다 모든 차량이 행동 1개(AP 1)를 고르고 한꺼번에 진행.
 // 행동은 이동 또는 포격 — 포격은 "셀"을 조준하는 예측 사격이라
@@ -2406,7 +2469,15 @@ function planEnemies() {
         enemy.plan = { type: 'fire', cell: aim, shot };
         continue;
       }
-      // 능선 굴착 (Lv2+): 막힌 능선 지형을 포격해 다음 턴 포각 확보
+      // 곡사 (Lv2+): 사선이 막혔으면 능선 너머로 넘겨 쏜다
+      if (lvl >= 2 && !shot.ok) {
+        const lobShot = computeShot(enemy, aimIsPlayer ? { unit: player } : aim, null, null, true);
+        if (lobShot.ok && (!aimIsPlayer || lobShot.chance >= 25)) {
+          enemy.plan = { type: 'fire', cell: aim, shot: lobShot };
+          continue;
+        }
+      }
+      // 능선 굴착 (Lv2+): 곡사도 안 되면 막힌 지형을 포격해 포각 확보
       if (lvl >= 2 && shot.blockCell) {
         const dig = computeShot(enemy, shot.blockCell);
         if (dig.ok) {
@@ -2513,14 +2584,15 @@ function simulateMoves() {
 // 발사 즉시 재장전 시작.
 async function resolvePlannedShot(u) {
   const { gx, gz } = u.plan.cell;
+  const wasLob = !!u.plan.shot?.lob;
   const occ = units.find((t) => t.alive && t !== u && t.gx === gx && t.gz === gz);
   let target = occ ? { unit: occ } : null;
-  let shot = target ? computeShot(u, target) : null;
+  let shot = target ? computeShot(u, target, null, null, wasLob) : null;
   if (!shot?.ok) {
     const prop = props.get(cellKey(gx, gz));
-    if (prop) { target = { prop }; shot = computeShot(u, target); }
+    if (prop) { target = { prop }; shot = computeShot(u, target, null, null, wasLob); }
   }
-  if (!shot?.ok) { target = { gx, gz }; shot = computeShot(u, target); }
+  if (!shot?.ok) { target = { gx, gz }; shot = computeShot(u, target, null, null, wasLob); }
   if (!shot.ok) { target = { gx, gz }; shot = u.plan.shot; } // 지형 변화 등 — 계획값으로 발사
   u.reloadLeft = u.gun?.reload ?? 2;
   u.aimStack = 0; // 조준 스택 소모
@@ -2659,30 +2731,35 @@ renderer.domElement.addEventListener('pointerdown', (e) => {
 renderer.domElement.addEventListener('pointermove', (e) => {
   if (fireGesture) {
     setPointer(e);
-    // 적 우선, 아니면 지면 셀
-    let cell = null;
-    const enemyHit = raycaster.intersectObjects(
-      enemies.filter((en) => en.alive).map((en) => en.hitbox)
-    )[0];
-    if (enemyHit) {
-      const u = enemyHit.object.userData.unit;
-      cell = { gx: u.gx, gz: u.gz };
-    } else {
-      const bridgeHit = bridge.alive && bridge.hit ? raycaster.intersectObject(bridge.hit)[0] : null;
-      if (bridgeHit) cell = worldToCell(bridgeHit.point);
-      else {
-        const ground = raycaster.intersectObject(terrainMesh, false)[0];
-        if (ground) cell = worldToCell(ground.point);
-      }
+    // 활시위: 내 차량에서 당긴 반대 방향으로, 당긴 만큼 멀리 조준
+    const pull = new THREE.Vector3();
+    bowPlane.constant = -player.group.position.y;
+    if (!raycaster.ray.intersectPlane(bowPlane, pull)) return;
+    const px = pull.x - player.group.position.x;
+    const pz = pull.z - player.group.position.z;
+    const pullLen = Math.hypot(px, pz);
+    if (pullLen < BOW_DEADZONE) {
+      fireGesture.cell = null;
+      fireGesture.shot = null;
+      hideBowUI();
+      hoverAim = null;
+      return;
     }
-    if (cell) {
-      const f = currentFireCells.get(cellKey(cell.gx, cell.gz));
-      fireGesture.cell = f ? cell : null;
-      fireGesture.shot = f ? f.shot : null;
-      const aimP = aimPointOf(fireGesture.cell ?? cell);
-      updateAimLine(aimP, !!f);
-      hoverAim = aimP;
-    }
+    const aimDist = Math.min(pullLen * BOW_GAIN, player.fireRange * TILE);
+    const ax = player.group.position.x - (px / pullLen) * aimDist;
+    const az = player.group.position.z - (pz / pullLen) * aimDist;
+    const cell = worldToCell({ x: ax, z: az });
+    const f = currentFireCells.get(cellKey(cell.gx, cell.gz));
+    fireGesture.cell = f ? { gx: cell.gx, gz: cell.gz } : null;
+    fireGesture.shot = f ? f.shot : null;
+    const aimP = aimPointOf(f ? fireGesture.cell : cell);
+    updateBowUI(pull, aimP, f ? f.shot : null);
+    hoverAim = aimP;
+    setHint(
+      f
+        ? `${f.shot.lob ? '🌕 곡사' : '➡ 직사'} ${(aimDist / TILE).toFixed(0)}칸 · ${f.shot.chance}%`
+        : `조준 불가 — ${(aimDist / TILE).toFixed(0)}칸`
+    );
     return;
   }
   if (ghostGesture) {
@@ -2706,13 +2783,13 @@ renderer.domElement.addEventListener('pointerup', async (e) => {
     const g = fireGesture;
     fireGesture = null;
     controls.enabled = true;
-    aimLine.visible = false;
+    hideBowUI();
     hoverAim = null;
     downPos = null;
     if (g.cell && g.shot) {
       await submitPlan({ type: 'fire', cell: g.cell, shot: g.shot });
     } else {
-      setHint('조준 취소 — 빨간 필드 안에서 놓아야 발사');
+      setHint('조준 취소');
       refreshPlanUI(false);
     }
     return;
@@ -2734,11 +2811,11 @@ renderer.domElement.addEventListener('pointerup', async (e) => {
   const enemyHit = raycaster.intersectObjects(
     enemies.filter((en) => en.alive).map((en) => en.hitbox)
   )[0];
-  if (enemyHit) setHint('사격: 내 전차에서 목표까지 드래그');
+  if (enemyHit) setHint('사격: 내 전차를 잡고 반대쪽으로 시위를 당기세요');
 });
 
 renderer.domElement.addEventListener('pointercancel', () => {
-  if (fireGesture) { fireGesture = null; aimLine.visible = false; refreshPlanUI(false); }
+  if (fireGesture) { fireGesture = null; hideBowUI(); refreshPlanUI(false); }
   if (ghostGesture) { ghostGesture = null; ghost.visible = false; }
   controls.enabled = true;
   downPos = null;
