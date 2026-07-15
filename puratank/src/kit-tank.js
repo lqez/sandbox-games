@@ -23,23 +23,23 @@ export const KIT_KEYS = ['ft', 'mk4', 't34', 'tiger'];
 export const KIT_INFO = {
   ft: {
     label: '르노 FT',
-    stats: { mp: 9, fireRange: 8, damage: 34, hullLv: 1, driverLv: 3 },
-    gun: { pitchMin: -24, pitchMax: 32, fixed: false },
+    stats: { mp: 18, fireRange: 16, damage: 34, hullLv: 1, driverLv: 3 },
+    gun: { pitchMin: -18, pitchMax: 30, fixed: false },
   },
   mk4: {
     label: 'Mark IV',
-    stats: { mp: 6, fireRange: 8, damage: 40, hullLv: 3, driverLv: 1 },
-    gun: { pitchMin: -16, pitchMax: 10, fixed: true, sponson: true, arc: 55 }, // 좌우 스폰슨 부포: 측면 ±90°±55° 사각
+    stats: { mp: 12, fireRange: 16, damage: 40, hullLv: 3, driverLv: 1 },
+    gun: { pitchMin: -12, pitchMax: 8, fixed: true, sponson: true, arc: 55 }, // 좌우 스폰슨 부포: 측면 ±90°±55° 사각
   },
   t34: {
     label: 'T-34',
-    stats: { mp: 8, fireRange: 9, damage: 45, hullLv: 2, driverLv: 2 },
-    gun: { pitchMin: -8, pitchMax: 26, fixed: false },
+    stats: { mp: 16, fireRange: 18, damage: 45, hullLv: 2, driverLv: 2 },
+    gun: { pitchMin: -5, pitchMax: 25, fixed: false },
   },
   tiger: {
     label: '티거 I',
-    stats: { mp: 6, fireRange: 10, damage: 60, hullLv: 3, driverLv: 1 },
-    gun: { pitchMin: -12, pitchMax: 16, fixed: false },
+    stats: { mp: 12, fireRange: 20, damage: 60, hullLv: 3, driverLv: 1 },
+    gun: { pitchMin: -8, pitchMax: 15, fixed: false },
   },
 };
 
@@ -75,7 +75,7 @@ const SPECS = {
   },
 };
 
-const SCALE = 0.42; // 킷(차체 ~8유닛) → 게임(차체 ~3.4유닛 ≈ 2×2타일)
+const SCALE = 0.22; // 킷(차체 ~8유닛) → 게임(차체 ~1.8유닛 ≈ 2×2타일, 1타일=1유닛)
 
 export function buildKitTank(key) {
   const def = BUILDERS[key]();
@@ -120,10 +120,10 @@ export function buildKitTank(key) {
   cannon.add(muzzle);
 
   const hitbox = new THREE.Mesh(
-    new THREE.CylinderGeometry(2.0, 2.0, 4.4, 8),
+    new THREE.CylinderGeometry(1.1, 1.1, 2.6, 8),
     new THREE.MeshBasicMaterial({ visible: false })
   );
-  hitbox.position.y = 2.2;
+  hitbox.position.y = 1.3;
   outer.add(hitbox);
 
   outer.traverse((o) => {

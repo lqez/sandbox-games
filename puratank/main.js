@@ -16,24 +16,24 @@ const enemyKits = KIT_KEYS.filter((k) => k !== playerKit);
 // ---------------------------------------------------------------------------
 // 상수
 // ---------------------------------------------------------------------------
-const GRID = 20;            // 20x20 그리드
-const TILE = 2;             // 한 칸의 월드 크기
-const VRES = 4;             // 타일당 하이트필드 분할 수
+const GRID = 40;            // 40x40 그리드 (2배 조밀 — 탱크 ≈ 2×2타일)
+const TILE = 1;             // 한 칸의 월드 크기
+const VRES = 2;             // 타일당 하이트필드 분할 수 (하이트필드 해상도는 동일)
 const WATER_Y = -0.12;      // 수면 높이
-const MAX_CLIMB = 1.0;      // 궤도로 오를 수 있는 최대 단차
+const MAX_CLIMB = 0.5;      // 궤도로 오를 수 있는 최대 단차 (1유닛 스텝 기준)
 const FORD_DEPTH = 0.22;    // 도하 가능한 최대 수심 — 더 깊은 물은 진입 불가
 const PITCH_MIN = -14;      // 포신 내림각 한계(도)
 const PITCH_MAX = 20;       // 포신 올림각 한계(도)
 
 const PLAYER_STATS = KIT_INFO[playerKit].stats;
-const ENEMY_BASE   = { mp: 6, fireRange: 7, damage: 24 };
+const ENEMY_BASE   = { mp: 12, fireRange: 14, damage: 24 };
 
-const PLAYER_SPAWN = { gx: 10, gz: 17 };
+const PLAYER_SPAWN = { gx: 20, gz: 34 };
 const ENEMY_SPAWNS = [
-  { gx: 3, gz: 2 },
-  { gx: 9, gz: 2 },
-  { gx: 16, gz: 3 },
-  { gx: 13, gz: 5 },
+  { gx: 6, gz: 4 },
+  { gx: 18, gz: 4 },
+  { gx: 32, gz: 6 },
+  { gx: 26, gz: 10 },
 ];
 
 // 지형 종류
@@ -247,31 +247,31 @@ const VN = GRID * VRES;               // 하이트필드 분할 수
 const HALF = (GRID * TILE) / 2;
 const VSTEP = TILE / VRES;
 
-const hNoise = makeNoise(5);
-const hNoise2 = makeNoise(2.4);
-const tNoise = makeNoise(4);
+const hNoise = makeNoise(10);
+const hNoise2 = makeNoise(4.8);
+const tNoise = makeNoise(8);
 
 // 하천 경로: 스폰 지점과 겹치지 않을 때까지 리샘플링
 let riverCx, riverAmp, riverPhase;
 {
   let tries = 0;
   do {
-    riverCx = 4 + rng() * 12;
-    riverAmp = 2.4 + rng() * 1.8;
+    riverCx = 8 + rng() * 24;
+    riverAmp = 4.8 + rng() * 3.6;
     riverPhase = rng() * Math.PI * 2;
     tries++;
   } while (
     tries < 40 &&
     [PLAYER_SPAWN, ...ENEMY_SPAWNS].some((s) => {
-      const rx = riverCx + Math.sin(s.gz * 0.42 + riverPhase) * riverAmp;
-      return Math.abs(rx - s.gx) < (s === PLAYER_SPAWN ? 4 : 3);
+      const rx = riverCx + Math.sin(s.gz * 0.21 + riverPhase) * riverAmp;
+      return Math.abs(rx - s.gx) < (s === PLAYER_SPAWN ? 8 : 6);
     })
   );
 }
 const riverPoints = [];
 for (let zw = -HALF; zw <= HALF; zw += 0.5) {
   const gzf = zw / TILE + (GRID - 1) / 2;
-  const rx = riverCx + Math.sin(gzf * 0.42 + riverPhase) * riverAmp;
+  const rx = riverCx + Math.sin(gzf * 0.21 + riverPhase) * riverAmp;
   riverPoints.push({ x: (rx - (GRID - 1) / 2) * TILE, z: zw });
 }
 function distToRiver(wx, wz) {
@@ -306,7 +306,7 @@ function fieldHeight(wx, wz) {
   const dr = distToRiver(wx, wz);
   if (dr < 5.5) {
     const gzf = wz / TILE + (GRID - 1) / 2;
-    const ford = smooth01((Math.sin(gzf * 0.55 + riverPhase * 2.3) - 0.38) / 0.3);
+    const ford = smooth01((Math.sin(gzf * 0.275 + riverPhase * 2.3) - 0.38) / 0.3);
     const bed = -0.52 + ford * 0.27; // 여울 -0.25(수심 0.13) ↔ 깊은 곳 -0.52(수심 0.4)
     h = THREE.MathUtils.lerp(bed, h, smooth01((dr - 1.3) / 4.2));
   }
@@ -385,8 +385,8 @@ const BLEND_COLORS = {
 // 지형 종류 가중치 (0..1) — 셀 분류와 같은 노이즈/규칙을 연속값으로 사용
 function surfaceWeights(wx, wz, h) {
   const fx = (wx + HALF) / TILE, fz = (wz + HALF) / TILE;
-  // tNoise 격자(size 7, cell 4)의 안전 입력 상한은 (size-2)*cell = 20
-  const tn = tNoise(Math.min(fx - 0.5 + 7, 19.99), Math.min(fz - 0.5 + 3, 19.99));
+  // tNoise 격자(size 7, cell 8)의 안전 입력 상한 (x0+1 ≤ size-1)
+  const tn = tNoise(Math.min(fx - 0.5 + 7, 47.9), Math.min(fz - 0.5 + 3, 47.9));
   const dirt = smooth01((tn - 0.58) / 0.2);
   const sand = smooth01((0.3 - tn) / 0.2) * (1 - dirt);
   const mud = 1 - smooth01((distToRiver(wx, wz) - 2.2) / 2.0);
@@ -755,7 +755,7 @@ function placeProp(type, gx, gz) {
     terrainAt(gx, gz) !== T.WATER;
 
   // 수목: 숲 노이즈 군락
-  const fNoise = makeNoise(3.4);
+  const fNoise = makeNoise(6.8);
   let trees = 0;
   for (let gx = 0; gx < GRID && trees < 42; gx++) {
     for (let gz = 0; gz < GRID && trees < 42; gz++) {
@@ -1032,8 +1032,8 @@ function makeHpBar() {
   canvas.height = 44;
   const tex = new THREE.CanvasTexture(canvas);
   const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false }));
-  sprite.scale.set(2.6, 0.72, 1);
-  sprite.position.y = 5.4;
+  sprite.scale.set(2.0, 0.55, 1);
+  sprite.position.y = 3.3;
   sprite.renderOrder = 10;
   return { sprite, canvas, tex };
 }
@@ -1200,12 +1200,12 @@ function muzzleApprox(unit, cell = null) {
   const gx = cell ? cell.gx : unit.gx;
   const gz = cell ? cell.gz : unit.gz;
   const p = cellToWorld(gx, gz);
-  return new THREE.Vector3(p.x, standHeight(gx, gz) + 2.7, p.z); // 2×2 스케일 포 높이
+  return new THREE.Vector3(p.x, standHeight(gx, gz) + 1.6, p.z);
 }
 function aimPointOf(target) {
   if (target.unit) {
     const u = target.unit;
-    return new THREE.Vector3(u.group.position.x, standHeight(u.gx, u.gz) + 1.7, u.group.position.z);
+    return new THREE.Vector3(u.group.position.x, standHeight(u.gx, u.gz) + 0.9, u.group.position.z);
   }
   if (target.prop) {
     const pr = target.prop;
@@ -1224,7 +1224,7 @@ function computeShot(attacker, target, fromCell = null) {
   const horiz = Math.hypot(dx, dz);
   const distCells = horiz / TILE;
   if (distCells > attacker.fireRange) return { ok: false, reason: `사거리 밖 (${distCells.toFixed(1)}/${attacker.fireRange}칸)` };
-  if (distCells < 0.6) return { ok: false, reason: '너무 가까움' };
+  if (distCells < 1.2) return { ok: false, reason: '너무 가까움' };
 
   // 포신 부앙각 — 차종별 한계 (T-34는 내림각이 나쁘고, FT는 유연)
   const pMin = attacker.gun?.pitchMin ?? PITCH_MIN;
@@ -1285,12 +1285,12 @@ function computeShot(attacker, target, fromCell = null) {
   let chance;
   if (target.unit) {
     const heightAdv = THREE.MathUtils.clamp((from.y - aim.y) * 6, -10, 12);
-    // 거리 편차: 2칸까지 최고 명중, 이후 칸당 6% + 원거리 가속 페널티
-    const distPen = Math.max(0, distCells - 2) * 6 + Math.max(0, distCells - 6) * 2.5;
+    // 거리 편차: 4칸까지 최고 명중, 이후 칸당 3% + 원거리 가속 페널티 (1칸=1유닛)
+    const distPen = Math.max(0, distCells - 4) * 3 + Math.max(0, distCells - 12) * 1.25;
     chance = 96 - distPen - cover * 14 - target.unit.driverLv * 6 + heightAdv;
     chance = THREE.MathUtils.clamp(Math.round(chance), 8, 96);
   } else {
-    chance = THREE.MathUtils.clamp(Math.round(90 - distCells * 4.5 - cover * 10), 20, 95);
+    chance = THREE.MathUtils.clamp(Math.round(90 - distCells * 2.25 - cover * 10), 20, 95);
   }
   return { ok: true, chance, distCells, pitch, cover };
 }
@@ -1348,21 +1348,21 @@ function groundPitch(unit) {
   const ry = unit.group.rotation.y;
   const fx = Math.sin(ry), fz = Math.cos(ry);
   const p = unit.group.position;
-  const hF = sampleHeight(p.x + fx * 1.3, p.z + fz * 1.3);
-  const hB = sampleHeight(p.x - fx * 1.3, p.z - fz * 1.3);
-  return THREE.MathUtils.clamp(Math.atan2(hB - hF, 2.6), -0.45, 0.45);
+  const hF = sampleHeight(p.x + fx * 0.8, p.z + fz * 0.8);
+  const hB = sampleHeight(p.x - fx * 0.8, p.z - fz * 0.8);
+  return THREE.MathUtils.clamp(Math.atan2(hB - hF, 1.6), -0.45, 0.45);
 }
 
 async function moveUnit(unit, path) {
   for (const cell of path) {
     const from = unit.group.position.clone();
     const to = cellToWorld(cell.gx, cell.gz);
-    await rotateTo(unit, Math.atan2(to.x - from.x, to.z - from.z), 110);
+    await rotateTo(unit, Math.atan2(to.x - from.x, to.z - from.z), 80);
     sfx(terrainAt(cell.gx, cell.gz) === T.WATER ? 'splash' : 'step');
-    await tween(180, (e) => {
+    await tween(105, (e) => {
       const x = THREE.MathUtils.lerp(from.x, to.x, e);
       const z = THREE.MathUtils.lerp(from.z, to.z, e);
-      unit.group.position.set(x, sampleHeight(x, z) + Math.sin(e * Math.PI) * 0.12, z);
+      unit.group.position.set(x, sampleHeight(x, z) + Math.sin(e * Math.PI) * 0.08, z);
       unit.group.rotation.x = groundPitch(unit);
     });
     unit.gx = cell.gx;
@@ -1375,7 +1375,7 @@ async function moveUnit(unit, path) {
 // ---------------------------------------------------------------------------
 // 이펙트: 파편 / 폭발 / 크레이터 / 분해
 // ---------------------------------------------------------------------------
-const shellGeo = new THREE.SphereGeometry(0.24, 10, 10);
+const shellGeo = new THREE.SphereGeometry(0.17, 10, 10);
 const shellMat = new THREE.MeshBasicMaterial({ color: 0x2f3542 });
 const flashMat = new THREE.MeshBasicMaterial({ color: 0xffd24d, transparent: true });
 const debrisGeo = new RoundedBoxGeometry(0.22, 0.22, 0.22, 1, 0.05);
@@ -1480,9 +1480,9 @@ function crater(gx, gz) {
   colAttr.needsUpdate = true;
   terrainGeo.computeVertexNormals();
   terrain[gx][gz] = T.DIRT;
-  // 주변 셀 높이 캐시 갱신 + 프랍 높이 보정
-  for (let dx = -1; dx <= 1; dx++) {
-    for (let dz = -1; dz <= 1; dz++) {
+  // 주변 셀 높이 캐시 갱신 + 프랍 높이 보정 (크레이터 R 2.1 = 약 2칸)
+  for (let dx = -2; dx <= 2; dx++) {
+    for (let dz = -2; dz <= 2; dz++) {
       const x = gx + dx, z = gz + dz;
       if (!inBounds(x, z)) continue;
       const p = cellToWorld(x, z);
@@ -1607,11 +1607,13 @@ async function resolveImpact(impact, attacker, directUnit = null) {
   await explosionFx(impact.clone().add(new THREE.Vector3(0, 0.4, 0)), !!directUnit);
   const c = worldToCell(impact);
   crater(c.gx, c.gz);
-  // 프랍 피해 (착탄 셀 + 인접)
-  for (let dx = -1; dx <= 1; dx++) {
-    for (let dz = -1; dz <= 1; dz++) {
+  // 프랍 피해 (착탄 셀 + 주변 2칸, 거리 감쇠)
+  for (let dx = -2; dx <= 2; dx++) {
+    for (let dz = -2; dz <= 2; dz++) {
       const prop = props.get(cellKey(c.gx + dx, c.gz + dz));
-      if (prop) damageProp(prop, dx === 0 && dz === 0 ? 60 : 28);
+      if (!prop) continue;
+      const ring = Math.max(Math.abs(dx), Math.abs(dz));
+      damageProp(prop, ring === 0 ? 60 : ring === 1 ? 38 : 20);
     }
   }
   if (directUnit) {
@@ -1621,7 +1623,7 @@ async function resolveImpact(impact, attacker, directUnit = null) {
   for (const u of units) {
     if (!u.alive || u === directUnit) continue;
     const d = Math.hypot(u.group.position.x - impact.x, u.group.position.z - impact.z);
-    if (d < TILE * 1.35) await applyUnitDamage(u, attacker.damage * 0.4); // 2×2 차체 스플래시
+    if (d < 2.0) await applyUnitDamage(u, attacker.damage * 0.4); // 스플래시 반경 (월드 유닛)
   }
 }
 
@@ -1696,7 +1698,7 @@ async function fireSequence(attacker, target, shot) {
   if (!hit) {
     const a = Math.random() * Math.PI * 2;
     // 산포 반경도 거리에 비례 — 원거리 빗나감은 크게 벗어난다
-    const r = TILE * (0.5 + Math.random() * 0.8) * (0.7 + (shot.distCells ?? 4) * 0.11);
+    const r = TILE * (1.0 + Math.random() * 1.6) * (0.7 + (shot.distCells ?? 8) * 0.055);
     impact.x += Math.sin(a) * r;
     impact.z += Math.cos(a) * r;
     impact.y = Math.max(sampleHeight(impact.x, impact.z), WATER_Y) + 0.1;
@@ -1876,7 +1878,7 @@ function showFireField(cells, active) {
   });
 }
 const targetRings = [];
-const targetRingGeo = new THREE.RingGeometry(1.7, 2.05, 32);
+const targetRingGeo = new THREE.RingGeometry(1.15, 1.42, 32);
 const targetRingMat = new THREE.MeshBasicMaterial({
   color: 0xff5544, transparent: true, opacity: 0.85, side: THREE.DoubleSide, depthWrite: false,
 });
@@ -1917,7 +1919,7 @@ function showTargets(targets) {
     scene.add(ring);
     targetRings.push(ring);
     const sp = chanceSprite(`${t.shot.chance}%`);
-    sp.position.set(u.group.position.x, u.group.position.y + 6.2, u.group.position.z);
+    sp.position.set(u.group.position.x, u.group.position.y + 4.0, u.group.position.z);
     scene.add(sp);
     chanceSprites.push(sp);
   }
