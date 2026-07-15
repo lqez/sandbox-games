@@ -1680,8 +1680,85 @@ function addTrackRibbon(unit, x0, z0, x1, z1) {
   trailIdx = (trailIdx + 1) % TRAIL_SEG;
 }
 
-const shellGeo = new THREE.SphereGeometry(0.17, 10, 10);
-const shellMat = new THREE.MeshBasicMaterial({ color: 0x2f3542 });
+// ---------------------------------------------------------------------------
+// 시대별 실포탄 (SD 과장 스케일): 차체별 실제 사용 탄종의 실루엣
+//  ft: 37mm Puteaux — 짧고 뭉툭한 유탄
+//  mk4: 6파운더(57mm) — 둥근 코의 강철 포탄
+//  t34: 76.2mm BR-350 — 뾰족 오자이브 + 검은 탄두
+//  tiger: 88mm PzGr.39 — 길쭉한 철갑탄 + 흰 탄도캡
+// ---------------------------------------------------------------------------
+const SHELL_SPECS = {
+  ft:    { len: 0.55, rad: 0.115, body: 0x565c66, tip: 0x565c66, blunt: 0.55 },
+  mk4:   { len: 0.72, rad: 0.13,  body: 0x4c545e, tip: 0x4c545e, blunt: 0.34 },
+  t34:   { len: 0.88, rad: 0.15,  body: 0x46523f, tip: 0x1d2126, blunt: 0.16 },
+  tiger: { len: 1.05, rad: 0.16,  body: 0x2e333b, tip: 0xdde2e8, blunt: 0.09 },
+};
+const shellBandMat = new THREE.MeshStandardMaterial({ color: 0xb08850, roughness: 0.35, metalness: 0.7 });
+const shellCache = new Map();
+function makeShell(kitKey) {
+  const key = SHELL_SPECS[kitKey] ? kitKey : 't34';
+  if (!shellCache.has(key)) {
+    const sp = SHELL_SPECS[key];
+    const g = new THREE.Group();
+    // 탄체: 원통 하부 + 오자이브(곡선 코) 회전체 — 코가 +Z를 향하게
+    const pts = [new THREE.Vector2(0.001, 0), new THREE.Vector2(sp.rad, 0), new THREE.Vector2(sp.rad, sp.len * 0.5)];
+    const tipStart = sp.len * 0.5;
+    for (let i = 1; i <= 5; i++) {
+      const t = i / 5;
+      const e = 1 - (1 - t) * (1 - t); // 오자이브 곡률
+      pts.push(new THREE.Vector2(THREE.MathUtils.lerp(sp.rad, sp.rad * sp.blunt, e), tipStart + (sp.len - tipStart) * t));
+    }
+    pts.push(new THREE.Vector2(0.001, sp.len));
+    const bodyGeo = new THREE.LatheGeometry(pts, 18);
+    bodyGeo.rotateX(Math.PI / 2);
+    const body = new THREE.Mesh(bodyGeo, new THREE.MeshStandardMaterial({ color: sp.body, roughness: 0.45, metalness: 0.55 }));
+    g.add(body);
+    // 탄두 (t34 검정 / tiger 흰 탄도캡)
+    if (sp.tip !== sp.body) {
+      const capGeo = new THREE.ConeGeometry(sp.rad * 0.62, sp.len * 0.3, 14);
+      capGeo.rotateX(Math.PI / 2);
+      const cap = new THREE.Mesh(capGeo, new THREE.MeshStandardMaterial({ color: sp.tip, roughness: 0.5, metalness: 0.3 }));
+      cap.position.z = sp.len * 0.88;
+      g.add(cap);
+    }
+    // 구리 회전탄대
+    const bandGeo = new THREE.CylinderGeometry(sp.rad * 1.05, sp.rad * 1.05, sp.len * 0.07, 18);
+    bandGeo.rotateX(Math.PI / 2);
+    const band = new THREE.Mesh(bandGeo, shellBandMat);
+    band.position.z = sp.len * 0.12;
+    g.add(band);
+    g.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+    shellCache.set(key, g);
+  }
+  return shellCache.get(key).clone();
+}
+// 예광 궤적: 포탄 뒤로 이어지는 트레일 라인
+const TRACER_N = 30;
+function makeTracer(startPos) {
+  const arr = new Float32Array(TRACER_N * 3);
+  for (let i = 0; i < TRACER_N; i++) arr.set([startPos.x, startPos.y, startPos.z], i * 3);
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(arr, 3));
+  const line = new THREE.Line(geo, new THREE.LineBasicMaterial({
+    color: 0xffb45e, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false,
+  }));
+  line.frustumCulled = false;
+  scene.add(line);
+  return {
+    line,
+    push(p) {
+      arr.copyWithin(3, 0, (TRACER_N - 1) * 3);
+      arr.set([p.x, p.y, p.z], 0);
+      geo.attributes.position.needsUpdate = true;
+    },
+    fade() {
+      tween(320, (e) => { line.material.opacity = 0.85 * (1 - e); }, linear).then(() => {
+        scene.remove(line);
+        geo.dispose();
+      });
+    },
+  };
+}
 const flashMat = new THREE.MeshBasicMaterial({ color: 0xffd24d, transparent: true });
 const debrisGeo = new RoundedBoxGeometry(0.22, 0.22, 0.22, 1, 0.05);
 
@@ -2068,14 +2145,33 @@ async function fireSequence(attacker, target, shot) {
   const mid = from.clone().lerp(impact, 0.5);
   // 곡사는 하늘 높이 치솟는 포물선, 직사는 거의 직선
   mid.y = Math.max(from.y, impact.y) + (shot.lob ? 7 + dist * 0.5 : 0.3 + dist * 0.03);
-  const shell = new THREE.Mesh(shellGeo, shellMat);
+  // 시대별 실포탄 + 예광 트레일 — 천천히 날아 궤적이 잘 보인다
+  const shell = makeShell(attacker.kitKey);
+  shell.position.copy(from);
   scene.add(shell);
-  await tween(shot.lob ? Math.min(1400, 550 + dist * 34) : Math.min(700, 260 + dist * 26), (e) => {
+  const tracer = makeTracer(from);
+  const prevPos = from.clone();
+  const dirTmp = new THREE.Vector3();
+  const fwd = new THREE.Vector3(0, 0, 1);
+  const flight = shot.lob
+    ? Math.min(2600, 950 + dist * 70)
+    : Math.min(1700, 550 + dist * 52);
+  await tween(flight, (e, rawK) => {
     const a = from.clone().lerp(mid, e);
     const b = mid.clone().lerp(impact, e);
-    shell.position.copy(a.lerp(b, e));
+    a.lerp(b, e);
+    shell.position.copy(a);
+    // 탄체를 비행 방향으로 정렬 + 강선 회전
+    dirTmp.subVectors(a, prevPos);
+    if (dirTmp.lengthSq() > 1e-6) {
+      shell.quaternion.setFromUnitVectors(fwd, dirTmp.normalize());
+      shell.rotateZ(rawK * 22);
+    }
+    prevPos.copy(a);
+    tracer.push(a);
   }, linear);
   scene.remove(shell);
+  tracer.fade();
   tween(200, (e) => { attacker.cannon.rotation.x = pitchRad * (1 - e); });
 
   if (!hit && target.unit && !collUnit) popText(aimPointOf(target), 'MISS!', '#bcd2ff');
