@@ -30,10 +30,8 @@ const ENEMY_BASE   = { mp: 12, fireRange: 14, damage: 24 };
 
 const PLAYER_SPAWN = { gx: 20, gz: 34 };
 const ENEMY_SPAWNS = [
-  { gx: 6, gz: 4 },
-  { gx: 18, gz: 4 },
-  { gx: 32, gz: 6 },
-  { gx: 26, gz: 10 },
+  { gx: 14, gz: 6 },
+  { gx: 27, gz: 8 },
 ];
 
 // 지형 종류
@@ -614,8 +612,11 @@ function rebuildGridLines() {
 }
 rebuildGridLines();
 
-// 유닛이 서는 높이 (강이면 바닥 = 도하 연출)
-const standHeight = (gx, gz) => heightAt(gx, gz);
+// 유닛이 서는 높이 (강이면 바닥 = 도하 연출, 다리 위는 상판)
+const standHeight = (gx, gz) =>
+  (typeof bridge !== 'undefined' && bridge.alive && bridge.cells.has(cellKey(gx, gz)))
+    ? bridge.deckY
+    : heightAt(gx, gz);
 
 // ---------------------------------------------------------------------------
 // 프랍 (WW 시대 오브젝트, 전부 파괴 가능)
@@ -955,6 +956,170 @@ function placeProp(type, gx, gz) {
 }
 
 // ---------------------------------------------------------------------------
+// 다리: 깊은 강 구간을 가로지르는 목교 — 유일한 안전 횡단로지만
+// 포격 2~3발이면 무너진다 (내구도 100)
+// ---------------------------------------------------------------------------
+const bridge = { cells: new Set(), gz: -1, deckY: WATER_Y + 0.5, hp: 100, maxHp: 100, alive: false, group: null, hit: null };
+{
+  // 여울에서 먼(=깊은) 강 구간을 고른다
+  let bestGz = -1, bestFord = Infinity;
+  for (let gz = 10; gz <= GRID - 10; gz++) {
+    const ford = smooth01((Math.sin((gz + 0.5) * 0.275 + riverPhase * 2.3) - 0.38) / 0.3);
+    if (ford < bestFord) { bestFord = ford; bestGz = gz; }
+  }
+  if (bestGz >= 0) {
+    // 강 중심에서 좌우로 물이 끝날 때까지 + 양쪽 강둑 1칸
+    const center = cellToWorld(0, bestGz);
+    const rxGrid = riverCx + Math.sin((bestGz + 0.5) * 0.21 + riverPhase) * riverAmp;
+    const cgx = Math.round(rxGrid - 0.5);
+    let g0 = cgx, g1 = cgx;
+    const isWet = (gx) => inBounds(gx, bestGz) && WATER_Y - heightAt(gx, bestGz) > 0.0;
+    while (g0 > 1 && isWet(g0 - 1) && cgx - g0 < 6) g0--;
+    while (g1 < GRID - 2 && isWet(g1 + 1) && g1 - cgx < 6) g1++;
+    g0 = Math.max(0, g0 - 1);
+    g1 = Math.min(GRID - 1, g1 + 1);
+    for (let gx = g0; gx <= g1; gx++) bridge.cells.add(cellKey(gx, bestGz));
+    bridge.gz = bestGz;
+    bridge.minGx = g0;
+    bridge.maxGx = g1;
+    bridge.alive = true;
+
+    // 목교 메시: 상판 널빤지 + 난간 + 물속 기둥
+    const g = new THREE.Group();
+    const w0 = cellToWorld(g0, bestGz).x - 0.5;
+    const w1 = cellToWorld(g1, bestGz).x + 0.5;
+    const len = w1 - w0;
+    const cx = (w0 + w1) / 2;
+    const cz = center.z;
+    const deck = bridge.deckY;
+    const wood = new THREE.MeshStandardMaterial({ color: 0x8a6a44, roughness: 0.9 });
+    const woodDark = new THREE.MeshStandardMaterial({ color: 0x6f5334, roughness: 0.9 });
+    const plankN = Math.round(len / 0.55);
+    for (let i = 0; i < plankN; i++) {
+      const p = new THREE.Mesh(new THREE.BoxGeometry(len / plankN - 0.06, 0.12, 2.6), i % 2 ? wood : woodDark);
+      p.position.set(w0 + (i + 0.5) * (len / plankN), deck, cz);
+      p.rotation.y = (Math.sin(i * 3.7) - 0.5) * 0.03;
+      p.castShadow = true;
+      p.receiveShadow = true;
+      g.add(p);
+    }
+    for (const side of [-1, 1]) {
+      const rail = new THREE.Mesh(new THREE.BoxGeometry(len, 0.1, 0.1), woodDark);
+      rail.position.set(cx, deck + 0.55, cz + side * 1.25);
+      rail.castShadow = true;
+      g.add(rail);
+      for (let i = 0; i <= 4; i++) {
+        const post = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.62, 0.12), wood);
+        post.position.set(w0 + (i / 4) * len, deck + 0.28, cz + side * 1.25);
+        g.add(post);
+      }
+      // 물속 교각
+      for (let i = 1; i <= 3; i++) {
+        const px = w0 + (i / 4) * len;
+        const bottom = Math.min(sampleHeight(px, cz), WATER_Y);
+        const h = deck - bottom + 0.1;
+        const pile = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.15, h, 8), woodDark);
+        pile.position.set(px, bottom + h / 2, cz + side * 0.9);
+        pile.castShadow = true;
+        g.add(pile);
+      }
+    }
+    // 클릭 판정용 히트박스
+    const hit = new THREE.Mesh(
+      new THREE.BoxGeometry(len, 1.2, 2.8),
+      new THREE.MeshBasicMaterial({ visible: false })
+    );
+    hit.position.set(cx, deck + 0.4, cz);
+    g.add(hit);
+    bridge.hit = hit;
+    bridge.group = g;
+    bridge.worldZ = cz;
+    bridge.worldX0 = w0;
+    bridge.worldX1 = w1;
+    scene.add(g);
+  }
+}
+const onBridge = (gx, gz) => bridge.alive && bridge.cells.has(cellKey(gx, gz));
+// 다리 붕괴: 파편 + 위에 있던 차량은 강에 추락
+function damageBridge(dmg, impactPos) {
+  if (!bridge.alive) return;
+  bridge.hp -= dmg;
+  const p = impactPos ?? new THREE.Vector3((bridge.worldX0 + bridge.worldX1) / 2, bridge.deckY, bridge.worldZ);
+  popText(p, `다리 ${Math.max(0, Math.round(bridge.hp))}/${bridge.maxHp}`, '#e8c37a');
+  if (bridge.hp > 0) {
+    const g = bridge.group;
+    tween(220, (e, k) => { g.position.y = Math.sin(k * 26) * 0.05 * (1 - k); }, linear);
+    return;
+  }
+  bridge.alive = false;
+  sfx('explode');
+  breakApartGroup(bridge.group, 6);
+  for (const u of units) {
+    if (!u.alive || !bridge.cells.has(cellKey(u.gx, u.gz))) continue;
+    popText(u.group.position, '추락!', '#ff8a5e');
+    applyUnitDamage(u, 40);
+    const y = sampleHeight(u.group.position.x, u.group.position.z);
+    tween(500, (e) => { u.group.position.y = THREE.MathUtils.lerp(u.group.position.y, y, e); }, easeOut);
+  }
+}
+// 차량 주행 높이: 다리 위에서는 상판 높이
+function driveHeight(x, z) {
+  if (bridge.alive && Math.abs(z - bridge.worldZ) < 1.3 && x > bridge.worldX0 - 0.4 && x < bridge.worldX1 + 0.4) {
+    return Math.max(bridge.deckY, sampleHeight(x, z));
+  }
+  return sampleHeight(x, z);
+}
+
+// ---------------------------------------------------------------------------
+// 헐다운 스팟: 능선 마루 칸 — 여기 서면 차체가 지형에 가려져 피격 확률 감소.
+// 금색 링으로 표시되어 "저기 서면 유리하다"가 한눈에 보인다
+// ---------------------------------------------------------------------------
+const hullDownCells = new Set();
+{
+  const candidates = [];
+  for (let gx = 2; gx < GRID - 2; gx++) {
+    for (let gz = 2; gz < GRID - 2; gz++) {
+      if (terrainAt(gx, gz) === T.WATER) continue;
+      if (props.has(cellKey(gx, gz))) continue;
+      const h = heightAt(gx, gz);
+      // 어느 방향으로든 2칸 앞이 0.7 이상 낮으면 능선 마루
+      let drop = 0;
+      for (const d of [[2, 0], [-2, 0], [0, 2], [0, -2]]) {
+        if (!inBounds(gx + d[0], gz + d[1])) continue;
+        drop = Math.max(drop, h - heightAt(gx + d[0], gz + d[1]));
+      }
+      // 주변 1칸보다 크게 높지 않아야(꼭대기 노출 아님) 마루 느낌
+      let localRise = 0;
+      for (const d of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        localRise = Math.max(localRise, h - heightAt(gx + d[0], gz + d[1]));
+      }
+      if (drop >= 0.72 && localRise <= 0.5) candidates.push({ gx, gz, drop });
+    }
+  }
+  candidates.sort((a, b) => b.drop - a.drop);
+  for (const c of candidates) {
+    if (hullDownCells.size >= 10) break;
+    let clash = false;
+    for (const k of hullDownCells) {
+      const [x, z] = k.split(',').map(Number);
+      if (Math.max(Math.abs(x - c.gx), Math.abs(z - c.gz)) < 4) { clash = true; break; }
+    }
+    if (!clash) hullDownCells.add(cellKey(c.gx, c.gz));
+  }
+  // 금색 링 마커
+  const ringGeo = new THREE.RingGeometry(0.55, 0.78, 26);
+  const ringMat = new THREE.MeshBasicMaterial({ color: 0xf0b23e, transparent: true, opacity: 0.75, side: THREE.DoubleSide, depthWrite: false });
+  for (const k of hullDownCells) {
+    const [gx, gz] = k.split(',').map(Number);
+    const p = cellToWorld(gx, gz);
+    const m = new THREE.Mesh(ringGeo, ringMat);
+    m.rotation.x = -Math.PI / 2;
+    m.position.set(p.x, heightAt(gx, gz) + 0.07, p.z);
+    scene.add(m);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // 지면 클릭 → 셀 계산 (하이트필드 직접 레이캐스트)
 // ---------------------------------------------------------------------------
 function raycastGroundCell(raycaster) {
@@ -1063,9 +1228,7 @@ function updateHpBar(unit) {
 const units = [];
 function spawnUnit(isPlayer, gx, gz, facing) {
   // 차고에서 조립한 SD 킷 모델 사용 — 플레이어는 선택 기체, 적은 나머지 기체
-  const kitKey = isPlayer
-    ? playerKit
-    : enemyKits[units.filter((u) => !u.isPlayer).length % enemyKits.length];
+  const kitKey = isPlayer ? playerKit : enemyKit;
   const model = buildKitTank(kitKey);
   const hullLv = isPlayer ? PLAYER_STATS.hullLv : 1 + Math.floor(rng() * 3);
   const driverLv = isPlayer ? PLAYER_STATS.driverLv : 1 + Math.floor(rng() * 3);
@@ -1075,6 +1238,7 @@ function spawnUnit(isPlayer, gx, gz, facing) {
     isPlayer, gx, gz, kitKey,
     gun: KIT_INFO[kitKey].gun,
     reloadLeft: 0,
+    movedLastTurn: false,
     mp: base.mp, fireRange: base.fireRange, damage: base.damage,
     hullLv, driverLv,
     hp: maxHp, maxHp,
@@ -1094,6 +1258,8 @@ function spawnUnit(isPlayer, gx, gz, facing) {
   units.push(unit);
   return unit;
 }
+// 적은 모두 같은 차체 — 시드로 하나 선택
+const enemyKit = enemyKits[Math.floor(rng() * enemyKits.length)];
 const player = spawnUnit(true, PLAYER_SPAWN.gx, PLAYER_SPAWN.gz, Math.PI);
 const enemies = ENEMY_SPAWNS.map((s) => spawnUnit(false, s.gx, s.gz, 0));
 
@@ -1127,12 +1293,18 @@ function facingDir(unit) {
 
 function stepCost(fromX, fromZ, toX, toZ, mover = null) {
   if (!inBounds(toX, toZ)) return Infinity;
-  const dh = heightAt(toX, toZ) - heightAt(fromX, fromZ);
-  if (Math.abs(dh) > MAX_CLIMB) return Infinity; // 궤도로 못 오르는 단차
+  const dh = standHeight(toX, toZ) - standHeight(fromX, fromZ);
+  if (Math.abs(dh) > MAX_CLIMB) return Infinity; // 궤도로 못 오르는 단차 (다리 상판 포함)
   const prop = props.get(cellKey(toX, toZ));
   if (prop && prop.def.blockMove) return Infinity;
   if (isOccupied(toX, toZ, mover)) return Infinity;
-  // 깊은 물은 도하 불가 — 여울(얕은 구간)로만 강을 건널 수 있다
+  // 다리 위는 통행 가능 (붕괴 전까지)
+  if (onBridge(toX, toZ)) {
+    const dhB = standHeight(toX, toZ) - standHeight(fromX, fromZ);
+    if (Math.abs(dhB) > MAX_CLIMB) return Infinity;
+    return 1.2;
+  }
+  // 깊은 물은 도하 불가 — 여울(얕은 구간) 또는 다리로만 강을 건널 수 있다
   if (terrainAt(toX, toZ) === T.WATER && WATER_Y - heightAt(toX, toZ) > FORD_DEPTH) return Infinity;
   let c = TERRAIN_COST[terrainAt(toX, toZ)];
   if (prop && prop.def.moveExtra) c += prop.def.moveExtra;
@@ -1214,6 +1386,7 @@ function aimPointOf(target) {
     return new THREE.Vector3(p.x, heightAt(pr.gx, pr.gz) + 0.7, p.z);
   }
   const p = cellToWorld(target.gx, target.gz);
+  if (onBridge(target.gx, target.gz)) return new THREE.Vector3(p.x, bridge.deckY + 0.3, p.z);
   return new THREE.Vector3(p.x, Math.max(heightAt(target.gx, target.gz), WATER_Y) + 0.5, p.z);
 }
 
@@ -1290,7 +1463,11 @@ function computeShot(attacker, target, fromCell = null, facingOverride = null) {
     // 거리 편차: 4칸까지 최고 명중, 이후 칸당 3% + 원거리 가속 페널티 (1칸=1유닛)
     const distPen = Math.max(0, distCells - 4) * 3 + Math.max(0, distCells - 12) * 1.25;
     chance = 96 - distPen - cover * 14 - target.unit.driverLv * 6 + heightAdv;
-    chance = THREE.MathUtils.clamp(Math.round(chance), 8, 96);
+    // 정지 사격 보너스: 직전 턴 정지 +12 / 기동 사격 -8 (halt fire)
+    chance += attacker.movedLastTurn ? -8 : 12;
+    // 헐다운: 능선 마루의 목표는 차체가 가려져 맞히기 어렵다
+    if (hullDownCells.has(cellKey(target.unit.gx, target.unit.gz))) chance -= 16;
+    chance = THREE.MathUtils.clamp(Math.round(chance), 8, 97);
   } else {
     chance = THREE.MathUtils.clamp(Math.round(90 - distCells * 2.25 - cover * 10), 20, 95);
   }
@@ -1352,8 +1529,8 @@ function groundPitch(unit) {
   const ry = unit.group.rotation.y;
   const fx = Math.sin(ry), fz = Math.cos(ry);
   const p = unit.group.position;
-  const hF = sampleHeight(p.x + fx * 0.8, p.z + fz * 0.8);
-  const hB = sampleHeight(p.x - fx * 0.8, p.z - fz * 0.8);
+  const hF = driveHeight(p.x + fx * 0.8, p.z + fz * 0.8);
+  const hB = driveHeight(p.x - fx * 0.8, p.z - fz * 0.8);
   return THREE.MathUtils.clamp(Math.atan2(hB - hF, 1.6), -0.45, 0.45);
 }
 
@@ -1366,16 +1543,19 @@ async function moveUnit(unit, path, finalFacing = null) {
     await tween(105, (e) => {
       const x = THREE.MathUtils.lerp(from.x, to.x, e);
       const z = THREE.MathUtils.lerp(from.z, to.z, e);
-      unit.group.position.set(x, sampleHeight(x, z) + Math.sin(e * Math.PI) * 0.08, z);
+      unit.group.position.set(x, driveHeight(x, z) + Math.sin(e * Math.PI) * 0.08, z);
       unit.group.rotation.x = groundPitch(unit);
     });
     unit.gx = cell.gx;
     unit.gz = cell.gz;
-    unit.group.position.y = sampleHeight(to.x, to.z);
+    unit.group.position.y = driveHeight(to.x, to.z);
   }
   // 드래그로 지정한 최종 차체 방향으로 선회
   if (finalFacing !== null) await rotateTo(unit, finalFacing, 160);
   unit.group.rotation.x = groundPitch(unit);
+  if (hullDownCells.has(cellKey(unit.gx, unit.gz))) {
+    popText(unit.group.position, '🛡 헐다운', '#ffd76e');
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -1586,11 +1766,49 @@ function updatePlayerHpUI() {
   playerHpFill.style.width = `${Math.max(0, (player.hp / player.maxHp) * 100)}%`;
 }
 
-async function applyUnitDamage(target, rawDmg) {
-  const dmg = Math.round(rawDmg * (1 - 0.07 * target.hullLv)); // 차체 레벨 = 장갑
+// 피격 방향 표시: 사수 쪽에서 목표를 가리키는 화살촉 플래시
+function hitDirectionFx(target, fromPos, color) {
+  const dir = new THREE.Vector3().subVectors(target.group.position, fromPos);
+  dir.y = 0;
+  if (dir.lengthSq() < 0.01) return;
+  dir.normalize();
+  const arrow = new THREE.Mesh(
+    new THREE.ConeGeometry(0.4, 1.1, 4),
+    new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.95, depthWrite: false })
+  );
+  arrow.position.copy(target.group.position).addScaledVector(dir, -2.1);
+  arrow.position.y += 1.0;
+  arrow.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
+  scene.add(arrow);
+  tween(850, (e) => {
+    arrow.position.addScaledVector(dir, 0.012);
+    arrow.material.opacity = 0.95 * (1 - e);
+  }, easeOut).then(() => scene.remove(arrow));
+}
+
+// 장갑 방향: 전면 ×0.7 / 측면 ×1.2 / 후면 ×1.5 — 피격 시 화면에 표시
+async function applyUnitDamage(target, rawDmg, fromPos = null) {
+  let aspectMult = 1;
+  let aspectLabel = null;
+  let aspectColor = '#ffffff';
+  if (fromPos) {
+    const toShooter = Math.atan2(fromPos.x - target.group.position.x, fromPos.z - target.group.position.z);
+    const rel = Math.abs(normAngle(toShooter - target.group.rotation.y)) * (180 / Math.PI);
+    if (rel <= 60) { aspectMult = 0.7; aspectLabel = '전면 장갑'; aspectColor = '#8fc9ff'; }
+    else if (rel >= 120) { aspectMult = 1.5; aspectLabel = '후면 직격'; aspectColor = '#ff6a5e'; }
+    else { aspectMult = 1.2; aspectLabel = '측면 관통'; aspectColor = '#ffb454'; }
+  }
+  const dmg = Math.round(rawDmg * aspectMult * (1 - 0.07 * target.hullLv)); // 차체 레벨 = 장갑
   target.hp -= dmg;
   updateHpBar(target);
   if (target.isPlayer) updatePlayerHpUI();
+  if (aspectLabel) {
+    const p = target.group.position.clone();
+    p.y += 1.2;
+    popText(p, `${aspectLabel}!`, aspectColor);
+    hitDirectionFx(target, fromPos, aspectColor);
+    if (target.isPlayer) setHint(`${aspectLabel} 피격 ×${aspectMult}`);
+  }
   popText(target.group.position, `-${dmg}`, target.isPlayer ? '#ff8a8a' : '#ffe28a');
   if (target.hp <= 0) {
     target.alive = false;
@@ -1613,6 +1831,11 @@ async function resolveImpact(impact, attacker, directUnit = null) {
   await explosionFx(impact.clone().add(new THREE.Vector3(0, 0.4, 0)), !!directUnit);
   const c = worldToCell(impact);
   crater(c.gx, c.gz);
+  // 다리 피해: 착탄 셀이 다리면 직격, 옆 칸이면 여파
+  if (bridge.alive) {
+    if (bridge.cells.has(cellKey(c.gx, c.gz))) damageBridge(60, impact);
+    else if ([...bridge.cells].some((k) => { const [bx, bz] = k.split(',').map(Number); return Math.max(Math.abs(bx - c.gx), Math.abs(bz - c.gz)) <= 1; })) damageBridge(25, impact);
+  }
   // 프랍 피해 (착탄 셀 + 주변 2칸, 거리 감쇠)
   for (let dx = -2; dx <= 2; dx++) {
     for (let dz = -2; dz <= 2; dz++) {
@@ -1623,7 +1846,7 @@ async function resolveImpact(impact, attacker, directUnit = null) {
     }
   }
   if (directUnit) {
-    await applyUnitDamage(directUnit, attacker.damage);
+    await applyUnitDamage(directUnit, attacker.damage, attacker.group.position);
   }
   // 스플래시 (직격 대상 제외)
   for (const u of units) {
@@ -1924,7 +2147,7 @@ function showTargets(targets) {
     ring.position.set(u.group.position.x, Math.max(standHeight(u.gx, u.gz), WATER_Y) + 0.12, u.group.position.z);
     scene.add(ring);
     targetRings.push(ring);
-    const sp = chanceSprite(`${t.shot.chance}%`);
+    const sp = chanceSprite(`${t.shot.chance}%${player.movedLastTurn ? '' : '★'}`);
     sp.position.set(u.group.position.x, u.group.position.y + 4.0, u.group.position.z);
     scene.add(sp);
     chanceSprites.push(sp);
@@ -2067,6 +2290,15 @@ function showGhost(cell, facing) {
   ghost.rotation.y = facing;
   ghost.visible = true;
 }
+
+// 정지 사격 보너스 표시: 직전 턴 정지 + 장전 완료면 발밑에 금색 조준 안정 링
+const haltRing = new THREE.Mesh(
+  new THREE.RingGeometry(1.35, 1.55, 30),
+  new THREE.MeshBasicMaterial({ color: 0xffc94d, transparent: true, opacity: 0.7, side: THREE.DoubleSide, depthWrite: false })
+);
+haltRing.rotation.x = -Math.PI / 2;
+haltRing.visible = false;
+scene.add(haltRing);
 
 // 포격 오더 마커: 조준 셀에 붉은 링
 const fireMarker = new THREE.Mesh(
@@ -2367,6 +2599,8 @@ async function resolveTurn() {
   // C) 후사격: "이동 후 사격" 오더 — 새 위치에서 발사
   const postShooters = units.filter((u) => u.alive && u.plan?.fire && u.plan.order === 'move-first');
   await Promise.all(postShooters.map((u) => resolvePlannedShot(u)));
+  // 정지 사격 판정용: 이번 턴 실제 이동 여부 기록
+  for (const u of units) if (u.alive) u.movedLastTurn = !!(u.plan?.move?.path?.length);
   // AI 예측용: 이번 턴 플레이어 변위 기록
   const pdx = player.gx - playerStart.gx, pdz = player.gz - playerStart.gz;
   playerLastMove = pdx || pdz ? { dx: pdx, dz: pdz } : null;
@@ -2569,6 +2803,12 @@ function animate(now) {
   for (const ring of targetRings) ring.scale.setScalar(pulse);
   if (ghost.visible) ghostMat.opacity = 0.32 + Math.sin(now * 0.005) * 0.1;
   if (fireMarker.visible) fireMarker.scale.setScalar(pulse);
+  // 조준 안정(정지 사격 보너스) 링
+  haltRing.visible = phase === 'plan' && player.alive && !player.movedLastTurn && player.reloadLeft === 0;
+  if (haltRing.visible) {
+    haltRing.position.set(player.group.position.x, player.group.position.y + 0.1, player.group.position.z);
+    haltRing.material.opacity = 0.5 + Math.sin(now * 0.004) * 0.2;
+  }
   rippleTex.offset.set((now * 0.0000121) % 1, (now * -0.0000324) % 1);
   controls.update();
   renderer.info.reset();
@@ -2588,6 +2828,9 @@ window.__puratank = {
   composer,
   moveHighlightGroup,
   playerUnit: player,
+  bridge,
+  damageBridge,
+  hullDown: () => [...hullDownCells],
   get state() {
     return {
       turnNo, phase, busy, planMode,
