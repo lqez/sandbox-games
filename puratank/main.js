@@ -1522,13 +1522,17 @@ function updateTweens(now) {
     if (k >= 1) { activeTweens.splice(i, 1); tw.resolve(); }
   }
 }
-async function rotateTo(unit, targetRot, dur = 130) {
+// 차체 선회 각속도 (rad/s) — 전차답게 느릿하게
+const DRIVE_TURN_RATE = 2.4; // 주행 중 방향 전환
+const PIVOT_RATE = 1.5;      // 제자리 선회
+const MAX_PIVOT = 1.9;       // 턴당 제자리 선회 한계 (~109°) — 지정 방향에 못 미칠 수 있음
+async function rotateTo(unit, targetRot, rate = DRIVE_TURN_RATE) {
   const from = unit.group.rotation.y;
   let diff = targetRot - from;
   while (diff > Math.PI) diff -= Math.PI * 2;
   while (diff < -Math.PI) diff += Math.PI * 2;
   if (Math.abs(diff) < 0.01) return;
-  await tween(dur, (e) => { unit.group.rotation.y = from + diff * e; });
+  await tween((Math.abs(diff) / rate) * 1000, (e) => { unit.group.rotation.y = from + diff * e; });
 }
 // 차체가 지면 경사를 따라 기울어지는 각도
 function groundPitch(unit) {
@@ -1541,13 +1545,23 @@ function groundPitch(unit) {
 }
 
 async function moveUnit(unit, path, finalFacing = null, onStep = null) {
+  // 후진 판단: 목적지가 가깝고(≤5칸) 첫 스텝이 등 뒤(>108°)면 선회하지 않고 후진한다
+  let reverse = false;
+  if (path.length) {
+    const first = cellToWorld(path[0].gx, path[0].gz);
+    const headTo = Math.atan2(first.x - unit.group.position.x, first.z - unit.group.position.z);
+    const turnNeed = Math.abs(normAngle(headTo - unit.group.rotation.y));
+    reverse = path.length <= 5 && turnNeed > Math.PI * 0.6;
+  }
   for (const cell of path) {
     if (!unit.alive) return; // 이동 중 경계 사격에 격파되면 그 자리에서 정지
     const from = unit.group.position.clone();
     const to = cellToWorld(cell.gx, cell.gz);
-    await rotateTo(unit, Math.atan2(to.x - from.x, to.z - from.z), 80);
+    const travel = Math.atan2(to.x - from.x, to.z - from.z);
+    // 후진이면 차체 전면은 진행 반대 방향을 유지
+    await rotateTo(unit, reverse ? travel + Math.PI : travel, DRIVE_TURN_RATE);
     sfx(terrainAt(cell.gx, cell.gz) === T.WATER ? 'splash' : 'step');
-    await tween(105, (e) => {
+    await tween(reverse ? 145 : 105, (e) => {
       const x = THREE.MathUtils.lerp(from.x, to.x, e);
       const z = THREE.MathUtils.lerp(from.z, to.z, e);
       unit.group.position.set(x, driveHeight(x, z) + Math.sin(e * Math.PI) * 0.08, z);
@@ -1558,8 +1572,13 @@ async function moveUnit(unit, path, finalFacing = null, onStep = null) {
     unit.group.position.y = driveHeight(to.x, to.z);
     if (onStep) onStep(unit);
   }
-  // 드래그로 지정한 최종 차체 방향으로 선회
-  if (finalFacing !== null) await rotateTo(unit, finalFacing, 160);
+  // 드래그로 지정한 최종 차체 방향으로 제자리 선회 —
+  // 느린 선회 속도와 턴당 한계 때문에 지정 방향에 못 미칠 수 있다
+  if (finalFacing !== null) {
+    const diff = normAngle(finalFacing - unit.group.rotation.y);
+    const applied = THREE.MathUtils.clamp(diff, -MAX_PIVOT, MAX_PIVOT);
+    if (Math.abs(applied) > 0.02) await rotateTo(unit, unit.group.rotation.y + applied, PIVOT_RATE);
+  }
   unit.group.rotation.x = groundPitch(unit);
   if (hullDownCells.has(cellKey(unit.gx, unit.gz))) {
     popText(unit.group.position, '🛡 헐다운', '#ffd76e');
@@ -1904,7 +1923,7 @@ async function aimAt(attacker, aim, pitchDeg, instant = false) {
       attacker.turret.rotation.y = rel;
     }
   } else {
-    await rotateTo(attacker, targetYaw, 200);
+    await rotateTo(attacker, targetYaw, PIVOT_RATE);
   }
   const fromP = attacker.cannon.rotation.x;
   if (instant) attacker.cannon.rotation.x = pitchRad;
@@ -1914,6 +1933,7 @@ async function aimAt(attacker, aim, pitchDeg, instant = false) {
 function sfxOnce(attacker) { if (!attacker._trvSfx) { attacker._trvSfx = true; setTimeout(() => (attacker._trvSfx = false), 400); sfx('step'); } }
 
 async function fireSequence(attacker, target, shot) {
+  attacker._aiming = true;
   const aim = aimPointOf(target);
   // 포탑/차체 조준 + 포신 부앙각 자동 조절 (곡사는 포신을 크게 들어올림)
   const pitchRad = await aimAt(attacker, aim, shot.lob ? 43 : shot.pitch);
@@ -1962,6 +1982,7 @@ async function fireSequence(attacker, target, shot) {
   const directProp = hit && target.prop ? target.prop : null;
   if (directProp) damageProp(directProp, attacker.damage * 1.4);
   await resolveImpact(impact, attacker, directUnit);
+  attacker._aiming = false;
 }
 
 // ---------------------------------------------------------------------------
@@ -2580,6 +2601,23 @@ function simulateMoves() {
   });
 }
 
+// 포탑 사전 추적 (해결 페이즈 전용): 포탑 각속도로 목표를 향해 미리 돈다.
+// 발사 시퀀스(aimAt)가 도는 동안은 간섭하지 않는다.
+const TURRET_TRACK_RATE = 2.6; // rad/s
+function updateTurretTracking(dt) {
+  if (phase !== 'resolve') return;
+  for (const u of units) {
+    if (!u.alive || !u._track || u._aiming) continue;
+    const p = u._track.point ?? u._track.unit?.group.position;
+    if (!p || (u._track.unit && !u._track.unit.alive)) continue;
+    const targetYaw = Math.atan2(p.x - u.group.position.x, p.z - u.group.position.z);
+    const rel = normAngle(targetYaw - u.group.rotation.y);
+    const diff = normAngle(rel - u.turret.rotation.y);
+    const step = TURRET_TRACK_RATE * dt;
+    u.turret.rotation.y += THREE.MathUtils.clamp(diff, -step, step);
+  }
+}
+
 // 계획된 포격 해결: 조준한 셀에 지금 무엇이 있는지로 판정 (예측 사격).
 // 발사 즉시 재장전 시작.
 async function resolvePlannedShot(u) {
@@ -2607,6 +2645,20 @@ async function resolveTurn() {
   aimLine.visible = false;
   turnLabel.textContent = `턴 ${turnNo} ▶`;
   const playerStart = { gx: player.gx, gz: player.gz };
+  // 포탑 사전 조준: 사격 예정 유닛은 조준 셀을, 그 외 적 포탑은 플레이어를
+  // 미리 추적한다 (차체 선회는 느려도 포탑은 목표를 맞춰 간다)
+  for (const u of units) {
+    u._track = null;
+    if (!u.alive || !u.hasTurret) continue;
+    if (u.plan?.type === 'fire') u._track = { point: aimPointOf({ gx: u.plan.cell.gx, gz: u.plan.cell.gz }) };
+    else if (!u.isPlayer) u._track = { unit: player };
+    else {
+      const near = enemies.filter((e) => e.alive).sort((a, b) =>
+        a.group.position.distanceToSquared(player.group.position) -
+        b.group.position.distanceToSquared(player.group.position))[0];
+      if (near) u._track = { unit: near };
+    }
+  }
   // A) 경계망 구성: 이동 스텝마다 상대편 경계자의 사선을 체크,
   //    걸리면 이동 중 "실시간" 스냅 사격 (경계자당 1회, 스냅 페널티)
   const overwatchers = units.filter((u) => u.alive && u.plan?.type === 'overwatch' && u.reloadLeft <= 0);
@@ -2861,6 +2913,7 @@ function animate(now) {
   lastNow = now;
   updateTweens(now);
   updateAimPreview(dt);
+  updateTurretTracking(dt);
   const pulse = 1 + Math.sin(now * 0.006) * 0.08;
   for (const ring of targetRings) ring.scale.setScalar(pulse);
   if (ghost.visible) ghostMat.opacity = 0.32 + Math.sin(now * 0.005) * 0.1;
