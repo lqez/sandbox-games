@@ -82,11 +82,11 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.12;
+renderer.toneMappingExposure = 0.92;
 app.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
-scene.fog = new THREE.Fog(0xc7dcef, 70, 150);
+scene.fog = new THREE.Fog(0xaecbe8, 75, 160);
 
 const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 300);
 camera.position.set(22, 26, 30);
@@ -101,8 +101,8 @@ controls.maxPolarAngle = Math.PI * 0.46;
 controls.enablePan = true;
 controls.panSpeed = 0.6;
 
-scene.add(new THREE.HemisphereLight(0xd8e8ff, 0x8f8468, 0.72));
-const sun = new THREE.DirectionalLight(0xfff2dc, 2.3);
+scene.add(new THREE.HemisphereLight(0xbcd4f0, 0x5f5a45, 0.38));
+const sun = new THREE.DirectionalLight(0xffe9c8, 1.95);
 sun.position.set(24, 34, 16);
 sun.castShadow = true;
 sun.shadow.mapSize.set(4096, 4096);
@@ -124,11 +124,11 @@ function makeSkyTexture() {
   c.width = 1024; c.height = 512;
   const ctx = c.getContext('2d');
   const g = ctx.createLinearGradient(0, 0, 0, 512);
-  g.addColorStop(0.0, '#3d7edb');
-  g.addColorStop(0.35, '#6fa8e8');
-  g.addColorStop(0.62, '#a8cdf0');
-  g.addColorStop(0.78, '#dcebf7');
-  g.addColorStop(1.0, '#e9e6d8');
+  g.addColorStop(0.0, '#2764c4');
+  g.addColorStop(0.35, '#4b8ede');
+  g.addColorStop(0.62, '#8ab8e8');
+  g.addColorStop(0.78, '#c3daee');
+  g.addColorStop(1.0, '#d8d2bd');
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, 1024, 512);
   // 태양 헤일로 (sun 방향과 비슷한 쪽)
@@ -198,7 +198,7 @@ composer.addPass(new OutputPass());
 // 툰 재질 / 외곽선
 // ---------------------------------------------------------------------------
 const gradientMap = (() => {
-  const tex = new THREE.DataTexture(new Uint8Array([96, 176, 255]), 3, 1, THREE.RedFormat);
+  const tex = new THREE.DataTexture(new Uint8Array([84, 168, 238]), 3, 1, THREE.RedFormat);
   tex.minFilter = tex.magFilter = THREE.NearestFilter;
   tex.needsUpdate = true;
   return tex;
@@ -308,11 +308,11 @@ function fieldHeight(wx, wz) {
 
 // 하이트필드 메시 (정점 색으로 지형 표현)
 const TERRAIN_COLORS = {
-  [T.GRASS]: [0x9ecf7f, 0x93c775],
-  [T.DIRT]: [0xc4a577, 0xbb9d6f],
-  [T.SAND]: [0xe3d3a1, 0xdccb98],
-  [T.MUD]: [0x9d7f5e, 0x957758],
-  [T.WATER]: [0xb59e77, 0xac9670], // 강바닥
+  [T.GRASS]: [0x79b055, 0x6fa64d],
+  [T.DIRT]: [0xa8875a, 0x9e7f54],
+  [T.SAND]: [0xd2bb7e, 0xc8b175],
+  [T.MUD]: [0x80664a, 0x775f44],
+  [T.WATER]: [0x94805d, 0x8b7857], // 강바닥
 };
 const terrainGeo = new THREE.PlaneGeometry(GRID * TILE, GRID * TILE, VN, VN);
 terrainGeo.rotateX(-Math.PI / 2);
@@ -424,7 +424,7 @@ const terrainMesh = new THREE.Mesh(
     bumpScale: 0.9,
     roughness: 0.94,
     metalness: 0,
-    envMapIntensity: 0.35,
+    envMapIntensity: 0.16,
   })
 );
 terrainMesh.receiveShadow = true;
@@ -435,9 +435,9 @@ scene.add(terrainMesh);
 const waterMesh = new THREE.Mesh(
   new THREE.PlaneGeometry(GRID * TILE, GRID * TILE),
   new THREE.MeshStandardMaterial({
-    color: 0x4d97cc,
+    color: 0x3a7cb4,
     transparent: true,
-    opacity: 0.78,
+    opacity: 0.8,
     roughness: 0.08,
     metalness: 0,
     envMapIntensity: 1.3,
