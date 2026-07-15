@@ -1362,54 +1362,61 @@ function stepCost(fromX, fromZ, toX, toZ, mover = null) {
   return c;
 }
 
-// 반환: Map(cellKey -> { cost, path[{gx,gz}], endDir })
+// 반환: Map(cellKey -> { cost, path[{gx,gz,rev}], endDir(차체 방향), turned })
+// 상태는 (셀, 차체 방향) — 각 스텝마다 전진(차체=진행 방향) 또는
+// 후진(차체는 반대를 유지, 속도 페널티 ×1.3)을 선택할 수 있어
+// 목표 각도를 유지한 채 뒤로 빠지는 경로가 나온다.
+// turned: 차체 회전 없이(전/후진만으로) 도달했는지 여부 — 필드 2톤 표시용.
+const REVERSE_COST = 1.3;
 function reachableCells(unit) {
   const startDir = facingDir(unit);
-  const best = new Map(); // "x,z,dir" -> cost
-  const prev = new Map();
-  const pq = [{ gx: unit.gx, gz: unit.gz, dir: startDir, cost: 0 }];
+  const best = new Map(); // "x,z,hull" -> cost
+  const prev = new Map(); // key -> { from, rev }
+  const pq = [{ gx: unit.gx, gz: unit.gz, hull: startDir, cost: 0 }];
   best.set(`${unit.gx},${unit.gz},${startDir}`, 0);
   while (pq.length) {
     let bi = 0;
     for (let i = 1; i < pq.length; i++) if (pq[i].cost < pq[bi].cost) bi = i;
     const cur = pq.splice(bi, 1)[0];
-    const curKey = `${cur.gx},${cur.gz},${cur.dir}`;
+    const curKey = `${cur.gx},${cur.gz},${cur.hull}`;
     if (cur.cost > (best.get(curKey) ?? Infinity)) continue;
     for (let d = 0; d < 8; d++) {
-      const turn = Math.min(Math.abs(d - cur.dir), 8 - Math.abs(d - cur.dir)) * TURN_COST45;
       const nx = cur.gx + DIRS[d].dx, nz = cur.gz + DIRS[d].dz;
       const sc = stepCost(cur.gx, cur.gz, nx, nz, unit);
       if (!isFinite(sc)) continue;
-      const nc = cur.cost + turn + sc;
-      if (nc > unit.mp) continue;
-      const nk = `${nx},${nz},${d}`;
-      if (nc < (best.get(nk) ?? Infinity)) {
-        best.set(nk, nc);
-        prev.set(nk, curKey);
-        pq.push({ gx: nx, gz: nz, dir: d, cost: nc });
+      for (const rev of [false, true]) {
+        const hull = rev ? (d + 4) % 8 : d;
+        const turn = Math.min(Math.abs(hull - cur.hull), 8 - Math.abs(hull - cur.hull)) * TURN_COST45;
+        const nc = cur.cost + turn + sc * (rev ? REVERSE_COST : 1);
+        if (nc > unit.mp) continue;
+        const nk = `${nx},${nz},${hull}`;
+        if (nc < (best.get(nk) ?? Infinity)) {
+          best.set(nk, nc);
+          prev.set(nk, { from: curKey, rev });
+          pq.push({ gx: nx, gz: nz, hull, cost: nc });
+        }
       }
     }
   }
   const result = new Map();
   for (const [k, cost] of best) {
-    const [x, z, d] = k.split(',').map(Number);
+    const [x, z, hull] = k.split(',').map(Number);
     const ck = cellKey(x, z);
     if (x === unit.gx && z === unit.gz) continue;
     if (!result.has(ck) || cost < result.get(ck).cost) {
-      // 경로 역추적
+      // 경로 역추적 — 각 셀에 진입 기어(rev)와 회전 여부를 함께 담는다
       const path = [];
+      let turned = false;
       let cur = k;
       while (cur) {
-        const [px, pz] = cur.split(',').map(Number);
-        path.unshift({ gx: px, gz: pz });
-        cur = prev.get(cur);
+        const [px, pz, ph] = cur.split(',').map(Number);
+        if (ph !== startDir) turned = true;
+        const pv = prev.get(cur);
+        path.unshift({ gx: px, gz: pz, rev: pv ? pv.rev : false });
+        cur = pv ? pv.from : null;
       }
-      // 시작 셀 중복 제거 (제자리 선회 노드)
-      const clean = path.filter(
-        (c, i) => i === 0 || c.gx !== path[i - 1].gx || c.gz !== path[i - 1].gz
-      );
-      clean.shift(); // 시작 셀 제외
-      result.set(ck, { cost, path: clean, endDir: d });
+      path.shift(); // 시작 셀 제외
+      result.set(ck, { cost, path, endDir: hull, turned });
     }
   }
   return result;
@@ -1628,16 +1635,20 @@ function groundPitch(unit) {
 }
 
 async function moveUnit(unit, path, finalFacing = null, onStep = null) {
-  // 후진 판단: 목적지가 가깝고(≤5칸) 첫 스텝이 등 뒤(>108°)면 선회하지 않고 후진한다
-  let reverse = false;
-  if (path.length) {
+  // 구간별 전/후진: 경로 셀에 기어(rev)가 담겨 있으면 그대로 따른다 —
+  // 등 뒤 구간은 차체를 돌리지 않고 후진해 목표 각도를 최대한 유지.
+  // 기어 정보 없는 합성 경로는 기존 휴리스틱(가깝고 등 뒤면 통째로 후진).
+  const hasGear = path.length > 0 && typeof path[0].rev === 'boolean';
+  let fallbackRev = false;
+  if (!hasGear && path.length) {
     const first = cellToWorld(path[0].gx, path[0].gz);
     const headTo = Math.atan2(first.x - unit.group.position.x, first.z - unit.group.position.z);
     const turnNeed = Math.abs(normAngle(headTo - unit.group.rotation.y));
-    reverse = path.length <= 5 && turnNeed > Math.PI * 0.6;
+    fallbackRev = path.length <= 5 && turnNeed > Math.PI * 0.6;
   }
   for (const cell of path) {
     if (!unit.alive) return; // 이동 중 경계 사격에 격파되면 그 자리에서 정지
+    const reverse = hasGear ? cell.rev : fallbackRev;
     const from = unit.group.position.clone();
     const to = cellToWorld(cell.gx, cell.gz);
     const travel = Math.atan2(to.x - from.x, to.z - from.z);
@@ -2245,6 +2256,11 @@ const moveFillMat = new THREE.MeshBasicMaterial({
 });
 const moveEdgeMat = new THREE.MeshBasicMaterial({ color: 0x2f7fe0, transparent: true, opacity: 0.9, depthWrite: false });
 const moveEdgeThinMat = new THREE.MeshBasicMaterial({ color: 0x2f7fe0, transparent: true, opacity: 0.3, depthWrite: false });
+// 각도 유지 구간(회전 없이 전/후진만으로 도달) — 밝은 하늘색으로 구별
+const keepFillMat = new THREE.MeshBasicMaterial({
+  color: 0x8ae4ff, transparent: true, opacity: 0.38, side: THREE.DoubleSide, depthWrite: false,
+});
+const keepEdgeMat = new THREE.MeshBasicMaterial({ color: 0x55c8f2, transparent: true, opacity: 0.85, depthWrite: false });
 const fireFillMat = new THREE.MeshBasicMaterial({
   color: 0xff5544, transparent: true, opacity: 0.21, side: THREE.DoubleSide, depthWrite: false,
 });
@@ -2347,7 +2363,7 @@ function loopTube(pts, lift, radius, mat) {
 
 // 셀 집합 → 콘벡스헐 느낌의 범위 필드 (차이킨 스무딩 경계 + 지형 밀착 채움)
 // fill=false면 얇은 외곽선만 (비활성 모드 표시용)
-function showCellField(cellKeys, { fillMat, edgeMat, fill = true, edgeRadius = 0.09 }) {
+function showCellField(cellKeys, { fillMat, edgeMat, fill = true, edgeRadius = 0.09, lift = 0 }) {
   const set = cellKeys instanceof Set ? cellKeys : new Set(cellKeys);
   if (!set.size) return;
   // 차이킨 3회 스무딩 — 타일 계단이 사라진 곡선 경계.
@@ -2368,8 +2384,9 @@ function showCellField(cellKeys, { fillMat, edgeMat, fill = true, edgeRadius = 0
     for (let x = minX; x < maxX; x += step) {
       for (let z = minZ; z < maxZ; z += step) {
         if (!insideLoops(pipLoops, x + step / 2, z + step / 2)) continue;
-        const y00 = groundY(x, z) + 0.05, y10 = groundY(x + step, z) + 0.05;
-        const y01 = groundY(x, z + step) + 0.05, y11 = groundY(x + step, z + step) + 0.05;
+        const yo = 0.05 + lift;
+        const y00 = groundY(x, z) + yo, y10 = groundY(x + step, z) + yo;
+        const y01 = groundY(x, z + step) + yo, y11 = groundY(x + step, z + step) + yo;
         verts.push(x, y00, z, x, y01, z + step, x + step, y10, z);
         verts.push(x + step, y10, z, x, y01, z + step, x + step, y11, z + step);
       }
@@ -2381,7 +2398,7 @@ function showCellField(cellKeys, { fillMat, edgeMat, fill = true, edgeRadius = 0
     moveHighlightGroup.add(fillMesh);
   }
   for (const loop of loops) {
-    const tube = loopTube(loop, 0.09, fill ? edgeRadius : edgeRadius * 0.55, edgeMat);
+    const tube = loopTube(loop, 0.09 + lift, fill ? edgeRadius : edgeRadius * 0.55, edgeMat);
     noAO(tube);
     moveHighlightGroup.add(tube);
   }
@@ -2395,6 +2412,16 @@ function showMoveField(cells, active) {
     edgeMat: active ? moveEdgeMat : moveEdgeThinMat,
     fill: active,
   });
+  if (!active) return;
+  // 차체 회전 없이(전진/후진만) 갈 수 있는 구간 — 밝은 하늘색 레인 오버레이.
+  // 여길 벗어나면 선회 비용을 치르고 각도가 흐트러진다는 표시.
+  const keep = new Set([cellKey(player.gx, player.gz)]);
+  for (const [k, v] of cells) if (!v.turned) keep.add(k);
+  if (keep.size > 1) {
+    showCellField(keep, {
+      fillMat: keepFillMat, edgeMat: keepEdgeMat, fill: true, edgeRadius: 0.05, lift: 0.045,
+    });
+  }
 }
 
 // 사격 가능 필드: 부앙각/사거리/사선이 전부 유효한 셀만 포함 —
@@ -2805,15 +2832,30 @@ function planEnemies() {
     }
     const cells = reachableCells(enemy);
     let best = null;
+    // 장갑 방향 관리: 도착 자세가 플레이어에게 측면(×1.2)/후면(×1.5)을
+    // 내주면 감점 — 레벨이 높을수록 예민하게 전면을 유지한다 (Lv1은 무시)
+    const sidePen = (lvl - 1) * 10, rearPen = (lvl - 1) * 22;
+    const exposurePenalty = (gx, gz, endDir) => {
+      const fd = DIRS[endDir];
+      const rel = Math.abs(normAngle(
+        Math.atan2(player.gx - gx, player.gz - gz) - Math.atan2(fd.dx, fd.dz)
+      )) * (180 / Math.PI);
+      return rel >= 120 ? rearPen : rel > 60 ? sidePen : 0;
+    };
     for (const [key, info] of cells) {
       const [gx, gz] = key.split(',').map(Number);
       const sShot = computeShot(enemy, { unit: player }, { gx, gz });
       const distP = Math.hypot(gx - player.gx, gz - player.gz);
-      const score = sShot.ok ? 200 + sShot.chance - info.cost * 2 : 100 - distP * 5 - info.cost;
+      let score = sShot.ok ? 200 + sShot.chance - info.cost * 2 : 100 - distP * 5 - info.cost;
+      score -= exposurePenalty(gx, gz, info.endDir);
       if (!best || score > best.score) best = { score, info };
     }
-    if (best && best.info.path.length) enemy.plan = { type: 'move', path: best.info.path.slice(), facing: null };
-    else enemy.plan = { type: 'wait' };
+    // 제자리 대기도 후보로 평가 — 지금 자세가 이미 노출이면 이동이 이긴다
+    const stayScore = 100 - Math.hypot(enemy.gx - player.gx, enemy.gz - player.gz) * 5
+      - exposurePenalty(enemy.gx, enemy.gz, facingDir(enemy));
+    if (best && best.info.path.length && best.score > stayScore) {
+      enemy.plan = { type: 'move', path: best.info.path.slice(), facing: null };
+    } else enemy.plan = { type: 'wait' };
   }
 }
 
@@ -3303,13 +3345,17 @@ window.__puratank = {
       aimStack: player.aimStack,
       movedLastTurn: player.movedLastTurn,
       player: { gx: player.gx, gz: player.gz, hp: player.hp, alive: player.alive, hullLv: player.hullLv, driverLv: player.driverLv },
-      enemies: enemies.map((e) => ({ gx: e.gx, gz: e.gz, hp: e.hp, alive: e.alive, hullLv: e.hullLv, driverLv: e.driverLv, reload: e.reloadLeft })),
+      enemies: enemies.map((e) => ({ gx: e.gx, gz: e.gz, hp: e.hp, alive: e.alive, hullLv: e.hullLv, driverLv: e.driverLv, reload: e.reloadLeft, rotY: e.group.rotation.y })),
       props: props.size,
     };
   },
   heightAt: (gx, gz) => heightAt(gx, gz),
   terrainAt: (gx, gz) => TERRAIN_NAME[terrainAt(gx, gz)],
   reachable: () => [...reachableCells(player).keys()],
+  moveInfo: (gx, gz) => {
+    const i = reachableCells(player).get(cellKey(gx, gz));
+    return i ? { cost: i.cost, endDir: i.endDir, turned: i.turned, path: i.path } : null;
+  },
   fireCells: () => [...computeFireCells(player).keys()],
   planMoveTo(gx, gz, facing = null) {
     const info = currentMoveCells.get(cellKey(gx, gz));
