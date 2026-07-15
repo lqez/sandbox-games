@@ -54,10 +54,16 @@ const SPECS = {
   },
   mk4: {
     turret: [],
-    gun: ['6파운더'],
-    turretPivot: null, // 무포탑 — 스폰슨 고정포
+    gun: [], // 주포는 좌/우 스폰슨으로 따로 조립 (아래 sponsons)
+    turretPivot: null, // 무포탑 — 좌우 스폰슨 고정포
     gunPivot: [0, 2.9, 1.6],
-    muzzle: [3.4, 0, 2.0],
+    muzzle: [0, 0, 0],
+    // 좌/우 스폰슨 부포: 각자 자기 마운트에서 독립 선회(요), 자기 포구로 발사.
+    // rest = 미조준 시 향하는 방향(측면 ±90°). match로 킷 파츠를 배정.
+    sponsons: [
+      { key: 'L', match: ['좌 6파운더'], pivot: [-3.4, 2.9, 1.6], muzzle: [0, 0, 1.7], rest: -Math.PI / 2 },
+      { key: 'R', match: ['우 6파운더'], pivot: [3.4, 2.9, 1.6], muzzle: [0, 0, 1.7], rest: Math.PI / 2 },
+    ],
   },
   t34: {
     turret: ['포탑', '큐폴라', '장전수 해치'],
@@ -151,12 +157,38 @@ export function buildKitTank(key) {
   );
   const turretInTank = new THREE.Vector3(...tp);
 
+  // 스폰슨 부포(Mark IV): 좌/우 각자 자기 마운트에서 선회하는 독립 포 그룹.
+  // 각 그룹은 hull 직속(차체 고정), 자기 요각(rotation.y)으로 조준한다.
+  const sponsons = (spec.sponsons || []).map((sp) => {
+    const grp = new THREE.Group();
+    grp.position.set(...sp.pivot);
+    grp.rotation.y = sp.rest;      // 미조준 시 측면(±90°)을 향한다
+    grp.userData.rest = sp.rest;
+    hull.add(grp);
+    const mz = new THREE.Object3D();
+    mz.position.set(...sp.muzzle);
+    grp.add(mz);
+    return { key: sp.key, group: grp, muzzle: mz, pivot: sp.pivot, match: sp.match };
+  });
+  const sponsonPivot = new Map(); // holder를 배정할 스폰슨 찾기용
+
   for (const part of def.parts) {
     const holder = new THREE.Group();
     holder.add(part.mesh);
     holder.position.set(...part.assembled.pos);
     holder.quaternion.setFromEuler(new THREE.Euler(...part.assembled.rot));
-    if (spec.gun.some((k) => part.name.includes(k))) {
+    const sp = sponsons.find((s) => s.match.some((k) => part.name.includes(k)));
+    if (sp) {
+      // 스폰슨포: 자기 마운트 기준으로 옮기고, 배럴이 +z(정면)을 향하도록
+      // 스플레이(요) 성분을 제거 — rest 회전이 측면 지향을 담당한다.
+      holder.position.set(
+        part.assembled.pos[0] - sp.pivot[0],
+        part.assembled.pos[1] - sp.pivot[1],
+        part.assembled.pos[2] - sp.pivot[2]
+      );
+      holder.quaternion.identity();
+      sp.group.add(holder);
+    } else if (spec.gun.some((k) => part.name.includes(k))) {
       holder.position.sub(cannonInTank);
       cannon.add(holder);
     } else if (spec.turret.some((k) => part.name.includes(k))) {
@@ -171,10 +203,16 @@ export function buildKitTank(key) {
   muzzle.position.set(...spec.muzzle);
   cannon.add(muzzle);
 
-  // 드로콜 절감: 회전 단위(차체/포탑/포)별로 정적 메시 병합
-  mergeStatic(cannon);
-  mergeStatic(turret, [cannon]);
-  mergeStatic(hull, [turret]);
+  // 드로콜 절감: 회전 단위(차체/포탑/포)별로 정적 메시 병합.
+  // 스폰슨포는 각 포가 독립 선회하므로 개별 병합하고 hull에서 제외.
+  if (sponsons.length) {
+    for (const s of sponsons) mergeStatic(s.group);
+    mergeStatic(hull, [turret, ...sponsons.map((s) => s.group)]);
+  } else {
+    mergeStatic(cannon);
+    mergeStatic(turret, [cannon]);
+    mergeStatic(hull, [turret]);
+  }
 
   const hitbox = new THREE.Mesh(
     new THREE.CylinderGeometry(1.1, 1.1, 2.6, 8),
@@ -187,5 +225,9 @@ export function buildKitTank(key) {
     if (o.isMesh && o !== hitbox) o.castShadow = true;
   });
   // hasTurret: 포탑 요 회전으로 조준 가능한 기체 (Mark IV는 차체 고정 스폰슨포)
-  return { group: outer, turret, cannon, muzzle, hitbox, hasTurret: !!spec.turretPivot };
+  // sponsonTwin: 좌/우 독립 부포 — main.js가 목표 쪽 포를 골라 조준/발사한다.
+  const twin = sponsons.length
+    ? { sponsonTwin: true, sponsons, cannon: sponsons[0].group, muzzle: sponsons[0].muzzle }
+    : { sponsonTwin: false };
+  return { group: outer, turret, cannon, muzzle, hitbox, hasTurret: !!spec.turretPivot, ...twin };
 }

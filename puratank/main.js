@@ -2122,21 +2122,45 @@ function clampToGunArc(unit, rel) {
   }
   return THREE.MathUtils.clamp(rel, -arc, arc);
 }
+// 스폰슨 트윈(Mark IV): 목표가 있는 쪽 부포를 고른다 (차체 기준 좌/우)
+function pickSponson(attacker, targetYaw) {
+  const rel = normAngle(targetYaw - attacker.group.rotation.y);
+  const key = rel >= 0 ? 'R' : 'L';
+  return {
+    gun: attacker.sponsons.find((s) => s.key === key),
+    other: attacker.sponsons.find((s) => s.key !== key),
+  };
+}
 async function aimAt(attacker, aim, pitchDeg, instant = false) {
   const dx = aim.x - attacker.group.position.x;
   const dz = aim.z - attacker.group.position.z;
   const targetYaw = Math.atan2(dx, dz);
   const pitchRad = -THREE.MathUtils.degToRad(pitchDeg);
+  let gunGroup = attacker.cannon;           // 부앙각/반동을 적용할 포 그룹
+  attacker._activeMuzzle = attacker.muzzle;
   if (attacker.gun?.fixed) {
-    // 고정 포신: 차체는 그대로, 포만 사각(arc) 안에서 좌우 미세 조준.
-    // 스폰슨 부포는 목표 쪽 측면(±90°) 창으로 클램프.
     const rel = clampToGunArc(attacker, normAngle(targetYaw - attacker.group.rotation.y));
-    const from = attacker.cannon.rotation.y;
-    const diff = normAngle(rel - from);
-    if (Math.abs(diff) > 0.01 && !instant) {
-      await tween(140 + Math.abs(diff) * 100, (e) => { attacker.cannon.rotation.y = from + diff * e; });
+    if (attacker.sponsonTwin) {
+      // 좌/우 독립 부포 — 목표 쪽 포만 조준하고 반대쪽은 자기 측면(rest)으로 되돌린다
+      const { gun, other } = pickSponson(attacker, targetYaw);
+      gunGroup = gun.group;
+      attacker._activeMuzzle = gun.muzzle;
+      const from = gun.group.rotation.y;
+      const diff = normAngle(rel - from);
+      if (Math.abs(diff) > 0.01 && !instant) {
+        await tween(140 + Math.abs(diff) * 100, (e) => { gun.group.rotation.y = from + diff * e; });
+      } else gun.group.rotation.y = rel;
+      const orest = other.group.userData.rest, ofrom = other.group.rotation.y;
+      const od = normAngle(orest - ofrom);
+      if (Math.abs(od) > 0.01 && !instant) tween(220, (e) => { other.group.rotation.y = ofrom + od * e; });
+      else other.group.rotation.y = orest;
     } else {
-      attacker.cannon.rotation.y = rel;
+      // 단일 고정 포신: 차체는 그대로, 포만 사각(arc) 안에서 좌우 미세 조준
+      const from = attacker.cannon.rotation.y;
+      const diff = normAngle(rel - from);
+      if (Math.abs(diff) > 0.01 && !instant) {
+        await tween(140 + Math.abs(diff) * 100, (e) => { attacker.cannon.rotation.y = from + diff * e; });
+      } else attacker.cannon.rotation.y = rel;
     }
   } else if (attacker.hasTurret) {
     const rel = normAngle(targetYaw - attacker.group.rotation.y);
@@ -2151,9 +2175,10 @@ async function aimAt(attacker, aim, pitchDeg, instant = false) {
   } else {
     await rotateTo(attacker, targetYaw, PIVOT_RATE);
   }
-  const fromP = attacker.cannon.rotation.x;
-  if (instant) attacker.cannon.rotation.x = pitchRad;
-  else await tween(140, (e) => { attacker.cannon.rotation.x = fromP + (pitchRad - fromP) * e; });
+  attacker._activeCannon = gunGroup;
+  const fromP = gunGroup.rotation.x;
+  if (instant) gunGroup.rotation.x = pitchRad;
+  else await tween(140, (e) => { gunGroup.rotation.x = fromP + (pitchRad - fromP) * e; });
   return pitchRad;
 }
 function sfxOnce(attacker) { if (!attacker._trvSfx) { attacker._trvSfx = true; setTimeout(() => (attacker._trvSfx = false), 400); sfx('step'); } }
@@ -2166,13 +2191,21 @@ async function fireSequence(attacker, target, shot) {
 
   sfx('fire');
   const muzzlePos = new THREE.Vector3();
-  attacker.muzzle.getWorldPosition(muzzlePos);
+  const activeMuzzle = attacker._activeMuzzle || attacker.muzzle;
+  activeMuzzle.getWorldPosition(muzzlePos);
   const flash = new THREE.Mesh(new THREE.SphereGeometry(0.3, 10, 10), flashMat.clone());
   flash.position.copy(muzzlePos);
   scene.add(flash);
   tween(160, (e) => { flash.scale.setScalar(1 + e); flash.material.opacity = 1 - e; }).then(() => scene.remove(flash));
-  const cz = attacker.cannon.position.z;
-  tween(200, (e, rawK) => { attacker.cannon.position.z = cz - Math.sin(rawK * Math.PI) * 0.2; }, linear);
+  // 반동: 발사한 포를 자기 배럴 축(로컬 전방) 뒤로 밀었다 되돌린다.
+  // 스폰슨포는 요회전돼 있으므로 로컬 전방을 방향으로 계산 (일반포는 +z와 동일).
+  const recoilGun = attacker._activeCannon || attacker.cannon;
+  const recoilBase = recoilGun.position.clone();
+  const rfx = Math.sin(recoilGun.rotation.y), rfz = Math.cos(recoilGun.rotation.y);
+  tween(200, (e, rawK) => {
+    const d = Math.sin(rawK * Math.PI) * 0.2;
+    recoilGun.position.set(recoilBase.x - rfx * d, recoilBase.y, recoilBase.z - rfz * d);
+  }, linear);
 
   // 명중 굴림
   const roll = Math.random() * 100;
@@ -2938,14 +2971,22 @@ function simulateMoves() {
 const TURRET_TRACK_RATE = 2.6; // rad/s
 function updateTurretTracking(dt) {
   if (phase !== 'resolve') return;
+  const step = TURRET_TRACK_RATE * dt;
   for (const u of units) {
     if (!u.alive || !u._track || u._aiming) continue;
     const p = u._track.point ?? u._track.unit?.group.position;
     if (!p || (u._track.unit && !u._track.unit.alive)) continue;
     const targetYaw = Math.atan2(p.x - u.group.position.x, p.z - u.group.position.z);
+    if (u.sponsonTwin) {
+      // 목표 쪽 부포를 사각 안에서 겨누고, 반대쪽은 자기 측면(rest)으로
+      const { gun, other } = pickSponson(u, targetYaw);
+      const rel = clampToGunArc(u, normAngle(targetYaw - u.group.rotation.y));
+      gun.group.rotation.y += THREE.MathUtils.clamp(normAngle(rel - gun.group.rotation.y), -step, step);
+      other.group.rotation.y += THREE.MathUtils.clamp(normAngle(other.group.userData.rest - other.group.rotation.y), -step, step);
+      continue;
+    }
     const rel = normAngle(targetYaw - u.group.rotation.y);
     const diff = normAngle(rel - u.turret.rotation.y);
-    const step = TURRET_TRACK_RATE * dt;
     u.turret.rotation.y += THREE.MathUtils.clamp(diff, -step, step);
   }
 }
@@ -2981,7 +3022,7 @@ async function resolveTurn() {
   // 미리 추적한다 (차체 선회는 느려도 포탑은 목표를 맞춰 간다)
   for (const u of units) {
     u._track = null;
-    if (!u.alive || !u.hasTurret) continue;
+    if (!u.alive || (!u.hasTurret && !u.sponsonTwin)) continue;
     if (u.plan?.type === 'fire') {
       u._track = { point: aimPointOf({ gx: u.plan.cell.gx, gz: u.plan.cell.gz }) };
       continue;
@@ -3006,15 +3047,22 @@ async function resolveTurn() {
     for (const ow of overwatchers) {
       if (ow._snapped || !ow.alive || !mover.alive) continue;
       if (ow.isPlayer === mover.isPlayer) continue;
-      // 포가 지금 실제로 향한 방향(포탑/고정포 요) 기준 정렬 검사 —
-      // 포탑이 추적으로 목표를 물어야 스냅이 나간다
-      const gunYaw = ow.group.rotation.y +
-        (ow.hasTurret ? ow.turret.rotation.y : (ow.cannon?.rotation.y ?? 0));
       const bearing = Math.atan2(
         mover.group.position.x - ow.group.position.x,
         mover.group.position.z - ow.group.position.z
       );
-      if (Math.abs(normAngle(bearing - gunYaw)) > SNAP_ARC) continue;
+      // 포가 지금 실제로 향한 방향 기준 정렬 검사 — 포가 목표를 물어야 스냅.
+      // 스폰슨 트윈은 좌/우 부포 중 어느 쪽이든 정렬되면 발사.
+      let aligned;
+      if (ow.sponsonTwin) {
+        aligned = ow.sponsons.some((s) =>
+          Math.abs(normAngle(bearing - (ow.group.rotation.y + s.group.rotation.y))) <= SNAP_ARC);
+      } else {
+        const gunYaw = ow.group.rotation.y +
+          (ow.hasTurret ? ow.turret.rotation.y : (ow.cannon?.rotation.y ?? 0));
+        aligned = Math.abs(normAngle(bearing - gunYaw)) <= SNAP_ARC;
+      }
+      if (!aligned) continue;
       const shot = computeShot(ow, { unit: mover });
       if (!shot.ok) continue;
       ow._snapped = true;
@@ -3264,9 +3312,18 @@ function updateAimPreview(dt) {
   const k = 1 - Math.exp(-dt * 9);
   const aim = hoverAim;
   const targetYaw = Math.atan2(aim.x - player.group.position.x, aim.z - player.group.position.z);
+  let pitchGun = player.cannon;
   if (player.gun?.fixed) {
     const rel = clampToGunArc(player, normAngle(targetYaw - player.group.rotation.y));
-    player.cannon.rotation.y += normAngle(rel - player.cannon.rotation.y) * k;
+    if (player.sponsonTwin) {
+      // 목표 쪽 부포만 조준 프리뷰, 반대쪽은 자기 측면으로 슬며시 복귀
+      const { gun, other } = pickSponson(player, targetYaw);
+      pitchGun = gun.group;
+      gun.group.rotation.y += normAngle(rel - gun.group.rotation.y) * k;
+      other.group.rotation.y += normAngle(other.group.userData.rest - other.group.rotation.y) * k;
+    } else {
+      player.cannon.rotation.y += normAngle(rel - player.cannon.rotation.y) * k;
+    }
   } else if (player.hasTurret) {
     const rel = normAngle(targetYaw - player.group.rotation.y);
     player.turret.rotation.y += normAngle(rel - player.turret.rotation.y) * k;
@@ -3279,7 +3336,7 @@ function updateAimPreview(dt) {
     player.gun?.pitchMin ?? PITCH_MIN, player.gun?.pitchMax ?? PITCH_MAX
   );
   const target = -THREE.MathUtils.degToRad(pitchDeg);
-  player.cannon.rotation.x += (target - player.cannon.rotation.x) * k;
+  pitchGun.rotation.x += (target - pitchGun.rotation.x) * k;
 }
 
 // ---------------------------------------------------------------------------
