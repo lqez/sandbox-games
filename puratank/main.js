@@ -6,7 +6,7 @@ import { EffectComposer } from './vendor/postprocessing/EffectComposer.js';
 import { RenderPass } from './vendor/postprocessing/RenderPass.js';
 import { SSAOPass } from './vendor/postprocessing/SSAOPass.js';
 import { OutputPass } from './vendor/postprocessing/OutputPass.js';
-import { buildKitTank, KIT_INFO, KIT_KEYS } from './src/kit-tank.js';
+import { buildKitTank, KIT_INFO, KIT_KEYS, mergeStatic } from './src/kit-tank.js';
 
 // 차고에서 선택한 기체 (?tank=ft|mk4|t34|tiger)
 const kitParam = new URLSearchParams(location.search).get('tank');
@@ -192,6 +192,19 @@ ssaoPass.minDistance = 0.0004;
 ssaoPass.maxDistance = 0.12;
 composer.addPass(ssaoPass);
 composer.addPass(new OutputPass());
+// AO 제외 레이어: 컷아웃 풀·수면·오버레이가 SSAO 노멀 패스에서
+// 통짜 사각형으로 렌더되어 검은 헤일로를 만드는 것을 방지
+const NO_AO_LAYER = 1;
+camera.layers.enable(NO_AO_LAYER);
+const noAO = (obj) => obj.traverse((o) => o.layers.set(NO_AO_LAYER));
+{
+  const orig = ssaoPass.render.bind(ssaoPass);
+  ssaoPass.render = (r, w, rd, dt, mask) => {
+    camera.layers.disable(NO_AO_LAYER);
+    orig(r, w, rd, dt, mask);
+    camera.layers.enable(NO_AO_LAYER);
+  };
+}
 
 // ---------------------------------------------------------------------------
 // 툰 재질 / 외곽선
@@ -575,7 +588,36 @@ const waterMesh = new THREE.Mesh(
 );
 waterMesh.rotation.x = -Math.PI / 2;
 waterMesh.position.y = WATER_Y;
+noAO(waterMesh);
 scene.add(waterMesh);
+
+// 지형 테두리 스커트 — 하이트필드 가장자리가 뚫려 보이지 않게 측면을 막는다
+{
+  const yBot = -0.58;
+  const step = TILE / VRES;
+  const verts = [];
+  const pushWall = (x0, z0, x1, z1) => {
+    const h0 = Math.max(sampleHeight(x0, z0), WATER_Y);
+    const h1 = Math.max(sampleHeight(x1, z1), WATER_Y);
+    verts.push(x0, h0, z0, x0, yBot, z0, x1, h1, z1);
+    verts.push(x1, h1, z1, x0, yBot, z0, x1, yBot, z1);
+  };
+  for (let t = -HALF; t < HALF - 1e-6; t += step) {
+    pushWall(t, -HALF, t + step, -HALF);
+    pushWall(t + step, HALF, t, HALF);
+    pushWall(-HALF, t + step, -HALF, t);
+    pushWall(HALF, t, HALF, t + step);
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(verts), 3));
+  geo.computeVertexNormals();
+  const skirt = new THREE.Mesh(
+    geo,
+    new THREE.MeshStandardMaterial({ color: 0x63523c, roughness: 0.96, side: THREE.DoubleSide })
+  );
+  skirt.receiveShadow = true;
+  scene.add(skirt);
+}
 
 // 받침대
 {
@@ -736,6 +778,7 @@ function placeProp(type, gx, gz) {
   hit.position.y = 1.2;
   group.add(hit);
   scene.add(group);
+  mergeStatic(group, [hit]); // 드로콜 절감: 프랍 메시 재질별 병합
   const prop = { type, def, gx, gz, hp: def.hp, group, hit };
   hit.userData.prop = prop;
   props.set(cellKey(gx, gz), prop);
@@ -859,6 +902,7 @@ function placeProp(type, gx, gz) {
   grassMesh.count = placed;
   grassMesh.instanceMatrix.needsUpdate = true;
   if (grassMesh.instanceColor) grassMesh.instanceColor.needsUpdate = true;
+  noAO(grassMesh);
   scene.add(grassMesh);
 
   // 자갈: 흙/진흙/바위 지대에 낮은 다면체
@@ -1031,6 +1075,7 @@ const bridge = { cells: new Set(), gz: -1, deckY: WATER_Y + 0.5, hp: 100, maxHp:
     );
     hit.position.set(cx, deck + 0.4, cz);
     g.add(hit);
+    mergeStatic(g, [hit]); // 드로콜 절감
     bridge.hit = hit;
     bridge.group = g;
     bridge.worldZ = cz;
@@ -1644,6 +1689,7 @@ const trailMesh = new THREE.Mesh(
 );
 trailMesh.frustumCulled = false;
 trailMesh.renderOrder = 1;
+noAO(trailMesh);
 scene.add(trailMesh);
 let trailIdx = 0;
 const trailY = (x, z) => Math.max(sampleHeight(x, z), WATER_Y) + 0.035;
@@ -2290,11 +2336,12 @@ function insideLoops(loops, x, z) {
   return inside;
 }
 
-// 부드러운 외곽선을 따라 지형에 밀착하는 튜브
+// 부드러운 외곽선을 따라 지형에 밀착하는 튜브 (포인트 데시메이트 + 캣멀롬 보간)
 function loopTube(pts, lift, radius, mat) {
-  const v = pts.map(([x, z]) => new THREE.Vector3(x, groundY(x, z) + lift, z));
-  const curve = new THREE.CatmullRomCurve3(v, true, 'catmullrom', 0.1);
-  const geo = new THREE.TubeGeometry(curve, Math.max(48, pts.length), radius, 5, true);
+  const dec = pts.filter((_, i) => i % 3 === 0);
+  const v = dec.map(([x, z]) => new THREE.Vector3(x, groundY(x, z) + lift, z));
+  const curve = new THREE.CatmullRomCurve3(v, true, 'catmullrom', 0.5);
+  const geo = new THREE.TubeGeometry(curve, Math.max(64, dec.length * 2), radius, 5, true);
   return new THREE.Mesh(geo, mat);
 }
 
@@ -2303,10 +2350,13 @@ function loopTube(pts, lift, radius, mat) {
 function showCellField(cellKeys, { fillMat, edgeMat, fill = true, edgeRadius = 0.09 }) {
   const set = cellKeys instanceof Set ? cellKeys : new Set(cellKeys);
   if (!set.size) return;
-  const loops = boundaryLoops(set).map((l) => chaikin(l, 2));
+  // 차이킨 3회 스무딩 — 타일 계단이 사라진 곡선 경계.
+  // 내부 판정(PIP)은 데시메이트한 루프로 비용을 억제한다
+  const loops = boundaryLoops(set).map((l) => chaikin(l, 3));
+  const pipLoops = loops.map((l) => l.filter((_, i) => i % 4 === 0));
   if (fill) {
-    // 채움: 0.5 간격 서브셀 래스터 → 지형 굴곡을 따라가는 쿼드
-    const step = 0.5;
+    // 채움: 0.45 간격 서브셀 래스터 → 지형 굴곡을 따라가는 쿼드
+    const step = 0.45;
     const verts = [];
     let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
     for (const loop of loops) {
@@ -2317,7 +2367,7 @@ function showCellField(cellKeys, { fillMat, edgeMat, fill = true, edgeRadius = 0
     }
     for (let x = minX; x < maxX; x += step) {
       for (let z = minZ; z < maxZ; z += step) {
-        if (!insideLoops(loops, x + step / 2, z + step / 2)) continue;
+        if (!insideLoops(pipLoops, x + step / 2, z + step / 2)) continue;
         const y00 = groundY(x, z) + 0.05, y10 = groundY(x + step, z) + 0.05;
         const y01 = groundY(x, z + step) + 0.05, y11 = groundY(x + step, z + step) + 0.05;
         verts.push(x, y00, z, x, y01, z + step, x + step, y10, z);
@@ -2326,9 +2376,15 @@ function showCellField(cellKeys, { fillMat, edgeMat, fill = true, edgeRadius = 0
     }
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(verts), 3));
-    moveHighlightGroup.add(new THREE.Mesh(geo, fillMat));
+    const fillMesh = new THREE.Mesh(geo, fillMat);
+    noAO(fillMesh);
+    moveHighlightGroup.add(fillMesh);
   }
-  for (const loop of loops) moveHighlightGroup.add(loopTube(loop, 0.09, fill ? edgeRadius : edgeRadius * 0.55, edgeMat));
+  for (const loop of loops) {
+    const tube = loopTube(loop, 0.09, fill ? edgeRadius : edgeRadius * 0.55, edgeMat);
+    noAO(tube);
+    moveHighlightGroup.add(tube);
+  }
 }
 
 function showMoveField(cells, active) {

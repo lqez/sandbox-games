@@ -77,6 +77,58 @@ const SPECS = {
 
 const SCALE = 0.22; // 킷(차체 ~8유닛) → 게임(차체 ~1.8유닛 ≈ 2×2타일, 1타일=1유닛)
 
+// 서브그룹(차체/포탑/포) 안의 정적 메시들을 재질별로 병합 — 킷 하나가
+// 수백 드로콜(볼트·리벳·트랙 링크가 전부 개별 메시)에서 재질 수만큼으로 준다.
+// exclude에 속한 하위 트리(포탑 속 포 등)는 건드리지 않는다.
+function relMatrix(obj, root) {
+  const m = new THREE.Matrix4();
+  const chain = [];
+  let cur = obj;
+  while (cur && cur !== root) { chain.push(cur); cur = cur.parent; }
+  for (let i = chain.length - 1; i >= 0; i--) {
+    chain[i].updateMatrix();
+    m.multiply(chain[i].matrix);
+  }
+  return m;
+}
+export function mergeStatic(root, exclude = []) {
+  const excludeSet = new Set(exclude);
+  const buckets = new Map(); // material -> geometry[]
+  const removals = [];
+  (function walk(o) {
+    if (excludeSet.has(o)) return;
+    for (const c of o.children) walk(c);
+    if (o.isMesh && o.material && o.material.visible !== false) {
+      const g = o.geometry.index ? o.geometry.toNonIndexed() : o.geometry.clone();
+      g.applyMatrix4(relMatrix(o, root));
+      if (!buckets.has(o.material)) buckets.set(o.material, []);
+      buckets.get(o.material).push(g);
+      removals.push(o);
+    }
+  })(root);
+  for (const o of removals) o.parent?.remove(o);
+  for (const [mat, geos] of buckets) {
+    let total = 0;
+    for (const g of geos) total += g.attributes.position.count;
+    const pos = new Float32Array(total * 3);
+    const nor = new Float32Array(total * 3);
+    let off = 0;
+    for (const g of geos) {
+      pos.set(g.attributes.position.array, off * 3);
+      if (g.attributes.normal) nor.set(g.attributes.normal.array, off * 3);
+      off += g.attributes.position.count;
+      g.dispose();
+    }
+    const merged = new THREE.BufferGeometry();
+    merged.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    merged.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+    const mesh = new THREE.Mesh(merged, mat);
+    mesh.castShadow = true;
+    mesh.receiveShadow = false;
+    root.add(mesh);
+  }
+}
+
 export function buildKitTank(key) {
   const def = BUILDERS[key]();
   const spec = SPECS[key];
@@ -118,6 +170,11 @@ export function buildKitTank(key) {
   const muzzle = new THREE.Object3D();
   muzzle.position.set(...spec.muzzle);
   cannon.add(muzzle);
+
+  // 드로콜 절감: 회전 단위(차체/포탑/포)별로 정적 메시 병합
+  mergeStatic(cannon);
+  mergeStatic(turret, [cannon]);
+  mergeStatic(hull, [turret]);
 
   const hitbox = new THREE.Mesh(
     new THREE.CylinderGeometry(1.1, 1.1, 2.6, 8),
