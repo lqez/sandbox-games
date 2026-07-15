@@ -749,6 +749,19 @@ const TRUNK_COLS = [0x6d5236, 0x7c5e3d, 0x5f4a30];
 const LEAF_COLS = [0x577f3b, 0x678f45, 0x496f32, 0x749a4f, 0x86813c]; // 마지막=누런 잎
 const PINE_COLS = [0x3c6437, 0x47733c, 0x33562f];
 const AUTUMN_COLS = [0xb0894a, 0xa88a3c, 0x9c6f3a];
+// 잎 덩이용 플랫 셰이딩 재질(캐시) — 이코사면이 각지게 잡혀 잎사귀 느낌
+const foliageCache = new Map();
+function foliageMat(color) {
+  if (!foliageCache.has(color)) {
+    foliageCache.set(color, new THREE.MeshStandardMaterial({ color, roughness: 0.9, flatShading: true }));
+  }
+  return foliageCache.get(color);
+}
+function leafPart(geo, color) {
+  const m = new THREE.Mesh(geo, foliageMat(color));
+  m.castShadow = true; m.receiveShadow = true;
+  return m;
+}
 function buildTreeMesh() {
   const g = new THREE.Group();
   const pine = rng() < 0.4;
@@ -783,7 +796,7 @@ function buildTreeMesh() {
         ? AUTUMN_COLS[Math.floor(rng() * AUTUMN_COLS.length)]
         : LEAF_COLS[Math.floor(rng() * LEAF_COLS.length)];
       const s = 0.3 + rng() * 0.34;
-      const clump = part(new THREE.IcosahedronGeometry(s, 0), col);
+      const clump = leafPart(new THREE.IcosahedronGeometry(s, 0), col);
       clump.position.set(Math.cos(ang) * rad, top + (rng() - 0.5) * 0.55, Math.sin(ang) * rad);
       clump.scale.set(1 + rng() * 0.35, 0.78 + rng() * 0.3, 1 + rng() * 0.35);
       clump.rotation.set(rng() * 3, rng() * 3, rng() * 3);
@@ -799,7 +812,7 @@ function buildBushMesh() {
   for (let i = 0; i < clumps; i++) {
     const ang = rng() * Math.PI * 2, rad = rng() * 0.36;
     const s = 0.26 + rng() * 0.24;
-    const c = part(new THREE.IcosahedronGeometry(s, 0), cols[Math.floor(rng() * cols.length)]);
+    const c = leafPart(new THREE.IcosahedronGeometry(s, 0), cols[Math.floor(rng() * cols.length)]);
     c.position.set(Math.cos(ang) * rad, 0.2 + rng() * 0.22, Math.sin(ang) * rad);
     c.scale.set(1 + rng() * 0.35, 0.72 + rng() * 0.26, 1 + rng() * 0.35);
     c.rotation.set(rng() * 3, rng() * 3, rng() * 3);
@@ -933,13 +946,22 @@ function buildHouseMesh() {
 }
 function buildRubbleMesh() {
   const g = new THREE.Group();
+  // 부서진 콘크리트/석재 덩이 (각진 이코사면)
+  const concrete = [0x9a9285, 0x847c70, 0xa8a091, 0x736c62];
   for (let i = 0; i < 5; i++) {
-    const b = part(
-      new RoundedBoxGeometry(0.45 + rng() * 0.4, 0.22 + rng() * 0.2, 0.45 + rng() * 0.3, 1, 0.05),
-      i % 2 ? 0xcfc4ac : 0xb0a28a
-    );
-    b.position.set((rng() - 0.5) * 1.1, 0.12 + rng() * 0.25, (rng() - 0.5) * 1.1);
-    b.rotation.y = rng() * Math.PI;
+    const s = 0.24 + rng() * 0.28;
+    const chunk = part(new THREE.IcosahedronGeometry(s, 0), concrete[Math.floor(rng() * concrete.length)]);
+    chunk.position.set((rng() - 0.5) * 1.1, 0.1 + rng() * 0.22, (rng() - 0.5) * 1.1);
+    chunk.scale.set(1 + rng() * 0.5, 0.5 + rng() * 0.4, 1 + rng() * 0.5);
+    chunk.rotation.set(rng() * 3, rng() * 3, rng() * 3);
+    g.add(chunk);
+  }
+  // 부서진 벽돌 조각 (벽돌 붉은 톤 작은 상자)
+  const brickCols = [0x9a5540, 0xa8654a, 0x8a4c38, 0xb07050];
+  for (let i = 0; i < 6; i++) {
+    const b = part(new THREE.BoxGeometry(0.2 + rng() * 0.12, 0.09, 0.1), brickCols[Math.floor(rng() * brickCols.length)]);
+    b.position.set((rng() - 0.5) * 1.2, 0.05 + rng() * 0.16, (rng() - 0.5) * 1.2);
+    b.rotation.set((rng() - 0.5) * 0.6, rng() * Math.PI, (rng() - 0.5) * 0.6);
     g.add(b);
   }
   return g;
