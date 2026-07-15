@@ -762,21 +762,128 @@ function buildBushMesh() {
   }
   return g;
 }
+// 벽돌 벽 텍스처: 어긋쌓기 벽돌 + 모르타르 줄눈 + 개체 색 변주/풍화
+function makeBrickTexture() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 256;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#5f4a3c'; // 모르타르(어두운 바탕)
+  ctx.fillRect(0, 0, 256, 256);
+  const rows = 13, bh = 256 / rows, bw = 256 / 6;
+  for (let r = 0; r < rows; r++) {
+    const off = (r % 2) * (bw / 2);
+    for (let cx = -1; cx < 7; cx++) {
+      const x = cx * bw + off + 1.5, y = r * bh + 1.5;
+      const base = 120 + Math.random() * 55;
+      const rr = base, gg = base * (0.62 + Math.random() * 0.12), bb = base * (0.46 + Math.random() * 0.12);
+      ctx.fillStyle = `rgb(${rr | 0},${gg | 0},${bb | 0})`;
+      ctx.fillRect(x, y, bw - 3, bh - 3);
+      // 풍화 얼룩
+      if (Math.random() < 0.3) {
+        ctx.fillStyle = `rgba(40,32,24,${0.1 + Math.random() * 0.2})`;
+        ctx.fillRect(x, y, bw - 3, bh - 3);
+      }
+    }
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.anisotropy = 4;
+  return tex;
+}
+// 슬레이트 지붕 텍스처: 겹친 기와 가로 켜 + 색 변주
+function makeSlateTexture() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 256;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#50555e';
+  ctx.fillRect(0, 0, 256, 256);
+  const rows = 15, th = 256 / rows, tw = 256 / 9;
+  for (let r = 0; r < rows; r++) {
+    const off = (r % 2) * (tw / 2);
+    for (let cx = -1; cx < 10; cx++) {
+      const x = cx * tw + off, y = r * th;
+      const v = 96 + Math.random() * 54;
+      ctx.fillStyle = `rgb(${v | 0},${(v * 1.03) | 0},${(v * 1.12) | 0})`;
+      ctx.beginPath();
+      ctx.roundRect(x + 1, y + 1, tw - 2, th * 1.5, 2);
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(20,22,26,0.5)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.anisotropy = 4;
+  return tex;
+}
+const brickTex = makeBrickTexture();
+const slateTex = makeSlateTexture();
+const brickMat = new THREE.MeshStandardMaterial({ map: brickTex, roughness: 0.95, color: 0xb9a48c, side: THREE.DoubleSide });
+const slateMat = new THREE.MeshStandardMaterial({ map: slateTex, roughness: 0.9 });
+const glassMat = new THREE.MeshStandardMaterial({ color: 0x2b3440, roughness: 0.35, metalness: 0.1, envMapIntensity: 0.5 });
+function texturedPart(geo, mat, uvRepeat) {
+  const m = new THREE.Mesh(geo, mat);
+  m.castShadow = true; m.receiveShadow = true;
+  return m;
+}
 function buildHouseMesh() {
   const g = new THREE.Group();
-  const body = part(new RoundedBoxGeometry(1.55, 1.15, 1.35, 2, 0.08), 0xe7dcc3);
-  body.position.y = 0.57;
+  const W = 1.55, D = 1.35, H = 1.2, RH = 0.72, ov = 0.12; // 벽/지붕 치수
+  // 벽돌 본체 (면마다 벽돌 크기 비슷하게 UV 반복 조정한 박스)
+  const bodyGeo = new THREE.BoxGeometry(W, H, D);
+  // BoxGeometry UV는 면당 0..1 — 벽돌 텍스처를 공유 재질로 쓰되 살짝 반복
+  const body = texturedPart(bodyGeo, brickMat);
+  body.position.y = H / 2;
   g.add(body);
-  const roof = part(new THREE.ConeGeometry(1.28, 0.85, 4), 0xb75c4a);
-  roof.rotation.y = Math.PI / 4;
-  roof.position.y = 1.55;
-  g.add(roof);
-  const chimney = part(new RoundedBoxGeometry(0.22, 0.5, 0.22, 1, 0.04), 0x8b7264);
-  chimney.position.set(0.4, 1.85, 0.3);
+  // 박공 지붕: 두 경사면(슬레이트) + 양 끝 벽돌 박공 삼각
+  const half = W / 2 + ov, dov = D / 2 + ov;
+  const slopeLen = Math.hypot(dov, RH);
+  for (const s of [-1, 1]) {
+    const slope = texturedPart(new THREE.BoxGeometry(W + ov * 2, 0.05, slopeLen), slateMat);
+    slope.position.set(0, H + RH / 2, s * dov / 2);
+    slope.rotation.x = s * Math.atan2(RH, dov);
+    g.add(slope);
+  }
+  // 박공 삼각 벽 (앞뒤가 아니라 좌우 끝)
+  for (const s of [-1, 1]) {
+    const tri = new THREE.BufferGeometry();
+    tri.setAttribute('position', new THREE.Float32BufferAttribute([
+      0, H, -D / 2,  0, H, D / 2,  0, H + RH, 0,
+    ], 3));
+    tri.setIndex([0, 1, 2]);
+    tri.computeVertexNormals();
+    const gable = new THREE.Mesh(tri, brickMat);
+    gable.position.x = s * W / 2;
+    gable.castShadow = true; gable.receiveShadow = true;
+    g.add(gable);
+  }
+  // 굴뚝
+  const chimney = texturedPart(new THREE.BoxGeometry(0.24, 0.55, 0.24), brickMat);
+  chimney.position.set(0.42, H + RH * 0.55, 0.25);
   g.add(chimney);
-  const door = part(new RoundedBoxGeometry(0.34, 0.55, 0.06, 1, 0.02), 0x7a5c3e, { outline: false });
-  door.position.set(0, 0.32, 0.69);
+  const cap = part(new THREE.BoxGeometry(0.3, 0.08, 0.3), 0x54453a);
+  cap.position.set(0.42, H + RH * 0.55 + 0.3, 0.25);
+  g.add(cap);
+  // 문
+  const door = part(new THREE.BoxGeometry(0.34, 0.6, 0.05), 0x6b4a2e, { outline: false });
+  door.position.set(0, 0.3, D / 2 + 0.01);
   g.add(door);
+  const lintel = part(new THREE.BoxGeometry(0.42, 0.07, 0.08), 0xcfc3a8, { outline: false });
+  lintel.position.set(0, 0.63, D / 2 + 0.02);
+  g.add(lintel);
+  // 창문 4개 (앞/옆) — 유리 + 밝은 틀
+  const addWindow = (x, y, z, ry) => {
+    const frame = part(new THREE.BoxGeometry(0.34, 0.42, 0.05), 0xcfc3a8, { outline: false });
+    const glass = new THREE.Mesh(new THREE.PlaneGeometry(0.24, 0.32), glassMat);
+    frame.position.set(x, y, z); frame.rotation.y = ry;
+    glass.position.set(x + Math.sin(ry) * 0.03, y, z + Math.cos(ry) * 0.03); glass.rotation.y = ry;
+    g.add(frame, glass);
+  };
+  addWindow(-0.42, 0.85, D / 2 + 0.005, 0);
+  addWindow(0.42, 0.85, D / 2 + 0.005, 0);
+  addWindow(W / 2 + 0.005, 0.8, 0.3, Math.PI / 2);
+  addWindow(W / 2 + 0.005, 0.8, -0.3, Math.PI / 2);
   return g;
 }
 function buildRubbleMesh() {
@@ -888,6 +995,7 @@ function placeProp(type, gx, gz) {
 // 리얼 디테일 스캐터: 풀 포기(교차 쿼드 컷아웃) + 흙 자갈 — 인스턴싱으로
 // 드로콜 각 1회. 배치는 연속 지형 가중치를 따라 풀밭/흙 위에만.
 // ---------------------------------------------------------------------------
+const decorMeshes = []; // 풀/꽃/낙엽/잔가지 — 디버그 토글용
 {
   // 스태틱 그래스 텍스처: 가는 잎 다발 + 밑동 어둡고 끝 밝은 세로 그라데이션.
   // 흰색으로 그려 instanceColor로 톤을 입히면 밑동 그늘/끝 하이라이트가 자연스럽다.
@@ -999,7 +1107,7 @@ function placeProp(type, gx, gz) {
   grassMesh.instanceMatrix.needsUpdate = true;
   if (grassMesh.instanceColor) grassMesh.instanceColor.needsUpdate = true;
   noAO(grassMesh);
-  scene.add(grassMesh);
+  scene.add(grassMesh); decorMeshes.push(grassMesh);
 
   // 들꽃: 풀밭에 노랑/흰 야생화 무리 — 십자 쿼드에 작은 꽃송이 텍스처
   const flowerCanvas = document.createElement('canvas');
@@ -1064,7 +1172,7 @@ function placeProp(type, gx, gz) {
   flowerMesh.instanceMatrix.needsUpdate = true;
   if (flowerMesh.instanceColor) flowerMesh.instanceColor.needsUpdate = true;
   noAO(flowerMesh);
-  scene.add(flowerMesh);
+  scene.add(flowerMesh); decorMeshes.push(flowerMesh);
 
   // 자갈: 흙/진흙/바위 지대에 낮은 다면체
   const PEB_N = 420;
@@ -1193,7 +1301,7 @@ function placeProp(type, gx, gz) {
   leafMesh.instanceMatrix.needsUpdate = true;
   if (leafMesh.instanceColor) leafMesh.instanceColor.needsUpdate = true;
   noAO(leafMesh);
-  scene.add(leafMesh);
+  scene.add(leafMesh); decorMeshes.push(leafMesh);
 
   // 잔가지: 흙/풀 위에 흩어진 가는 나뭇가지
   const twigGeo = new THREE.CylinderGeometry(0.018, 0.026, 0.55, 5);
@@ -1226,7 +1334,7 @@ function placeProp(type, gx, gz) {
   twigMesh.count = placed;
   twigMesh.instanceMatrix.needsUpdate = true;
   if (twigMesh.instanceColor) twigMesh.instanceColor.needsUpdate = true;
-  scene.add(twigMesh);
+  scene.add(twigMesh); decorMeshes.push(twigMesh);
 }
 
 // ---------------------------------------------------------------------------
@@ -3626,6 +3734,7 @@ window.__puratank = {
   composer,
   camera,
   sun,
+  hideDecor: (v = true) => decorMeshes.forEach((m) => (m.visible = !v)),
   moveHighlightGroup,
   playerUnit: player,
   bridge,
