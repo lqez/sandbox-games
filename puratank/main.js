@@ -1032,8 +1032,8 @@ function makeHpBar() {
   canvas.height = 44;
   const tex = new THREE.CanvasTexture(canvas);
   const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false }));
-  sprite.scale.set(2.0, 0.55, 1);
-  sprite.position.y = 3.3;
+  sprite.scale.set(2.6, 0.72, 1);
+  sprite.position.y = 5.4;
   sprite.renderOrder = 10;
   return { sprite, canvas, tex };
 }
@@ -1053,7 +1053,7 @@ function updateHpBar(unit) {
   ctx.font = 'bold 17px sans-serif';
   ctx.fillStyle = '#232a38';
   ctx.textAlign = 'center';
-  ctx.fillText(`차체${unit.hullLv} 조종${unit.driverLv}`, 80, 40);
+  ctx.fillText(unit.isPlayer ? `차체${unit.hullLv} 조종${unit.driverLv}` : `차체${unit.hullLv} AI${unit.driverLv}`, 80, 40);
   tex.needsUpdate = true;
 }
 
@@ -1096,8 +1096,10 @@ function spawnUnit(isPlayer, gx, gz, facing) {
 const player = spawnUnit(true, PLAYER_SPAWN.gx, PLAYER_SPAWN.gz, Math.PI);
 const enemies = ENEMY_SPAWNS.map((s) => spawnUnit(false, s.gx, s.gz, 0));
 
+// 탱크가 2×2타일 크기이므로 다른 유닛과 체비쇼프 1칸 이내로 접근 불가
 const isOccupied = (gx, gz, except = null) =>
-  units.some((u) => u.alive && u !== except && u.gx === gx && u.gz === gz);
+  units.some((u) => u.alive && u !== except &&
+    Math.max(Math.abs(u.gx - gx), Math.abs(u.gz - gz)) <= 1);
 
 // ---------------------------------------------------------------------------
 // 이동: 방향 상태 다익스트라 (지형비용 + 경사 + 선회비용 = 궤도 기동)
@@ -1122,13 +1124,13 @@ function facingDir(unit) {
   return best;
 }
 
-function stepCost(fromX, fromZ, toX, toZ) {
+function stepCost(fromX, fromZ, toX, toZ, mover = null) {
   if (!inBounds(toX, toZ)) return Infinity;
   const dh = heightAt(toX, toZ) - heightAt(fromX, fromZ);
   if (Math.abs(dh) > MAX_CLIMB) return Infinity; // 궤도로 못 오르는 단차
   const prop = props.get(cellKey(toX, toZ));
   if (prop && prop.def.blockMove) return Infinity;
-  if (isOccupied(toX, toZ)) return Infinity;
+  if (isOccupied(toX, toZ, mover)) return Infinity;
   // 깊은 물은 도하 불가 — 여울(얕은 구간)로만 강을 건널 수 있다
   if (terrainAt(toX, toZ) === T.WATER && WATER_Y - heightAt(toX, toZ) > FORD_DEPTH) return Infinity;
   let c = TERRAIN_COST[terrainAt(toX, toZ)];
@@ -1154,7 +1156,7 @@ function reachableCells(unit) {
     for (let d = 0; d < 4; d++) {
       const turn = Math.min(Math.abs(d - cur.dir), 4 - Math.abs(d - cur.dir)) * TURN_COST;
       const nx = cur.gx + DIRS[d].dx, nz = cur.gz + DIRS[d].dz;
-      const sc = stepCost(cur.gx, cur.gz, nx, nz);
+      const sc = stepCost(cur.gx, cur.gz, nx, nz, unit);
       if (!isFinite(sc)) continue;
       const nc = cur.cost + turn + sc;
       if (nc > unit.mp) continue;
@@ -1198,12 +1200,12 @@ function muzzleApprox(unit, cell = null) {
   const gx = cell ? cell.gx : unit.gx;
   const gz = cell ? cell.gz : unit.gz;
   const p = cellToWorld(gx, gz);
-  return new THREE.Vector3(p.x, standHeight(gx, gz) + 1.6, p.z);
+  return new THREE.Vector3(p.x, standHeight(gx, gz) + 2.7, p.z); // 2×2 스케일 포 높이
 }
 function aimPointOf(target) {
   if (target.unit) {
     const u = target.unit;
-    return new THREE.Vector3(u.group.position.x, standHeight(u.gx, u.gz) + 0.9, u.group.position.z);
+    return new THREE.Vector3(u.group.position.x, standHeight(u.gx, u.gz) + 1.7, u.group.position.z);
   }
   if (target.prop) {
     const pr = target.prop;
@@ -1211,7 +1213,7 @@ function aimPointOf(target) {
     return new THREE.Vector3(p.x, heightAt(pr.gx, pr.gz) + 0.7, p.z);
   }
   const p = cellToWorld(target.gx, target.gz);
-  return new THREE.Vector3(p.x, Math.max(heightAt(target.gx, target.gz), WATER_Y) + 0.15, p.z);
+  return new THREE.Vector3(p.x, Math.max(heightAt(target.gx, target.gz), WATER_Y) + 0.5, p.z);
 }
 
 // 반환 { ok, reason, chance, distCells, pitch, cover }
@@ -1231,12 +1233,18 @@ function computeShot(attacker, target, fromCell = null) {
   if (pitch < pMin) return { ok: false, reason: `목표가 너무 낮음 (포신 내림각 ${pMin}° 한계)` };
   if (pitch > pMax) return { ok: false, reason: `목표가 너무 높음 (포신 올림각 +${pMax}° 한계)` };
 
-  // 고정 포신(Mark IV 스폰슨): 차체 정면 ±arc° 안만 조준 가능.
-  // 가상 위치 평가(fromCell)는 이동으로 차체를 돌린다고 보고 스킵.
+  // 고정 포신: 사각(arc) 검사. 스폰슨 부포(Mark IV)는 좌/우 측면(±90°) 중심,
+  // 일반 고정포는 정면 중심. 가상 위치 평가(fromCell)는 이동으로 선회한다고 보고 스킵.
   if (attacker.gun?.fixed && !fromCell) {
-    const rel = normAngle(Math.atan2(dx, dz) - attacker.group.rotation.y);
+    const relDeg = Math.abs(THREE.MathUtils.radToDeg(
+      normAngle(Math.atan2(dx, dz) - attacker.group.rotation.y)
+    ));
     const arcDeg = attacker.gun.arc ?? 55;
-    if (Math.abs(rel) > THREE.MathUtils.degToRad(arcDeg)) {
+    if (attacker.gun.sponson) {
+      if (Math.abs(relDeg - 90) > arcDeg) {
+        return { ok: false, reason: `측면 부포 사각(좌우 90°±${arcDeg}°) 밖 — 이동으로 측면을 내주세요` };
+      }
+    } else if (relDeg > arcDeg) {
       return { ok: false, reason: `고정 포신 — 차체 정면 ±${arcDeg}° 밖 (이동으로 선회 필요)` };
     }
   }
@@ -1257,7 +1265,7 @@ function computeShot(attacker, target, fromCell = null) {
     const c = worldToCell(pt);
     const ck = cellKey(c.gx, c.gz);
     if (ck === attackerKey || ck === targetKey) continue;
-    if (sampleHeight(pt.x, pt.z) > pt.y + 0.05) return { ok: false, reason: '지형(능선)에 사선이 막힘' };
+    if (sampleHeight(pt.x, pt.z) > pt.y + 0.05) return { ok: false, reason: '지형(능선)에 사선이 막힘', blockCell: { gx: c.gx, gz: c.gz } };
     const prop = props.get(ck);
     if (prop) {
       const groundH = heightAt(c.gx, c.gz);
@@ -1340,9 +1348,9 @@ function groundPitch(unit) {
   const ry = unit.group.rotation.y;
   const fx = Math.sin(ry), fz = Math.cos(ry);
   const p = unit.group.position;
-  const hF = sampleHeight(p.x + fx * 0.7, p.z + fz * 0.7);
-  const hB = sampleHeight(p.x - fx * 0.7, p.z - fz * 0.7);
-  return THREE.MathUtils.clamp(Math.atan2(hB - hF, 1.4), -0.45, 0.45);
+  const hF = sampleHeight(p.x + fx * 1.3, p.z + fz * 1.3);
+  const hB = sampleHeight(p.x - fx * 1.3, p.z - fz * 1.3);
+  return THREE.MathUtils.clamp(Math.atan2(hB - hF, 2.6), -0.45, 0.45);
 }
 
 async function moveUnit(unit, path) {
@@ -1367,7 +1375,7 @@ async function moveUnit(unit, path) {
 // ---------------------------------------------------------------------------
 // 이펙트: 파편 / 폭발 / 크레이터 / 분해
 // ---------------------------------------------------------------------------
-const shellGeo = new THREE.SphereGeometry(0.16, 10, 10);
+const shellGeo = new THREE.SphereGeometry(0.24, 10, 10);
 const shellMat = new THREE.MeshBasicMaterial({ color: 0x2f3542 });
 const flashMat = new THREE.MeshBasicMaterial({ color: 0xffd24d, transparent: true });
 const debrisGeo = new RoundedBoxGeometry(0.22, 0.22, 0.22, 1, 0.05);
@@ -1613,22 +1621,32 @@ async function resolveImpact(impact, attacker, directUnit = null) {
   for (const u of units) {
     if (!u.alive || u === directUnit) continue;
     const d = Math.hypot(u.group.position.x - impact.x, u.group.position.z - impact.z);
-    if (d < TILE * 0.95) await applyUnitDamage(u, attacker.damage * 0.4);
+    if (d < TILE * 1.35) await applyUnitDamage(u, attacker.damage * 0.4); // 2×2 차체 스플래시
   }
 }
 
 // 목표를 향해 조준: 포탑 기체는 포탑 요 회전, 무포탑(Mark IV)은 차체 선회.
 // 포신 부앙각은 목표 고도차에 맞춰 자동 조절 (이슈 #6)
 const normAngle = (a) => THREE.MathUtils.euclideanModulo(a + Math.PI, Math.PI * 2) - Math.PI;
+// 고정포의 사각 창으로 상대 요각을 클램프 (스폰슨은 좌/우 ±90° 중심 창)
+function clampToGunArc(unit, rel) {
+  const arc = THREE.MathUtils.degToRad(unit.gun?.arc ?? 55);
+  if (unit.gun?.sponson) {
+    const side = rel >= 0 ? 1 : -1;
+    const half = Math.PI / 2;
+    return side * THREE.MathUtils.clamp(Math.abs(rel), half - arc, half + arc);
+  }
+  return THREE.MathUtils.clamp(rel, -arc, arc);
+}
 async function aimAt(attacker, aim, pitchDeg, instant = false) {
   const dx = aim.x - attacker.group.position.x;
   const dz = aim.z - attacker.group.position.z;
   const targetYaw = Math.atan2(dx, dz);
   const pitchRad = -THREE.MathUtils.degToRad(pitchDeg);
   if (attacker.gun?.fixed) {
-    // 고정 포신: 차체는 그대로, 포만 사각(arc) 안에서 좌우 미세 조준
-    const arc = THREE.MathUtils.degToRad(attacker.gun.arc ?? 55);
-    const rel = THREE.MathUtils.clamp(normAngle(targetYaw - attacker.group.rotation.y), -arc, arc);
+    // 고정 포신: 차체는 그대로, 포만 사각(arc) 안에서 좌우 미세 조준.
+    // 스폰슨 부포는 목표 쪽 측면(±90°) 창으로 클램프.
+    const rel = clampToGunArc(attacker, normAngle(targetYaw - attacker.group.rotation.y));
     const from = attacker.cannon.rotation.y;
     const diff = normAngle(rel - from);
     if (Math.abs(diff) > 0.01 && !instant) {
@@ -1858,7 +1876,7 @@ function showFireField(cells, active) {
   });
 }
 const targetRings = [];
-const targetRingGeo = new THREE.RingGeometry(1.0, 1.3, 28);
+const targetRingGeo = new THREE.RingGeometry(1.7, 2.05, 32);
 const targetRingMat = new THREE.MeshBasicMaterial({
   color: 0xff5544, transparent: true, opacity: 0.85, side: THREE.DoubleSide, depthWrite: false,
 });
@@ -1899,7 +1917,7 @@ function showTargets(targets) {
     scene.add(ring);
     targetRings.push(ring);
     const sp = chanceSprite(`${t.shot.chance}%`);
-    sp.position.set(u.group.position.x, u.group.position.y + 4.0, u.group.position.z);
+    sp.position.set(u.group.position.x, u.group.position.y + 6.2, u.group.position.z);
     scene.add(sp);
     chanceSprites.push(sp);
   }
@@ -1967,7 +1985,7 @@ const playerHpFill = document.getElementById('player-hp-fill');
 const levelLabel = document.getElementById('level-label');
 if (levelLabel) {
   const g = player.gun;
-  const gunTxt = g.fixed ? `고정포 ±${g.arc}°` : '포탑';
+  const gunTxt = g.sponson ? `측면 부포 90°±${g.arc}°` : g.fixed ? `고정포 ±${g.arc}°` : '포탑';
   levelLabel.textContent = `${KIT_INFO[playerKit].label} · ${gunTxt} · 부앙 ${g.pitchMin}°~+${g.pitchMax}° · 기동 ${player.mp} · 사거리 ${player.fireRange}`;
 }
 
@@ -2063,15 +2081,38 @@ async function submitPlayerPlan(plan) {
   await resolveTurn();
 }
 
-// 적 AI 계획: 현재 위치에서 명중 기대가 있으면 플레이어의 "현재 칸"을 예측 사격,
-// 아니면 사격 가능 지점으로 재배치/접근
+// 적 AI 계획 — AI 레벨(driverLv)에 따라 다르게 행동한다:
+//  Lv1: 플레이어의 현재 칸만 조준 (예측 없음)
+//  Lv2: 지난 턴 이동 방향의 절반만큼 리드 사격 + 능선 굴착
+//  Lv3: 지난 턴 이동을 그대로 외삽한 칸을 리드 사격 + 능선 굴착
+// 굴착: 사선이 능선에 막히면 그 지형을 포격해 크레이터로 포각을 확보한다.
+let playerLastMove = null; // 지난 턴 플레이어 변위 {dx, dz}
+function predictPlayerCell(lvl) {
+  if (lvl <= 1 || !playerLastMove) return { gx: player.gx, gz: player.gz };
+  const f = lvl >= 3 ? 1 : 0.5;
+  return {
+    gx: THREE.MathUtils.clamp(Math.round(player.gx + playerLastMove.dx * f), 0, GRID - 1),
+    gz: THREE.MathUtils.clamp(Math.round(player.gz + playerLastMove.dz * f), 0, GRID - 1),
+  };
+}
 function planEnemies() {
   for (const enemy of enemies) {
     if (!enemy.alive) continue;
-    const shot = computeShot(enemy, { unit: player });
-    if (shot.ok && shot.chance >= 30) {
-      enemy.plan = { type: 'fire', cell: { gx: player.gx, gz: player.gz }, shot };
+    const lvl = enemy.driverLv;
+    const aim = predictPlayerCell(lvl);
+    const aimIsPlayer = aim.gx === player.gx && aim.gz === player.gz;
+    const shot = computeShot(enemy, aimIsPlayer ? { unit: player } : aim);
+    if (shot.ok && (!aimIsPlayer || shot.chance >= 30)) {
+      enemy.plan = { type: 'fire', cell: aim, shot };
       continue;
+    }
+    // 능선 굴착 (Lv2+): 막힌 능선 지형을 포격해 다음 턴 포각 확보
+    if (lvl >= 2 && shot.blockCell) {
+      const dig = computeShot(enemy, shot.blockCell);
+      if (dig.ok) {
+        enemy.plan = { type: 'fire', cell: shot.blockCell, shot: dig };
+        continue;
+      }
     }
     const cells = reachableCells(enemy);
     let best = null;
@@ -2112,17 +2153,25 @@ function simulateMoves() {
     while (changed) {
       changed = false;
       const active = intents.filter((it) => !stopped.has(it.u));
+      const cheb = (ax, az, bx, bz) => Math.max(Math.abs(ax - bx), Math.abs(az - bz));
       for (const it of active) {
-        const tk = cellKey(it.to.gx, it.to.gz);
-        const rival = active.find((o) => o !== it && cellKey(o.to.gx, o.to.gz) === tk);
+        // 목적지끼리 1칸 이내로 근접하는 다른 이동자 (2×2 차체 충돌)
+        const rival = active.find((o) => o !== it && cheb(o.to.gx, o.to.gz, it.to.gx, it.to.gz) <= 1);
         const swap = active.find((o) => {
           if (o === it) return false;
           const oc = cur.get(o.u), ic = cur.get(it.u);
           return o.to.gx === ic.gx && o.to.gz === ic.gz && it.to.gx === oc.gx && it.to.gz === oc.gz;
         });
-        const occ = cellOf.get(tk);
-        const occLeaves = occ && active.some((o) => o.u === occ);
-        if (rival || swap || (occ && occ !== it.u && !occLeaves)) {
+        // 이번 스텝에 비켜나지 않는 유닛과 1칸 이내로 접촉
+        let occ = null;
+        for (const [u2, c2] of cur) {
+          if (u2 === it.u) continue;
+          if (cheb(c2.gx, c2.gz, it.to.gx, it.to.gz) > 1) continue;
+          if (active.some((o) => o.u === u2)) continue; // 같은 스텝에 이동 중이면 rival 검사가 처리
+          occ = u2;
+          break;
+        }
+        if (rival || swap || occ) {
           const other = rival?.u ?? swap?.u ?? occ;
           stopped.add(it.u);
           cut.set(it.u, k);
@@ -2180,6 +2229,7 @@ async function resolveTurn() {
   clearHighlights();
   turnLabel.textContent = `턴 ${turnNo} ▶`;
   const collisions = simulateMoves();
+  const playerStart = { gx: player.gx, gz: player.gz };
   // 1) 전 차량 동시 이동
   const movers = units.filter((u) => u.alive && u.plan?.type === 'move' && u.plan.path.length);
   await Promise.all(movers.map((u) => moveUnit(u, u.plan.path)));
@@ -2196,6 +2246,9 @@ async function resolveTurn() {
   // 3) 전원 동시 포격
   const shooters = units.filter((u) => u.alive && u.plan?.type === 'fire');
   await Promise.all(shooters.map((u) => resolvePlannedShot(u)));
+  // AI 예측용: 이번 턴 플레이어 변위 기록 (이동 안 했으면 null → 현재 칸 조준)
+  const pdx = player.gx - playerStart.gx, pdz = player.gz - playerStart.gz;
+  playerLastMove = pdx || pdz ? { dx: pdx, dz: pdz } : null;
   for (const u of units) u.plan = null;
   if (checkGameEnd()) return;
   turnNo++;
@@ -2313,8 +2366,7 @@ function updateAimPreview(dt) {
   const aim = hoverAim;
   const targetYaw = Math.atan2(aim.x - player.group.position.x, aim.z - player.group.position.z);
   if (player.gun?.fixed) {
-    const arc = THREE.MathUtils.degToRad(player.gun.arc ?? 55);
-    const rel = THREE.MathUtils.clamp(normAngle(targetYaw - player.group.rotation.y), -arc, arc);
+    const rel = clampToGunArc(player, normAngle(targetYaw - player.group.rotation.y));
     player.cannon.rotation.y += normAngle(rel - player.cannon.rotation.y) * k;
   } else if (player.hasTurret) {
     const rel = normAngle(targetYaw - player.group.rotation.y);
