@@ -3177,6 +3177,74 @@ function showGhost(cell, facing, turretYaw = null) {
   ghost.visible = true;
 }
 
+// 다중 턴 계획: 한 번에 최대 3턴 예약 (아래 예약 고스트 풀이 참조)
+const PLAN_AHEAD = 3;
+// 예약 고스트 풀: 예약된 각 이동의 도착 자세를 옅은 홀로그램으로 미리 보여준다
+const queueGhostMat = new THREE.MeshBasicMaterial({
+  color: 0x7fd4c8, transparent: true, opacity: 0.26, depthWrite: false,
+});
+const queueGhosts = [];
+for (let i = 0; i < PLAN_AHEAD; i++) {
+  const gk = buildKitTank(playerKit);
+  gk.group.traverse((o) => {
+    if (o.isMesh && o !== gk.hitbox) { o.material = queueGhostMat; o.castShadow = false; o.receiveShadow = false; }
+  });
+  gk.hitbox.visible = false;
+  gk.group.visible = false;
+  // 순번 라벨
+  const badge = makeQueueBadge(i + 1);
+  badge.position.set(0, 3.2, 0);
+  gk.group.add(badge);
+  gk._badge = badge;
+  scene.add(gk.group);
+  queueGhosts.push(gk);
+}
+function makeQueueBadge(n) {
+  const c = document.createElement('canvas'); c.width = c.height = 64;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = 'rgba(30,120,110,0.92)';
+  ctx.beginPath(); ctx.arc(32, 32, 26, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#fff'; ctx.font = 'bold 40px sans-serif';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(String(n), 32, 36);
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), depthTest: false }));
+  sp.scale.set(0.9, 0.9, 1);
+  sp.renderOrder = 12;
+  return sp;
+}
+// 예약 경로 연결선
+const queueLineMat = new THREE.LineBasicMaterial({ color: 0x4fd0c0, transparent: true, opacity: 0.8, depthTest: false });
+let queueLine = null;
+function drawQueueGhosts() {
+  for (const gk of queueGhosts) gk.group.visible = false;
+  if (queueLine) { scene.remove(queueLine); queueLine.geometry.dispose(); queueLine = null; }
+  let cx = player.gx, cz = player.gz;
+  const pts = [new THREE.Vector3(player.group.position.x, standHeight(player.gx, player.gz) + 0.3, player.group.position.z)];
+  let gi = 0;
+  for (const p of planQueue) {
+    if (p.type === 'move' && p.path && p.path.length) {
+      const l = p.path[p.path.length - 1];
+      cx = l.gx; cz = l.gz;
+      const gk = queueGhosts[gi++];
+      if (gk) {
+        const wp = cellToWorld(cx, cz);
+        gk.group.position.set(wp.x, standHeight(cx, cz), wp.z);
+        const facing = p.endDir != null ? dirAngle(p.endDir) : gk.group.rotation.y;
+        gk.group.rotation.y = facing;
+        if (gk.turret) gk.turret.rotation.y = p.turretYaw != null ? normAngle(p.turretYaw - facing) : 0;
+        gk.group.visible = true;
+      }
+      pts.push(new THREE.Vector3(cellToWorld(cx, cz).x, standHeight(cx, cz) + 0.3, cellToWorld(cx, cz).z));
+    }
+  }
+  if (pts.length > 1) {
+    const geo = new THREE.BufferGeometry().setFromPoints(pts);
+    queueLine = new THREE.Line(geo, queueLineMat);
+    queueLine.renderOrder = 11;
+    scene.add(queueLine);
+  }
+}
+
 // 정지 사격 보너스 표시: 직전 턴 정지 + 장전 완료면 발밑에 금색 조준 안정 링
 const haltRing = new THREE.Mesh(
   new THREE.RingGeometry(1.35, 1.55, 30),
@@ -3300,26 +3368,63 @@ const SNAP_PENALTY = 15;
 const dirAngle = (d) => Math.atan2(DIRS[d].dx, DIRS[d].dz);
 let currentMoveCells = new Map();
 let currentFireCells = new Map();
+// ── 다중 턴 계획: 한 번에 최대 3턴 예약, 이동 후 도착 고스트에서 이어서 계획 ──
+let planQueue = [];   // 예약된 플레이어 플랜(move/fire/overwatch/wait) 리스트
+let projReload = 0;   // 지금 계획 중인 액션 시점의 예상 재장전 잔여
+
+// 예약된 플랜들을 반영한 "지금 계획 중인 액션의 출발 상태"
+function projectedOrigin() {
+  let gx = player.gx, gz = player.gz, dir = facingDir(player), reload = player.reloadLeft;
+  for (const p of planQueue) {
+    if (p.type === 'fire') reload = Math.max(0, (player.gun?.reload ?? 2) - 1);
+    else reload = Math.max(0, reload - 1); // 다음 턴 시작 시 감소
+    if (p.type === 'move' && p.path && p.path.length) {
+      const l = p.path[p.path.length - 1];
+      gx = l.gx; gz = l.gz;
+      if (p.endDir != null) dir = p.endDir;
+    }
+  }
+  return { gx, gz, dir, reload };
+}
+// 투영 상태로 player를 잠시 바꿔 필드/도달셀을 계산 (렌더 전에 원복)
+function withProjectedPlayer(fn) {
+  const o = projectedOrigin();
+  const sgx = player.gx, sgz = player.gz, sry = player.group.rotation.y;
+  player.gx = o.gx; player.gz = o.gz; player.group.rotation.y = dirAngle(o.dir);
+  try { return fn(o); } finally {
+    player.gx = sgx; player.gz = sgz; player.group.rotation.y = sry;
+  }
+}
 
 function refreshPlanUI(fireEmphasis = false) {
   if (phase !== 'plan') return;
-  currentMoveCells = reachableCells(player);
-  currentFireCells = player.reloadLeft > 0 ? new Map() : computeFireCells(player);
-  clearHighlights();
-  showMoveField(currentMoveCells, !fireEmphasis);
-  showFireField(currentFireCells, fireEmphasis);
-  showTargets(
-    enemies
-      .filter((e) => e.alive && currentFireCells.has(cellKey(e.gx, e.gz)))
-      .map((e) => ({ unit: e, shot: currentFireCells.get(cellKey(e.gx, e.gz)).shot }))
-  );
-  btnGo.textContent = player.reloadLeft > 0 ? `⏸ 대기 (재장전 ${player.reloadLeft})` : '👁 경계';
+  const o = withProjectedPlayer((o) => {
+    currentMoveCells = reachableCells(player);
+    currentFireCells = o.reload > 0 ? new Map() : computeFireCells(player);
+    clearHighlights();
+    showMoveField(currentMoveCells, !fireEmphasis);
+    showFireField(currentFireCells, fireEmphasis);
+    showTargets(
+      enemies
+        .filter((e) => e.alive && currentFireCells.has(cellKey(e.gx, e.gz)))
+        .map((e) => ({ unit: e, shot: currentFireCells.get(cellKey(e.gx, e.gz)).shot }))
+    );
+    return o;
+  });
+  projReload = o.reload;
+  drawQueueGhosts();
+  if (planQueue.length) {
+    btnGo.textContent = `▶ 실행 (${planQueue.length}턴)`;
+  } else {
+    btnGo.textContent = player.reloadLeft > 0 ? `⏸ 대기 (재장전 ${player.reloadLeft})` : '👁 경계';
+  }
 }
 
 function startPlanning() {
   if (checkGameEnd()) return;
   phase = 'plan';
   busy = false;
+  planQueue = [];
   for (const u of units) if (u.alive && u.reloadLeft > 0) u.reloadLeft -= 1;
   ghost.visible = false;
   hideBowUI();
@@ -3327,11 +3432,41 @@ function startPlanning() {
   refreshPlanUI();
 }
 
+// 단일 턴 즉시 해결 (테스트 훅·경계 버튼용)
 async function submitPlan(plan) {
   if (phase !== 'plan' || busy) return;
   player.plan = plan;
   planEnemies();
-  await resolveTurn();
+  await resolveOneTurn();
+  if (phase !== 'gameover') startPlanning();
+}
+
+// 인터랙티브: 플랜을 큐에 예약. 3턴 차거나 이동할 칸이 없으면 자동 실행.
+function enqueuePlan(plan) {
+  if (phase !== 'plan' || busy) return;
+  planQueue.push(plan);
+  if (planQueue.length >= PLAN_AHEAD) { resolveQueue(); return; }
+  ghost.visible = false;
+  hideBowUI();
+  refreshPlanUI();
+}
+
+// 예약된 플랜들을 순차 서브턴으로 실행. 적은 매 서브턴 새로 반응한다.
+async function resolveQueue() {
+  if (phase !== 'plan' || busy || !planQueue.length) return;
+  const queue = planQueue;
+  planQueue = [];
+  ghost.visible = false;
+  drawQueueGhosts();
+  for (let i = 0; i < queue.length; i++) {
+    if (!player.alive) break;
+    if (i > 0) for (const u of units) if (u.alive && u.reloadLeft > 0) u.reloadLeft -= 1;
+    player.plan = queue[i];
+    planEnemies();
+    await resolveOneTurn();
+    if (phase === 'gameover') return;
+  }
+  startPlanning();
 }
 
 // 적 AI — AI 레벨(driverLv):
@@ -3528,11 +3663,13 @@ async function resolvePlannedShot(u) {
   await fireSequence(u, target, shot);
 }
 
-async function resolveTurn() {
+async function resolveOneTurn() {
   phase = 'resolve';
   busy = true;
   clearHighlights();
   ghost.visible = false;
+  for (const gk of queueGhosts) gk.group.visible = false;
+  if (queueLine) { scene.remove(queueLine); queueLine.geometry.dispose(); queueLine = null; }
   hideBowUI();
   turnLabel.textContent = `턴 ${turnNo} ▶`;
   const playerStart = { gx: player.gx, gz: player.gz };
@@ -3640,7 +3777,7 @@ async function resolveTurn() {
   for (const u of units) u.plan = null;
   if (checkGameEnd()) return;
   turnNo++;
-  startPlanning();
+  // startPlanning은 호출자(submitPlan/resolveQueue)가 큐를 마친 뒤 부른다
 }
 
 function checkGameEnd() {
@@ -3663,6 +3800,8 @@ function checkGameEnd() {
 
 btnGo.addEventListener('click', () => {
   if (phase !== 'plan' || busy) return;
+  // 예약된 플랜이 있으면 실행, 없으면 이번 턴을 경계/대기로 종료
+  if (planQueue.length) { resolveQueue(); return; }
   submitPlan(player.reloadLeft > 0 ? { type: 'wait' } : { type: 'overwatch' });
 });
 
@@ -3688,7 +3827,7 @@ renderer.domElement.addEventListener('pointerdown', (e) => {
   setPointer(e);
   // 1) 내 차량에서 드래그 시작 = 사격 조준 (이동/사격 필드가 겹쳐도 명확)
   if (raycaster.intersectObject(player.hitbox).length) {
-    if (player.reloadLeft > 0) { setHint(`재장전 중 — ${player.reloadLeft}턴 남음`); return; }
+    if (projReload > 0) { setHint(`재장전 중 — ${projReload}턴 남음`); return; }
     fireGesture = { cell: null, shot: null };
     controls.enabled = false;
     refreshPlanUI(true); // 사격 필드 강조
@@ -3774,7 +3913,7 @@ renderer.domElement.addEventListener('pointerup', async (e) => {
     hoverAim = null;
     downPos = null;
     if (g.cell && g.shot) {
-      await submitPlan({ type: 'fire', cell: g.cell, shot: g.shot });
+      enqueuePlan({ type: 'fire', cell: g.cell, shot: g.shot });
     } else {
       setHint('조준 취소');
       refreshPlanUI(false);
@@ -3793,7 +3932,7 @@ renderer.domElement.addEventListener('pointerup', async (e) => {
       setHint('이동 취소');
       return;
     }
-    await submitPlan({ type: 'move', path: g.info.path.slice(), facing: null, turretYaw: g.turretYaw });
+    enqueuePlan({ type: 'move', path: g.info.path.slice(), facing: null, turretYaw: g.turretYaw, endDir: g.info.endDir });
     return;
   }
   if (!downPos) return;
@@ -3810,11 +3949,14 @@ renderer.domElement.addEventListener('pointerup', async (e) => {
 
 window.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;
-  if (fireGesture) { fireGesture = null; hideBowUI(); hoverAim = null; refreshPlanUI(false); }
-  if (ghostGesture) { ghostGesture = null; ghost.visible = false; }
-  controls.enabled = true;
-  downPos = null;
-  setHint('취소');
+  if (fireGesture) { fireGesture = null; hideBowUI(); hoverAim = null; controls.enabled = true; downPos = null; refreshPlanUI(false); setHint('취소'); return; }
+  if (ghostGesture) { ghostGesture = null; ghost.visible = false; controls.enabled = true; downPos = null; refreshPlanUI(false); setHint('취소'); return; }
+  // 제스처가 없으면 마지막 예약 플랜 취소(되돌리기)
+  if (phase === 'plan' && !busy && planQueue.length) {
+    planQueue.pop();
+    setHint(`예약 취소 (${planQueue.length}턴 남음)`);
+    refreshPlanUI(false);
+  }
 });
 
 renderer.domElement.addEventListener('pointercancel', () => {
@@ -3957,6 +4099,17 @@ window.__puratank = {
     submitPlan({ type: 'wait' });
     return true;
   },
+  // 다중 턴 예약 테스트용
+  queueMoveTo(gx, gz) {
+    const info = currentMoveCells.get(cellKey(gx, gz));
+    if (!info || phase !== 'plan' || busy) return false;
+    enqueuePlan({ type: 'move', path: info.path.slice(), facing: null, turretYaw: dirAngle(info.endDir), endDir: info.endDir });
+    return true;
+  },
+  queueLen: () => planQueue.length,
+  projOrigin: () => projectedOrigin(),
+  curMoveKeys: () => [...currentMoveCells.keys()],
+  runQueue: () => resolveQueue(),
   shotAt: (gx, gz) => {
     const enemy = enemies.find((e) => e.alive && e.gx === gx && e.gz === gz);
     return computeShot(player, enemy ? { unit: enemy } : { gx, gz });
