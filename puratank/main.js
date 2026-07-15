@@ -1324,7 +1324,9 @@ const DIRS = [
   { dx: 0, dz: -1 }, { dx: -1, dz: -1 }, { dx: -1, dz: 0 }, { dx: -1, dz: 1 },
 ];
 const DIR_LEN = DIRS.map((d) => Math.hypot(d.dx, d.dz));
-const TURN_COST45 = 0.7; // 45° 선회당 — 차체 방향이 이동 범위에 크게 영향
+// 비용 모델: 전진/후진 스텝 = 1(평지 기준), 회전은 90°당 +1.5(=45°당 0.75).
+// 차체 축 방향(전·후진)으로는 멀리, 옆으로 틀려면 회전값을 크게 치른다.
+const TURN_COST45 = 0.75; // 45° 선회당
 
 function facingDir(unit) {
   // rotation.y 기준 가장 가까운 8방향
@@ -1367,7 +1369,7 @@ function stepCost(fromX, fromZ, toX, toZ, mover = null) {
 // 후진(차체는 반대를 유지, 속도 페널티 ×1.3)을 선택할 수 있어
 // 목표 각도를 유지한 채 뒤로 빠지는 경로가 나온다.
 // turned: 차체 회전 없이(전/후진만으로) 도달했는지 여부 — 필드 2톤 표시용.
-const REVERSE_COST = 1.3;
+const REVERSE_COST = 1.0; // 후진도 전진과 동일 비용 (차체 축 대칭 이동)
 function reachableCells(unit) {
   const startDir = facingDir(unit);
   const best = new Map(); // "x,z,hull" -> cost
@@ -2289,11 +2291,11 @@ const moveFillMat = new THREE.MeshBasicMaterial({
 });
 const moveEdgeMat = new THREE.MeshBasicMaterial({ color: 0x2f7fe0, transparent: true, opacity: 0.9, depthWrite: false });
 const moveEdgeThinMat = new THREE.MeshBasicMaterial({ color: 0x2f7fe0, transparent: true, opacity: 0.3, depthWrite: false });
-// 각도 유지 구간(회전 없이 전/후진만으로 도달) — 밝은 하늘색으로 구별
+// 각도 유지 구간(회전 없이 전/후진만으로 도달)은 같은 파랑 필드 안에서
+// 살짝 더 진하게만 덧칠 — 별도 레이어처럼 도드라지지 않는다 (외곽선 없음)
 const keepFillMat = new THREE.MeshBasicMaterial({
-  color: 0x8ae4ff, transparent: true, opacity: 0.38, side: THREE.DoubleSide, depthWrite: false,
+  color: 0x2f6fd0, transparent: true, opacity: 0.22, side: THREE.DoubleSide, depthWrite: false,
 });
-const keepEdgeMat = new THREE.MeshBasicMaterial({ color: 0x55c8f2, transparent: true, opacity: 0.85, depthWrite: false });
 const fireFillMat = new THREE.MeshBasicMaterial({
   color: 0xff5544, transparent: true, opacity: 0.21, side: THREE.DoubleSide, depthWrite: false,
 });
@@ -2396,7 +2398,7 @@ function loopTube(pts, lift, radius, mat) {
 
 // 셀 집합 → 콘벡스헐 느낌의 범위 필드 (차이킨 스무딩 경계 + 지형 밀착 채움)
 // fill=false면 얇은 외곽선만 (비활성 모드 표시용)
-function showCellField(cellKeys, { fillMat, edgeMat, fill = true, edgeRadius = 0.09, lift = 0 }) {
+function showCellField(cellKeys, { fillMat, edgeMat, fill = true, edge = true, edgeRadius = 0.09, lift = 0 }) {
   const set = cellKeys instanceof Set ? cellKeys : new Set(cellKeys);
   if (!set.size) return;
   // 차이킨 3회 스무딩 — 타일 계단이 사라진 곡선 경계.
@@ -2430,10 +2432,12 @@ function showCellField(cellKeys, { fillMat, edgeMat, fill = true, edgeRadius = 0
     noAO(fillMesh);
     moveHighlightGroup.add(fillMesh);
   }
-  for (const loop of loops) {
-    const tube = loopTube(loop, 0.09 + lift, fill ? edgeRadius : edgeRadius * 0.55, edgeMat);
-    noAO(tube);
-    moveHighlightGroup.add(tube);
+  if (edge) {
+    for (const loop of loops) {
+      const tube = loopTube(loop, 0.09 + lift, fill ? edgeRadius : edgeRadius * 0.55, edgeMat);
+      noAO(tube);
+      moveHighlightGroup.add(tube);
+    }
   }
 }
 
@@ -2446,13 +2450,13 @@ function showMoveField(cells, active) {
     fill: active,
   });
   if (!active) return;
-  // 차체 회전 없이(전진/후진만) 갈 수 있는 구간 — 밝은 하늘색 레인 오버레이.
-  // 여길 벗어나면 선회 비용을 치르고 각도가 흐트러진다는 표시.
+  // 차체 회전 없이(전진/후진만) 갈 수 있는 구간을 같은 필드 안에서 더 진하게.
+  // 외곽선 없이 아주 살짝만 덧칠 — 별도 반경처럼 도드라지지 않고 음영으로 구분.
   const keep = new Set([cellKey(player.gx, player.gz)]);
   for (const [k, v] of cells) if (!v.turned) keep.add(k);
   if (keep.size > 1) {
     showCellField(keep, {
-      fillMat: keepFillMat, edgeMat: keepEdgeMat, fill: true, edgeRadius: 0.05, lift: 0.045,
+      fillMat: keepFillMat, edge: false, fill: true, lift: 0.006,
     });
   }
 }
@@ -3390,6 +3394,8 @@ window.__puratank = {
   seed,
   ssaoPass,
   composer,
+  camera,
+  sun,
   moveHighlightGroup,
   playerUnit: player,
   bridge,
