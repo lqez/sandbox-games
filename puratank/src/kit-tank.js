@@ -23,23 +23,23 @@ export const KIT_KEYS = ['ft', 'mk4', 't34', 'tiger'];
 export const KIT_INFO = {
   ft: {
     label: '르노 FT',
-    stats: { mp: 18, fireRange: 16, damage: 34, hullLv: 1, driverLv: 3 },
-    gun: { pitchMin: -18, pitchMax: 30, fixed: false },
+    stats: { mp: 12, fireRange: 16, damage: 34, hullLv: 1, driverLv: 3 },
+    gun: { pitchMin: -18, pitchMax: 30, fixed: false, reload: 1 },
   },
   mk4: {
     label: 'Mark IV',
-    stats: { mp: 12, fireRange: 16, damage: 40, hullLv: 3, driverLv: 1 },
-    gun: { pitchMin: -12, pitchMax: 8, fixed: true, sponson: true, arc: 55 }, // 좌우 스폰슨 부포: 측면 ±90°±55° 사각
+    stats: { mp: 8, fireRange: 16, damage: 40, hullLv: 3, driverLv: 1 },
+    gun: { pitchMin: -12, pitchMax: 8, fixed: true, sponson: true, arc: 55, reload: 2 }, // 좌우 스폰슨 부포: 측면 ±90°±55° 사각
   },
   t34: {
     label: 'T-34',
-    stats: { mp: 16, fireRange: 18, damage: 45, hullLv: 2, driverLv: 2 },
-    gun: { pitchMin: -5, pitchMax: 25, fixed: false },
+    stats: { mp: 11, fireRange: 18, damage: 45, hullLv: 2, driverLv: 2 },
+    gun: { pitchMin: -5, pitchMax: 25, fixed: false, reload: 2 },
   },
   tiger: {
     label: '티거 I',
-    stats: { mp: 12, fireRange: 20, damage: 60, hullLv: 3, driverLv: 1 },
-    gun: { pitchMin: -8, pitchMax: 15, fixed: false },
+    stats: { mp: 8, fireRange: 20, damage: 60, hullLv: 3, driverLv: 1 },
+    gun: { pitchMin: -8, pitchMax: 15, fixed: false, reload: 3 },
   },
 };
 
