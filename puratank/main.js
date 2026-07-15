@@ -17,7 +17,7 @@ const enemyKits = KIT_KEYS.filter((k) => k !== playerKit);
 // ---------------------------------------------------------------------------
 // 상수
 // ---------------------------------------------------------------------------
-const GRID = 40;            // 40x40 그리드 (2배 조밀 — 탱크 ≈ 2×2타일)
+const GRID = 60;            // 60x60 그리드 (기존 40에서 1.5배 — 더 넓은 전장)
 const TILE = 1;             // 한 칸의 월드 크기
 const VRES = 2;             // 타일당 하이트필드 분할 수 (하이트필드 해상도는 동일)
 const WATER_Y = -0.12;      // 수면 높이
@@ -29,10 +29,10 @@ const PITCH_MAX = 20;       // 포신 올림각 한계(도)
 const PLAYER_STATS = KIT_INFO[playerKit].stats;
 const ENEMY_BASE   = { mp: 12, fireRange: 14, damage: 24 };
 
-const PLAYER_SPAWN = { gx: 20, gz: 34 };
+const PLAYER_SPAWN = { gx: 30, gz: 51 };
 const ENEMY_SPAWNS = [
-  { gx: 14, gz: 6 },
-  { gx: 27, gz: 8 },
+  { gx: 21, gz: 9 },
+  { gx: 40, gz: 12 },
 ];
 
 // 지형 종류
@@ -58,10 +58,15 @@ const rng = mulberry32(seed);
 
 // 2옥타브 밸류 노이즈
 function makeNoise(cell) {
-  const size = Math.ceil(GRID / cell) + 2;
+  const size = Math.ceil(GRID / cell) + 3;
   const lattice = [];
   for (let i = 0; i < size * size; i++) lattice.push(rng());
-  const at = (x, y) => lattice[y * size + x];
+  // 인덱스를 격자 범위로 클램프 — 맵 크기/오프셋과 무관하게 NaN 없이 안전
+  const at = (x, y) => {
+    const xi = x < 0 ? 0 : x >= size ? size - 1 : x;
+    const yi = y < 0 ? 0 : y >= size ? size - 1 : y;
+    return lattice[yi * size + xi];
+  };
   return (fx, fz) => {
     const x = fx / cell, z = fz / cell;
     const x0 = Math.floor(x), z0 = Math.floor(z);
@@ -86,13 +91,13 @@ renderer.toneMappingExposure = 0.92;
 app.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
-scene.fog = new THREE.Fog(0xaecbe8, 75, 160);
+scene.fog = new THREE.Fog(0xaecbe8, 95, 230);
 
-const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 300);
-camera.position.set(22, 26, 30);
+const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 400);
+camera.position.set(32, 37, 44);
 
 const controls = new OrbitControls(camera, renderer.domElement);
-controls.target.set(0, 0, 4);
+controls.target.set(0, 0, 6);
 controls.enableDamping = true;
 controls.dampingFactor = 0.08;
 controls.minDistance = 12;
@@ -106,11 +111,11 @@ const sun = new THREE.DirectionalLight(0xffe9c8, 1.95);
 sun.position.set(24, 34, 16);
 sun.castShadow = true;
 sun.shadow.mapSize.set(4096, 4096);
-sun.shadow.camera.left = -26;
-sun.shadow.camera.right = 26;
-sun.shadow.camera.top = 26;
-sun.shadow.camera.bottom = -26;
-sun.shadow.camera.far = 90;
+sun.shadow.camera.left = -40;
+sun.shadow.camera.right = 40;
+sun.shadow.camera.top = 40;
+sun.shadow.camera.bottom = -40;
+sun.shadow.camera.far = 130;
 sun.shadow.bias = -0.0004;
 sun.shadow.radius = 4;
 scene.add(sun);
@@ -296,8 +301,8 @@ let riverCx, riverAmp, riverPhase;
 {
   let tries = 0;
   do {
-    riverCx = 8 + rng() * 24;
-    riverAmp = 4.8 + rng() * 3.6;
+    riverCx = 14 + rng() * 34;
+    riverAmp = 6.5 + rng() * 5.0;
     riverPhase = rng() * Math.PI * 2;
     tries++;
   } while (
@@ -425,8 +430,8 @@ const BLEND_COLORS = {
 // 지형 종류 가중치 (0..1) — 셀 분류와 같은 노이즈/규칙을 연속값으로 사용
 function surfaceWeights(wx, wz, h) {
   const fx = (wx + HALF) / TILE, fz = (wz + HALF) / TILE;
-  // tNoise 격자(size 7, cell 8)의 안전 입력 상한 (x0+1 ≤ size-1)
-  const tn = tNoise(Math.min(fx - 0.5 + 7, 47.9), Math.min(fz - 0.5 + 3, 47.9));
+  // at()가 인덱스를 클램프하므로 상한 걱정 없이 직접 샘플
+  const tn = tNoise(fx - 0.5 + 7, fz - 0.5 + 3);
   const dirt = smooth01((tn - 0.58) / 0.2);
   const sand = smooth01((0.3 - tn) / 0.2) * (1 - dirt);
   const mud = 1 - smooth01((distToRiver(wx, wz) - 2.2) / 2.0);
@@ -1034,8 +1039,8 @@ function placeProp(type, gx, gz) {
   // 수목: 숲 노이즈 군락
   const fNoise = makeNoise(6.8);
   let trees = 0;
-  for (let gx = 0; gx < GRID && trees < 42; gx++) {
-    for (let gz = 0; gz < GRID && trees < 42; gz++) {
+  for (let gx = 0; gx < GRID && trees < 74; gx++) {
+    for (let gz = 0; gz < GRID && trees < 74; gz++) {
       if (!free(gx, gz)) continue;
       if (terrainAt(gx, gz) !== T.GRASS) continue;
       const f = fNoise(gx, gz);
@@ -1052,10 +1057,10 @@ function placeProp(type, gx, gz) {
       placed++;
     }
   };
-  scatter('house', 5, (x, z) => terrainAt(x, z) !== T.MUD && heightAt(x, z) <= 1.5);
-  scatter('hedgehog', 8);
-  scatter('sandbag', 6);
-  scatter('bush', 6);
+  scatter('house', 9, (x, z) => terrainAt(x, z) !== T.MUD && heightAt(x, z) <= 1.5);
+  scatter('hedgehog', 13);
+  scatter('sandbag', 10);
+  scatter('bush', 11);
 }
 
 // ---------------------------------------------------------------------------
@@ -1129,7 +1134,7 @@ const decorMeshes = []; // 풀/꽃/낙엽/잔가지 — 디버그 토글용
     return out;
   };
 
-  const GRASS_N = 6400;
+  const GRASS_N = 11000;
   const grassMesh = new THREE.InstancedMesh(
     grassGeo,
     new THREE.MeshStandardMaterial({ map: grassTex, alphaTest: 0.42, side: THREE.DoubleSide, roughness: 0.96 }),
@@ -1210,7 +1215,7 @@ const decorMeshes = []; // 풀/꽃/낙엽/잔가지 — 디버그 토글용
   flowerGeo.setAttribute('uv', new THREE.Float32BufferAttribute(flUv, 2));
   flowerGeo.setIndex(flIdx);
   flowerGeo.computeVertexNormals();
-  const FLOWER_N = 520;
+  const FLOWER_N = 880;
   const flowerMesh = new THREE.InstancedMesh(
     flowerGeo,
     new THREE.MeshStandardMaterial({ map: flowerTex, alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.9 }),
@@ -1242,7 +1247,7 @@ const decorMeshes = []; // 풀/꽃/낙엽/잔가지 — 디버그 토글용
   scene.add(flowerMesh); decorMeshes.push(flowerMesh);
 
   // 자갈: 흙/진흙/바위 지대에 낮은 다면체
-  const PEB_N = 420;
+  const PEB_N = 720;
   const pebMesh = new THREE.InstancedMesh(
     new THREE.DodecahedronGeometry(0.09, 0),
     new THREE.MeshStandardMaterial({ roughness: 0.92 }),
@@ -1275,7 +1280,7 @@ const decorMeshes = []; // 풀/꽃/낙엽/잔가지 — 디버그 토글용
 
   // 바위 노두: 급경사면에 반쯤 묻힌 각진 화강암 (플랫 셰이딩 결정면).
   // 일부는 큰 바위덩이로 솟아 레퍼런스의 암반 노두 느낌.
-  const ROCK_N = 150;
+  const ROCK_N = 260;
   const rockMesh = new THREE.InstancedMesh(
     new THREE.IcosahedronGeometry(0.42, 0),
     new THREE.MeshStandardMaterial({ roughness: 0.96, flatShading: true }),
@@ -1310,7 +1315,7 @@ const decorMeshes = []; // 풀/꽃/낙엽/잔가지 — 디버그 토글용
   scene.add(rockMesh);
 
   // 여울 강돌: 도하 가능한 얕은 물에만 배치 — 수심이 얕은 곳이 한눈에 보인다
-  const STONE_N = 150;
+  const STONE_N = 250;
   const stoneMesh = new THREE.InstancedMesh(
     new THREE.DodecahedronGeometry(0.11, 0),
     new THREE.MeshStandardMaterial({ roughness: 0.55 }),
@@ -1341,7 +1346,7 @@ const decorMeshes = []; // 풀/꽃/낙엽/잔가지 — 디버그 토글용
 
   // 낙엽 리터: 지면에 깔린 작은 평면 나뭇잎 — 흙/풀 위, 수목 근처 밀도↑
   const leafGeo = new THREE.PlaneGeometry(0.17, 0.13);
-  const LEAF_N = 900;
+  const LEAF_N = 1500;
   const leafMesh = new THREE.InstancedMesh(
     leafGeo,
     new THREE.MeshStandardMaterial({ roughness: 0.95, side: THREE.DoubleSide }),
@@ -1378,7 +1383,7 @@ const decorMeshes = []; // 풀/꽃/낙엽/잔가지 — 디버그 토글용
   // 잔가지: 흙/풀 위에 흩어진 가는 나뭇가지
   const twigGeo = new THREE.CylinderGeometry(0.018, 0.026, 0.55, 5);
   twigGeo.rotateZ(Math.PI / 2); // 눕힌다
-  const TWIG_N = 260;
+  const TWIG_N = 440;
   const twigMesh = new THREE.InstancedMesh(
     twigGeo,
     new THREE.MeshStandardMaterial({ roughness: 0.95 }),
@@ -1432,7 +1437,7 @@ const decorMeshes = []; // 풀/꽃/낙엽/잔가지 — 디버그 토글용
   const rdPos = [], rdUv = [], rdIdx = [];
   for (const rot of [0, Math.PI / 2]) {
     const c = Math.cos(rot), sn = Math.sin(rot);
-    const b = rdPos.length / 3; const w = 0.5, hh = 1.4;
+    const b = rdPos.length / 3; const w = 0.42, hh = 0.72;
     rdPos.push(-w / 2 * c, 0, -w / 2 * sn,  w / 2 * c, 0, w / 2 * sn,  w / 2 * c, hh, w / 2 * sn,  -w / 2 * c, hh, -w / 2 * sn);
     rdUv.push(0, 0, 1, 0, 1, 1, 0, 1);
     rdIdx.push(b, b + 1, b + 2, b, b + 2, b + 3);
@@ -1461,7 +1466,7 @@ const decorMeshes = []; // 풀/꽃/낙엽/잔가지 — 디버그 토글용
     const w = surfaceWeights(wx, wz, h);
     if (w.rock > 0.4) continue;
     gq.setFromAxisAngle(up, rng() * Math.PI * 2);
-    const sy = 0.7 + rng() * 0.9, sxz = 0.7 + rng() * 0.6;
+    const sy = 0.5 + rng() * 0.5, sxz = 0.65 + rng() * 0.5;
     gs.set(sxz, sy, sxz);
     gv.set(wx, Math.max(h, WATER_Y - 0.02), wz);
     gm.compose(gv, gq, gs);
@@ -1477,7 +1482,7 @@ const decorMeshes = []; // 풀/꽃/낙엽/잔가지 — 디버그 토글용
   scene.add(reedMesh); decorMeshes.push(reedMesh);
 
   // 이끼: 바위/급경사 지대에 낮게 깔린 초록 이끼 패치
-  const MOSS_N = 380;
+  const MOSS_N = 620;
   const mossMesh = new THREE.InstancedMesh(
     new THREE.IcosahedronGeometry(0.16, 0),
     new THREE.MeshStandardMaterial({ roughness: 0.98 }),
