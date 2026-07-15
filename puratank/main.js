@@ -205,7 +205,8 @@ const gradientMap = (() => {
 })();
 const matCache = new Map();
 function toonMat(color) {
-  if (!matCache.has(color)) matCache.set(color, new THREE.MeshToonMaterial({ color, gradientMap }));
+  // 디오라마 룩: 프랍/파편은 툰 대신 무광 스탠다드 재질
+  if (!matCache.has(color)) matCache.set(color, new THREE.MeshStandardMaterial({ color, roughness: 0.88, metalness: 0 }));
   return matCache.get(color);
 }
 const outlineMat = new THREE.MeshBasicMaterial({ color: 0x232a38, side: THREE.BackSide });
@@ -216,7 +217,7 @@ function addOutline(mesh, scale = 1.05) {
   mesh.add(o);
   return mesh;
 }
-function part(geo, color, { outline = true, shadow = true, outlineScale = 1.05 } = {}) {
+function part(geo, color, { outline = false, shadow = true, outlineScale = 1.05 } = {}) {
   const m = new THREE.Mesh(geo, toonMat(color));
   m.castShadow = shadow;
   m.receiveShadow = shadow;
@@ -372,7 +373,8 @@ const BLEND_COLORS = {
   sand:  [new THREE.Color(0xd2bb7e), new THREE.Color(0xc3ac6e)],
   mud:   [new THREE.Color(0x7d6446), new THREE.Color(0x6f583e)],
   bed:   [new THREE.Color(0x8b7857), new THREE.Color(0x7d6c4e)],
-  rock:  [new THREE.Color(0x8d8371), new THREE.Color(0x7b7263)],
+  rock:  [new THREE.Color(0xb3a385), new THREE.Color(0x97876a)],
+  dry:   [new THREE.Color(0xa3985e), new THREE.Color(0x8f8752)], // 마른 풀 패치
 };
 // 지형 종류 가중치 (0..1) — 셀 분류와 같은 노이즈/규칙을 연속값으로 사용
 function surfaceWeights(wx, wz, h) {
@@ -397,6 +399,9 @@ function surfaceColorAt(wx, wz, h, out) {
   const v2 = hNoise(fz * 0.8 + 2, fx * 0.8 + 5);
   const pick = (pair) => _sc.lerpColors(pair[0], pair[1], v1);
   out.copy(pick(BLEND_COLORS.grass));
+  // 마른 풀 패치: 실제 디오라마처럼 초지 안에 누런 풀 무리가 섞인다
+  const dry = smooth01((v2 - 0.52) / 0.22);
+  out.lerp(pick(BLEND_COLORS.dry), dry * 0.55);
   out.lerp(pick(BLEND_COLORS.dirt), w.dirt);
   out.lerp(pick(BLEND_COLORS.sand), w.sand);
   out.lerp(pick(BLEND_COLORS.mud), w.mud);
@@ -479,8 +484,8 @@ function makeWaterMaps() {
   const ac = alphaC.getContext('2d');
   const cImg = cc.createImageData(N, N);
   const aImg = ac.createImageData(N, N);
-  const shallow = { r: 128, g: 200, b: 214 };
-  const deep = { r: 22, g: 84, b: 140 };
+  const shallow = { r: 150, g: 214, b: 216 };
+  const deep = { r: 30, g: 108, b: 158 };
   for (let py = 0; py < N; py++) {
     for (let px = 0; px < N; px++) {
       // PlaneGeometry.rotateX(-PI/2) 기준: u→+x, 캔버스 행(py)→+z
@@ -499,7 +504,7 @@ function makeWaterMaps() {
       b += (246 - b) * foam;
       cImg.data[i] = r; cImg.data[i + 1] = g; cImg.data[i + 2] = b; cImg.data[i + 3] = 255;
       // 알파(green 채널): 물가에서 0으로 부드럽게 — 지형과 만나는 면이 자연스럽다
-      const a = Math.min(0.93, smooth01(depth / 0.3) * 0.75 + smooth01(depth / 0.9) * 0.25 + foam * 0.35) * 255;
+      const a = Math.min(0.74, smooth01(depth / 0.35) * 0.5 + smooth01(depth / 1.0) * 0.22 + foam * 0.3) * 255;
       aImg.data[i] = a; aImg.data[i + 1] = a; aImg.data[i + 2] = a; aImg.data[i + 3] = 255;
     }
   }
@@ -556,12 +561,12 @@ const waterMesh = new THREE.Mesh(
     map: waterMaps.colorTex,
     alphaMap: waterMaps.alphaTex,
     normalMap: rippleTex,
-    normalScale: new THREE.Vector2(0.42, 0.42),
+    normalScale: new THREE.Vector2(0.26, 0.26),
     transparent: true,
     depthWrite: false,
-    roughness: 0.12,
+    roughness: 0.05,
     metalness: 0,
-    envMapIntensity: 1.15,
+    envMapIntensity: 1.35,
   })
 );
 waterMesh.rotation.x = -Math.PI / 2;
@@ -812,10 +817,10 @@ function placeProp(type, gx, gz) {
   grassGeo.setIndex(gIdx);
   grassGeo.computeVertexNormals();
 
-  const GRASS_N = 2400;
+  const GRASS_N = 3200;
   const grassMesh = new THREE.InstancedMesh(
     grassGeo,
-    new THREE.MeshToonMaterial({ map: grassTex, alphaTest: 0.5, side: THREE.DoubleSide, gradientMap }),
+    new THREE.MeshStandardMaterial({ map: grassTex, alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.95 }),
     GRASS_N
   );
   grassMesh.receiveShadow = true;
@@ -839,7 +844,8 @@ function placeProp(type, gx, gz) {
     gv.set(wx, h - 0.02, wz);
     gm.compose(gv, gq, gs);
     grassMesh.setMatrixAt(placed, gm);
-    gCol.setHSL(0.26 + rng() * 0.05, 0.5 + rng() * 0.2, 0.32 + rng() * 0.14);
+    if (rng() < 0.38) gCol.setHSL(0.14 + rng() * 0.04, 0.42 + rng() * 0.15, 0.4 + rng() * 0.12); // 마른 풀
+    else gCol.setHSL(0.23 + rng() * 0.07, 0.45 + rng() * 0.2, 0.3 + rng() * 0.13);
     grassMesh.setColorAt(placed, gCol);
     placed++;
   }
@@ -852,7 +858,7 @@ function placeProp(type, gx, gz) {
   const PEB_N = 420;
   const pebMesh = new THREE.InstancedMesh(
     new THREE.DodecahedronGeometry(0.09, 0),
-    new THREE.MeshToonMaterial({ gradientMap }),
+    new THREE.MeshStandardMaterial({ roughness: 0.92 }),
     PEB_N
   );
   pebMesh.castShadow = true;
@@ -871,7 +877,7 @@ function placeProp(type, gx, gz) {
     gv.set(wx, h + 0.015, wz);
     gm.compose(gv, gq, gs);
     pebMesh.setMatrixAt(placed, gm);
-    gCol.setHSL(0.08 + rng() * 0.04, 0.12 + rng() * 0.15, 0.3 + rng() * 0.18);
+    gCol.setHSL(0.09 + rng() * 0.03, 0.18 + rng() * 0.12, 0.2 + rng() * 0.13);
     pebMesh.setColorAt(placed, gCol);
     placed++;
   }
@@ -879,6 +885,37 @@ function placeProp(type, gx, gz) {
   pebMesh.instanceMatrix.needsUpdate = true;
   if (pebMesh.instanceColor) pebMesh.instanceColor.needsUpdate = true;
   scene.add(pebMesh);
+
+  // 바위 노두: 급경사면에 반쯤 묻힌 각진 암석 (레퍼런스 절벽 톤)
+  const ROCK_N = 110;
+  const rockMesh = new THREE.InstancedMesh(
+    new THREE.DodecahedronGeometry(0.42, 0),
+    new THREE.MeshStandardMaterial({ roughness: 0.95 }),
+    ROCK_N
+  );
+  rockMesh.castShadow = true;
+  rockMesh.receiveShadow = true;
+  placed = 0; guard = 0;
+  while (placed < ROCK_N && guard++ < ROCK_N * 40) {
+    const wx = (rng() - 0.5) * (GRID * TILE - 1.6);
+    const wz = (rng() - 0.5) * (GRID * TILE - 1.6);
+    const h = sampleHeight(wx, wz);
+    if (h < WATER_Y + 0.05) continue;
+    const w = surfaceWeights(wx, wz, h);
+    if (w.rock < 0.3 || rng() > w.rock) continue;
+    gq.setFromEuler(new THREE.Euler(rng() * Math.PI, rng() * Math.PI, rng() * Math.PI));
+    gs.set(0.6 + rng() * 1.3, 0.45 + rng() * 0.7, 0.6 + rng() * 1.3);
+    gv.set(wx, h - 0.12 + rng() * 0.1, wz);
+    gm.compose(gv, gq, gs);
+    rockMesh.setMatrixAt(placed, gm);
+    gCol.setHSL(0.1 + rng() * 0.03, 0.2 + rng() * 0.1, 0.4 + rng() * 0.13);
+    rockMesh.setColorAt(placed, gCol);
+    placed++;
+  }
+  rockMesh.count = placed;
+  rockMesh.instanceMatrix.needsUpdate = true;
+  if (rockMesh.instanceColor) rockMesh.instanceColor.needsUpdate = true;
+  scene.add(rockMesh);
 }
 
 // ---------------------------------------------------------------------------
@@ -990,15 +1027,17 @@ function updateHpBar(unit) {
 const units = [];
 function spawnUnit(isPlayer, gx, gz, facing) {
   // 차고에서 조립한 SD 킷 모델 사용 — 플레이어는 선택 기체, 적은 나머지 기체
-  const model = isPlayer
-    ? buildKitTank(playerKit)
-    : buildKitTank(enemyKits[units.filter((u) => !u.isPlayer).length % enemyKits.length]);
+  const kitKey = isPlayer
+    ? playerKit
+    : enemyKits[units.filter((u) => !u.isPlayer).length % enemyKits.length];
+  const model = buildKitTank(kitKey);
   const hullLv = isPlayer ? PLAYER_STATS.hullLv : 1 + Math.floor(rng() * 3);
   const driverLv = isPlayer ? PLAYER_STATS.driverLv : 1 + Math.floor(rng() * 3);
   const base = isPlayer ? PLAYER_STATS : ENEMY_BASE;
   const maxHp = (isPlayer ? 110 : 60) + hullLv * 15;
   const unit = {
-    isPlayer, gx, gz,
+    isPlayer, gx, gz, kitKey,
+    gun: KIT_INFO[kitKey].gun,
     mp: base.mp, fireRange: base.fireRange, damage: base.damage,
     hullLv, driverLv,
     hp: maxHp, maxHp,
@@ -1147,10 +1186,22 @@ function computeShot(attacker, target, fromCell = null) {
   if (distCells > attacker.fireRange) return { ok: false, reason: `사거리 밖 (${distCells.toFixed(1)}/${attacker.fireRange}칸)` };
   if (distCells < 0.6) return { ok: false, reason: '너무 가까움' };
 
-  // 포신 부앙각
+  // 포신 부앙각 — 차종별 한계 (T-34는 내림각이 나쁘고, FT는 유연)
+  const pMin = attacker.gun?.pitchMin ?? PITCH_MIN;
+  const pMax = attacker.gun?.pitchMax ?? PITCH_MAX;
   const pitch = (Math.atan2(aim.y - from.y, horiz) * 180) / Math.PI;
-  if (pitch < PITCH_MIN) return { ok: false, reason: `목표가 너무 낮음 (포신 내림각 ${PITCH_MIN}° 한계)` };
-  if (pitch > PITCH_MAX) return { ok: false, reason: `목표가 너무 높음 (포신 올림각 ${PITCH_MAX}° 한계)` };
+  if (pitch < pMin) return { ok: false, reason: `목표가 너무 낮음 (포신 내림각 ${pMin}° 한계)` };
+  if (pitch > pMax) return { ok: false, reason: `목표가 너무 높음 (포신 올림각 +${pMax}° 한계)` };
+
+  // 고정 포신(Mark IV 스폰슨): 차체 정면 ±arc° 안만 조준 가능.
+  // 가상 위치 평가(fromCell)는 이동으로 차체를 돌린다고 보고 스킵.
+  if (attacker.gun?.fixed && !fromCell) {
+    const rel = normAngle(Math.atan2(dx, dz) - attacker.group.rotation.y);
+    const arcDeg = attacker.gun.arc ?? 55;
+    if (Math.abs(rel) > THREE.MathUtils.degToRad(arcDeg)) {
+      return { ok: false, reason: `고정 포신 — 차체 정면 ±${arcDeg}° 밖 (이동으로 선회 필요)` };
+    }
+  }
 
   // 사선 차폐 검사 (직선 샘플링)
   const attackerKey = cellKey(fromCell ? fromCell.gx : attacker.gx, fromCell ? fromCell.gz : attacker.gz);
@@ -1188,10 +1239,12 @@ function computeShot(attacker, target, fromCell = null) {
   let chance;
   if (target.unit) {
     const heightAdv = THREE.MathUtils.clamp((from.y - aim.y) * 6, -10, 12);
-    chance = 95 - Math.max(0, distCells - 2) * 3.5 - cover * 14 - target.unit.driverLv * 6 + heightAdv;
-    chance = THREE.MathUtils.clamp(Math.round(chance), 8, 95);
+    // 거리 편차: 2칸까지 최고 명중, 이후 칸당 6% + 원거리 가속 페널티
+    const distPen = Math.max(0, distCells - 2) * 6 + Math.max(0, distCells - 6) * 2.5;
+    chance = 96 - distPen - cover * 14 - target.unit.driverLv * 6 + heightAdv;
+    chance = THREE.MathUtils.clamp(Math.round(chance), 8, 96);
   } else {
-    chance = THREE.MathUtils.clamp(Math.round(88 - distCells * 2 - cover * 10), 25, 95);
+    chance = THREE.MathUtils.clamp(Math.round(90 - distCells * 4.5 - cover * 10), 20, 95);
   }
   return { ok: true, chance, distCells, pitch, cover };
 }
@@ -1534,7 +1587,18 @@ async function aimAt(attacker, aim, pitchDeg, instant = false) {
   const dz = aim.z - attacker.group.position.z;
   const targetYaw = Math.atan2(dx, dz);
   const pitchRad = -THREE.MathUtils.degToRad(pitchDeg);
-  if (attacker.hasTurret) {
+  if (attacker.gun?.fixed) {
+    // 고정 포신: 차체는 그대로, 포만 사각(arc) 안에서 좌우 미세 조준
+    const arc = THREE.MathUtils.degToRad(attacker.gun.arc ?? 55);
+    const rel = THREE.MathUtils.clamp(normAngle(targetYaw - attacker.group.rotation.y), -arc, arc);
+    const from = attacker.cannon.rotation.y;
+    const diff = normAngle(rel - from);
+    if (Math.abs(diff) > 0.01 && !instant) {
+      await tween(140 + Math.abs(diff) * 100, (e) => { attacker.cannon.rotation.y = from + diff * e; });
+    } else {
+      attacker.cannon.rotation.y = rel;
+    }
+  } else if (attacker.hasTurret) {
     const rel = normAngle(targetYaw - attacker.group.rotation.y);
     const from = attacker.turret.rotation.y;
     const diff = normAngle(rel - from);
@@ -1575,7 +1639,8 @@ async function fireSequence(attacker, target, shot) {
   let impact = aim.clone();
   if (!hit) {
     const a = Math.random() * Math.PI * 2;
-    const r = TILE * (0.8 + Math.random() * 1.0);
+    // 산포 반경도 거리에 비례 — 원거리 빗나감은 크게 벗어난다
+    const r = TILE * (0.5 + Math.random() * 0.8) * (0.7 + (shot.distCells ?? 4) * 0.11);
     impact.x += Math.sin(a) * r;
     impact.z += Math.cos(a) * r;
     impact.y = Math.max(sampleHeight(impact.x, impact.z), WATER_Y) + 0.1;
@@ -1862,7 +1927,11 @@ const btnAgain = document.getElementById('btn-again');
 const playerHpNum = document.getElementById('player-hp-num');
 const playerHpFill = document.getElementById('player-hp-fill');
 const levelLabel = document.getElementById('level-label');
-if (levelLabel) levelLabel.textContent = `${KIT_INFO[playerKit].label} · 차체 Lv${player.hullLv} · 조종 Lv${player.driverLv} · 기동 ${player.mp} · 사거리 ${player.fireRange}`;
+if (levelLabel) {
+  const g = player.gun;
+  const gunTxt = g.fixed ? `고정포 ±${g.arc}°` : '포탑';
+  levelLabel.textContent = `${KIT_INFO[playerKit].label} · ${gunTxt} · 부앙 ${g.pitchMin}°~+${g.pitchMax}° · 기동 ${player.mp} · 사거리 ${player.fireRange}`;
+}
 
 // 상태 메시지: 짧게 표시 후 자동 소거 (포격 불가 사유 등 값만)
 let hintTimer = 0;
@@ -2205,16 +2274,20 @@ function updateAimPreview(dt) {
   const k = 1 - Math.exp(-dt * 9);
   const aim = hoverAim;
   const targetYaw = Math.atan2(aim.x - player.group.position.x, aim.z - player.group.position.z);
-  if (player.hasTurret) {
+  if (player.gun?.fixed) {
+    const arc = THREE.MathUtils.degToRad(player.gun.arc ?? 55);
+    const rel = THREE.MathUtils.clamp(normAngle(targetYaw - player.group.rotation.y), -arc, arc);
+    player.cannon.rotation.y += normAngle(rel - player.cannon.rotation.y) * k;
+  } else if (player.hasTurret) {
     const rel = normAngle(targetYaw - player.group.rotation.y);
     player.turret.rotation.y += normAngle(rel - player.turret.rotation.y) * k;
   }
-  // 포신 부앙각 미리보기: 목표 고도차 기준, 한계각으로 클램프
+  // 포신 부앙각 미리보기: 목표 고도차 기준, 차종 한계각으로 클램프
   const from = muzzleApprox(player);
   const horiz = Math.hypot(aim.x - from.x, aim.z - from.z);
   const pitchDeg = THREE.MathUtils.clamp(
     (Math.atan2(aim.y - from.y, Math.max(horiz, 0.001)) * 180) / Math.PI,
-    PITCH_MIN, PITCH_MAX
+    player.gun?.pitchMin ?? PITCH_MIN, player.gun?.pitchMax ?? PITCH_MAX
   );
   const target = -THREE.MathUtils.degToRad(pitchDeg);
   player.cannon.rotation.x += (target - player.cannon.rotation.x) * k;
