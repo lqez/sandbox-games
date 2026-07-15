@@ -6,6 +6,7 @@ import { EffectComposer } from './vendor/postprocessing/EffectComposer.js';
 import { RenderPass } from './vendor/postprocessing/RenderPass.js';
 import { SSAOPass } from './vendor/postprocessing/SSAOPass.js';
 import { OutputPass } from './vendor/postprocessing/OutputPass.js';
+import { ShaderPass } from './vendor/postprocessing/ShaderPass.js';
 import { buildKitTank, KIT_INFO, KIT_KEYS, mergeStatic } from './src/kit-tank.js';
 
 // 차고에서 선택한 기체 (?tank=ft|mk4|t34|tiger)
@@ -192,6 +193,34 @@ ssaoPass.minDistance = 0.0004;
 ssaoPass.maxDistance = 0.12;
 composer.addPass(ssaoPass);
 composer.addPass(new OutputPass());
+// 컬러 그레이드: 디오라마 촬영 톤 — 과채도 억제 + 대비 + 웜 틴트 + 비네트
+const GradeShader = {
+  uniforms: {
+    tDiffuse: { value: null },
+    saturation: { value: 0.9 },
+    contrast: { value: 1.08 },
+    warm: { value: new THREE.Vector3(1.035, 1.0, 0.95) },
+    vignette: { value: 0.3 },
+  },
+  vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
+  fragmentShader: `
+    uniform sampler2D tDiffuse; uniform float saturation; uniform float contrast;
+    uniform vec3 warm; uniform float vignette; varying vec2 vUv;
+    void main(){
+      vec4 c = texture2D(tDiffuse, vUv);
+      vec3 col = c.rgb;
+      float l = dot(col, vec3(0.299, 0.587, 0.114));
+      col = mix(vec3(l), col, saturation);       // 채도 억제
+      col = (col - 0.5) * contrast + 0.5;         // 대비
+      col *= warm;                                // 웜 틴트
+      vec2 d = vUv - 0.5;
+      col *= 1.0 - vignette * smoothstep(0.15, 0.9, dot(d, d) * 2.0); // 비네트
+      gl_FragColor = vec4(clamp(col, 0.0, 1.0), c.a);
+    }
+  `,
+};
+const gradePass = new ShaderPass(GradeShader);
+composer.addPass(gradePass);
 // AO 제외 레이어: 컷아웃 풀·수면·오버레이가 SSAO 노멀 패스에서
 // 통짜 사각형으로 렌더되어 검은 헤일로를 만드는 것을 방지
 const NO_AO_LAYER = 1;
