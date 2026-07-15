@@ -442,33 +442,57 @@ function surfaceColorAt(wx, wz, h, out) {
 }
 terrainGeo.computeVertexNormals();
 
-// 흙/풀 디테일 텍스처 (프로시저럴 노이즈) — 컬러 얼룩 + 범프
+// 흙/풀 디테일 텍스처 (프로시저럴 노이즈) — 컬러 얼룩 + 범프.
+// 다중 스케일 유기적 모틀 + 미세 그레인 + 흙알갱이/균열로 지면 질감을 살린다.
 function makeDetailTexture() {
   const c = document.createElement('canvas');
   c.width = c.height = 512;
   const ctx = c.getContext('2d');
-  ctx.fillStyle = '#cfcfcf';
+  ctx.fillStyle = '#c8c8c8';
   ctx.fillRect(0, 0, 512, 512);
+  // 미세 그레인
   const img = ctx.getImageData(0, 0, 512, 512);
   const d = img.data;
   for (let i = 0; i < d.length; i += 4) {
-    const v = 196 + Math.random() * 59; // 밝기 얼룩
+    const v = 188 + Math.random() * 62;
     d[i] = d[i + 1] = d[i + 2] = v;
   }
   ctx.putImageData(img, 0, 0);
-  // 굵은 얼룩(풀 뭉치/흙덩이 느낌) 오버레이
-  for (let i = 0; i < 2600; i++) {
+  // 다중 스케일 유기적 얼룩 (큰 흙무리 → 잔 알갱이)
+  const blobs = (n, rmin, rmax, alpha) => {
+    for (let i = 0; i < n; i++) {
+      const x = Math.random() * 512, y = Math.random() * 512;
+      const r = rmin + Math.random() * (rmax - rmin);
+      const bright = Math.random() > 0.5;
+      ctx.fillStyle = bright ? `rgba(255,255,250,${alpha})` : `rgba(55,48,36,${alpha})`;
+      ctx.beginPath();
+      ctx.ellipse(x, y, r, r * (0.4 + Math.random() * 0.6), Math.random() * Math.PI, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  };
+  blobs(90, 14, 34, 0.06);   // 큰 흙무리
+  blobs(700, 4, 11, 0.09);   // 중간 얼룩
+  blobs(2600, 1.2, 4, 0.11); // 잔 알갱이
+  // 흙 알갱이/작은 돌 점각
+  for (let i = 0; i < 1400; i++) {
     const x = Math.random() * 512, y = Math.random() * 512;
-    const r = 1.5 + Math.random() * 5;
-    const bright = Math.random() > 0.5;
-    ctx.fillStyle = bright ? 'rgba(255,255,255,0.10)' : 'rgba(60,55,40,0.10)';
-    ctx.beginPath();
-    ctx.ellipse(x, y, r, r * (0.4 + Math.random() * 0.6), Math.random() * Math.PI, 0, Math.PI * 2);
-    ctx.fill();
+    ctx.fillStyle = Math.random() > 0.5 ? 'rgba(40,34,24,0.16)' : 'rgba(250,246,235,0.12)';
+    ctx.fillRect(x, y, 1 + Math.random() * 1.6, 1 + Math.random() * 1.6);
+  }
+  // 가는 균열/뿌리 자국
+  ctx.strokeStyle = 'rgba(45,38,28,0.10)';
+  for (let i = 0; i < 40; i++) {
+    ctx.lineWidth = 0.6 + Math.random() * 0.9;
+    let x = Math.random() * 512, y = Math.random() * 512;
+    ctx.beginPath(); ctx.moveTo(x, y);
+    const seg = 3 + Math.floor(Math.random() * 4);
+    for (let s = 0; s < seg; s++) { x += (Math.random() - 0.5) * 40; y += (Math.random() - 0.5) * 40; ctx.lineTo(x, y); }
+    ctx.stroke();
   }
   const tex = new THREE.CanvasTexture(c);
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-  tex.repeat.set(14, 14);
+  tex.repeat.set(16, 16);
+  tex.anisotropy = 4;
   return tex;
 }
 const detailTex = makeDetailTexture();
@@ -1134,6 +1158,75 @@ function placeProp(type, gx, gz) {
   stoneMesh.instanceMatrix.needsUpdate = true;
   if (stoneMesh.instanceColor) stoneMesh.instanceColor.needsUpdate = true;
   scene.add(stoneMesh);
+
+  // 낙엽 리터: 지면에 깔린 작은 평면 나뭇잎 — 흙/풀 위, 수목 근처 밀도↑
+  const leafGeo = new THREE.PlaneGeometry(0.17, 0.13);
+  const LEAF_N = 900;
+  const leafMesh = new THREE.InstancedMesh(
+    leafGeo,
+    new THREE.MeshStandardMaterial({ roughness: 0.95, side: THREE.DoubleSide }),
+    LEAF_N
+  );
+  leafMesh.receiveShadow = true;
+  const leafCols = [0x8a6a34, 0x9c7b3c, 0x74582c, 0xa98a44, 0x6f7a38];
+  placed = 0; guard = 0;
+  while (placed < LEAF_N && guard++ < LEAF_N * 12) {
+    const wx = (rng() - 0.5) * (GRID * TILE - 1.4);
+    const wz = (rng() - 0.5) * (GRID * TILE - 1.4);
+    const h = sampleHeight(wx, wz);
+    if (h < WATER_Y + 0.05) continue;
+    const w = surfaceWeights(wx, wz, h);
+    if (w.bed > 0.2 || w.rock > 0.5) continue;
+    // 나무 밑에 잘 쌓이도록 숲 노이즈 가중
+    const near = props.has(cellKey(worldToCell({ x: wx, z: wz }).gx, worldToCell({ x: wx, z: wz }).gz));
+    if (rng() > 0.4 + (near ? 0.4 : 0)) continue;
+    gq.setFromEuler(new THREE.Euler(-Math.PI / 2 + (rng() - 0.5) * 0.5, rng() * Math.PI, 0));
+    gs.setScalar(0.7 + rng() * 0.9);
+    gv.set(wx, h + 0.012, wz);
+    gm.compose(gv, gq, gs);
+    leafMesh.setMatrixAt(placed, gm);
+    gCol.set(leafCols[Math.floor(rng() * leafCols.length)]);
+    leafMesh.setColorAt(placed, gCol);
+    placed++;
+  }
+  leafMesh.count = placed;
+  leafMesh.instanceMatrix.needsUpdate = true;
+  if (leafMesh.instanceColor) leafMesh.instanceColor.needsUpdate = true;
+  noAO(leafMesh);
+  scene.add(leafMesh);
+
+  // 잔가지: 흙/풀 위에 흩어진 가는 나뭇가지
+  const twigGeo = new THREE.CylinderGeometry(0.018, 0.026, 0.55, 5);
+  twigGeo.rotateZ(Math.PI / 2); // 눕힌다
+  const TWIG_N = 260;
+  const twigMesh = new THREE.InstancedMesh(
+    twigGeo,
+    new THREE.MeshStandardMaterial({ roughness: 0.95 }),
+    TWIG_N
+  );
+  twigMesh.castShadow = true;
+  twigMesh.receiveShadow = true;
+  placed = 0; guard = 0;
+  while (placed < TWIG_N && guard++ < TWIG_N * 14) {
+    const wx = (rng() - 0.5) * (GRID * TILE - 1.4);
+    const wz = (rng() - 0.5) * (GRID * TILE - 1.4);
+    const h = sampleHeight(wx, wz);
+    if (h < WATER_Y + 0.06) continue;
+    const w = surfaceWeights(wx, wz, h);
+    if (w.bed > 0.1) continue;
+    gq.setFromEuler(new THREE.Euler((rng() - 0.5) * 0.2, rng() * Math.PI, (rng() - 0.5) * 0.2));
+    gs.set(0.7 + rng() * 0.8, 1, 1);
+    gv.set(wx, h + 0.02, wz);
+    gm.compose(gv, gq, gs);
+    twigMesh.setMatrixAt(placed, gm);
+    gCol.setHSL(0.08 + rng() * 0.03, 0.32 + rng() * 0.14, 0.22 + rng() * 0.1);
+    twigMesh.setColorAt(placed, gCol);
+    placed++;
+  }
+  twigMesh.count = placed;
+  twigMesh.instanceMatrix.needsUpdate = true;
+  if (twigMesh.instanceColor) twigMesh.instanceColor.needsUpdate = true;
+  scene.add(twigMesh);
 }
 
 // ---------------------------------------------------------------------------
