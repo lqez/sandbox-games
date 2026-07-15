@@ -1239,6 +1239,7 @@ function spawnUnit(isPlayer, gx, gz, facing) {
     gun: KIT_INFO[kitKey].gun,
     reloadLeft: 0,
     movedLastTurn: false,
+    aimStack: 0,
     mp: base.mp, fireRange: base.fireRange, damage: base.damage,
     hullLv, driverLv,
     hp: maxHp, maxHp,
@@ -1465,6 +1466,8 @@ function computeShot(attacker, target, fromCell = null, facingOverride = null) {
     chance = 96 - distPen - cover * 14 - target.unit.driverLv * 6 + heightAdv;
     // 정지 사격 보너스: 직전 턴 정지 +12 / 기동 사격 -8 (halt fire)
     chance += attacker.movedLastTurn ? -8 : 12;
+    // 조준 스택: 허탕 경계로 쌓은 조준 보너스
+    if (attacker.aimStack) chance += 15;
     // 헐다운: 능선 마루의 목표는 차체가 가려져 맞히기 어렵다
     if (hullDownCells.has(cellKey(target.unit.gx, target.unit.gz))) chance -= 16;
     chance = THREE.MathUtils.clamp(Math.round(chance), 8, 97);
@@ -1534,7 +1537,7 @@ function groundPitch(unit) {
   return THREE.MathUtils.clamp(Math.atan2(hB - hF, 1.6), -0.45, 0.45);
 }
 
-async function moveUnit(unit, path, finalFacing = null) {
+async function moveUnit(unit, path, finalFacing = null, onStep = null) {
   for (const cell of path) {
     const from = unit.group.position.clone();
     const to = cellToWorld(cell.gx, cell.gz);
@@ -1549,6 +1552,7 @@ async function moveUnit(unit, path, finalFacing = null) {
     unit.gx = cell.gx;
     unit.gz = cell.gz;
     unit.group.position.y = driveHeight(to.x, to.z);
+    if (onStep) onStep(unit);
   }
   // 드래그로 지정한 최종 차체 방향으로 선회
   if (finalFacing !== null) await rotateTo(unit, finalFacing, 160);
@@ -2203,8 +2207,6 @@ function sfx(kind) {
 // ---------------------------------------------------------------------------
 const turnLabel = document.getElementById('turn-label');
 const hintEl = document.getElementById('hint');
-const btnMoveMode = document.getElementById('btn-move-mode');
-const btnFireMode = document.getElementById('btn-fire-mode');
 const btnGo = document.getElementById('btn-go');
 const btnRestart = document.getElementById('btn-restart');
 const overlay = document.getElementById('overlay');
@@ -2299,19 +2301,31 @@ const haltRing = new THREE.Mesh(
 haltRing.rotation.x = -Math.PI / 2;
 haltRing.visible = false;
 scene.add(haltRing);
-
-// 포격 오더 마커: 조준 셀에 붉은 링
-const fireMarker = new THREE.Mesh(
-  new THREE.RingGeometry(0.55, 0.8, 24),
-  new THREE.MeshBasicMaterial({ color: 0xff3b2e, transparent: true, opacity: 0.9, side: THREE.DoubleSide, depthWrite: false })
+// 조준 스택 링: 허탕 경계 후 다음 사격 +15% 상태 표시 (점선 느낌의 안쪽 링)
+const aimRing = new THREE.Mesh(
+  new THREE.RingGeometry(0.95, 1.12, 26, 1),
+  new THREE.MeshBasicMaterial({ color: 0xffe27a, transparent: true, opacity: 0.85, side: THREE.DoubleSide, depthWrite: false })
 );
-fireMarker.rotation.x = -Math.PI / 2;
-fireMarker.visible = false;
-scene.add(fireMarker);
-function placeFireMarker(cell) {
-  const p = cellToWorld(cell.gx, cell.gz);
-  fireMarker.position.set(p.x, groundY(p.x, p.z) + 0.12, p.z);
-  fireMarker.visible = true;
+aimRing.rotation.x = -Math.PI / 2;
+aimRing.visible = false;
+scene.add(aimRing);
+
+// 사격 조준선: 내 차량에서 드래그하는 동안 표시
+const aimLine = new THREE.Line(
+  new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(new Float32Array(6), 3)),
+  new THREE.LineBasicMaterial({ color: 0xff5544, transparent: true, opacity: 0.95, depthTest: false })
+);
+aimLine.renderOrder = 15;
+aimLine.visible = false;
+scene.add(aimLine);
+function updateAimLine(toPoint, valid) {
+  const pos = aimLine.geometry.attributes.position;
+  const p = player.group.position;
+  pos.setXYZ(0, p.x, p.y + 1.3, p.z);
+  pos.setXYZ(1, toPoint.x, toPoint.y + 0.15, toPoint.z);
+  pos.needsUpdate = true;
+  aimLine.material.color.set(valid ? 0xff5544 : 0x8b95a8);
+  aimLine.visible = true;
 }
 
 // 동시 턴제(WeGo): 턴마다 모든 차량이 행동 1개(AP 1)를 고르고 한꺼번에 진행.
@@ -2322,121 +2336,54 @@ const COLLISION_DMG = 16; // 같은 칸 진입 충돌 시 상호 피해
 let turnNo = 1;
 let phase = 'plan'; // plan | resolve | gameover
 let busy = false;
-let planMode = 'move'; // move | fire
+// ── 3동사 턴: 기동 / 사격 / 경계 ──
+// 한 턴 = 동사 하나, 입력 즉시 실행:
+//  기동: 이동 필드 셀 터치 → 드래그로 차체 방향 → 놓기
+//  사격: 내 차량에서 바깥으로 드래그 → 목표 셀에서 놓기 (장전 완료 시)
+//  경계: 👁 버튼(턴 종료) — 정지한 채 사격 필드를 지나는 적에게 스냅 사격,
+//        아무도 안 걸리면 조준 스택 +15% (다음 사격에 가산)
+// 상성: 기동 > 사격(예측탄 회피) · 경계 > 기동(스냅) · 사격 > 경계(정지 표적)
+const SNAP_PENALTY = 15;
+const dirAngle = (d) => Math.atan2(DIRS[d].dx, DIRS[d].dz);
 let currentMoveCells = new Map();
 let currentFireCells = new Map();
 
-function setPlanMode(mode) {
-  if (mode === 'fire' && player.reloadLeft > 0) {
-    setHint(`재장전 중 — ${player.reloadLeft}턴 남음`);
-    return;
-  }
-  planMode = mode;
-  btnMoveMode.classList.toggle('on', mode === 'move');
-  btnFireMode.classList.toggle('on', mode === 'fire');
-  if (phase === 'plan' && !busy) refreshPlanUI();
-}
-
-// 이번 턴 플레이어 오더 — 이동과 포격을 모두 예약할 수 있다.
-// order: 먼저 예약한 쪽이 먼저 실행 ('fire-first' = 쏘고 이동, 'move-first' = 이동 후 사격)
-let playerOrders = { move: null, fire: null, order: null };
-const dirAngle = (d) => Math.atan2(DIRS[d].dx, DIRS[d].dz);
-
-// 조준 셀 → 타깃 스펙 (유닛/프랍/지면)
-function targetForCell(cell, shooter) {
-  const occ = units.find((t) => t.alive && t !== shooter && t.gx === cell.gx && t.gz === cell.gz);
-  if (occ) return { unit: occ };
-  const prop = props.get(cellKey(cell.gx, cell.gz));
-  if (prop) return { prop };
-  return { gx: cell.gx, gz: cell.gz };
-}
-
-function setMoveOrder(cell, info, facing) {
-  playerOrders.move = { path: info.path.slice(), facing, cell: { gx: cell.gx, gz: cell.gz } };
-  if (playerOrders.fire && playerOrders.order === 'move-first') {
-    // 목적지가 바뀌었으니 새 위치 기준으로 포격 유효성 재검사
-    const f = computeShot(player, targetForCell(playerOrders.fire.cell, player), playerOrders.move.cell, facing);
-    if (f.ok) playerOrders.fire.shot = f;
-    else { playerOrders.fire = null; playerOrders.order = null; setHint('이동 변경 — 새 위치에서 조준 불가라 포격 취소'); }
-  }
-  refreshPlanUI();
-}
-
-function setFireOrder(cell, shot) {
-  playerOrders.fire = { cell: { gx: cell.gx, gz: cell.gz }, shot };
-  if (!playerOrders.order) playerOrders.order = playerOrders.move ? 'move-first' : 'fire-first';
-  refreshPlanUI();
-}
-
-// 겹침 해법: 활성 모드의 필드만 채워 그리고, 비활성 필드는 얇은 외곽선으로만.
-// 이동 오더가 있으면 포격 필드는 "이동 목적지 + 지정 방향" 기준으로 계산된다.
-function refreshPlanUI() {
+function refreshPlanUI(fireEmphasis = false) {
   if (phase !== 'plan') return;
   currentMoveCells = reachableCells(player);
-  const mv = playerOrders.move;
-  currentFireCells = player.reloadLeft > 0
-    ? new Map()
-    : computeFireCells(player, mv ? mv.cell : null, mv ? mv.facing : null);
+  currentFireCells = player.reloadLeft > 0 ? new Map() : computeFireCells(player);
   clearHighlights();
-  if (planMode === 'move') {
-    showMoveField(currentMoveCells, true);
-    showFireField(currentFireCells, false);
-  } else {
-    showFireField(currentFireCells, true);
-    showMoveField(currentMoveCells, false);
-    showTargets(
-      enemies
-        .filter((e) => e.alive && currentFireCells.has(cellKey(e.gx, e.gz)))
-        .map((e) => ({ unit: e, shot: currentFireCells.get(cellKey(e.gx, e.gz)).shot }))
-    );
-  }
-  // 오더 마커
-  if (mv) showGhost(mv.cell, mv.facing);
-  else ghost.visible = false;
-  if (playerOrders.fire) placeFireMarker(playerOrders.fire.cell);
-  else fireMarker.visible = false;
-  // 버튼 라벨
-  btnFireMode.textContent = player.reloadLeft > 0 ? `🎯 재장전 ${player.reloadLeft}` : '🎯 포격';
-  const n = (playerOrders.move ? 1 : 0) + (playerOrders.fire ? 1 : 0);
-  btnGo.textContent = n ? `▶ 진행 (${n})` : '▶ 대기';
+  showMoveField(currentMoveCells, !fireEmphasis);
+  showFireField(currentFireCells, fireEmphasis);
+  showTargets(
+    enemies
+      .filter((e) => e.alive && currentFireCells.has(cellKey(e.gx, e.gz)))
+      .map((e) => ({ unit: e, shot: currentFireCells.get(cellKey(e.gx, e.gz)).shot }))
+  );
+  btnGo.textContent = player.reloadLeft > 0 ? `⏸ 대기 (재장전 ${player.reloadLeft})` : '👁 경계';
 }
 
 function startPlanning() {
   if (checkGameEnd()) return;
   phase = 'plan';
   busy = false;
-  // 재장전 진행 (전 유닛)
   for (const u of units) if (u.alive && u.reloadLeft > 0) u.reloadLeft -= 1;
-  playerOrders = { move: null, fire: null, order: null };
   ghost.visible = false;
-  fireMarker.visible = false;
+  aimLine.visible = false;
   turnLabel.textContent = `턴 ${turnNo}`;
-  if (planMode === 'fire' && player.reloadLeft > 0) {
-    planMode = 'move';
-    btnMoveMode.classList.add('on');
-    btnFireMode.classList.remove('on');
-  }
   refreshPlanUI();
 }
 
-// ▶ 진행: 예약한 오더(없으면 대기)로 턴 실행
-async function goTurn() {
+async function submitPlan(plan) {
   if (phase !== 'plan' || busy) return;
-  player.plan = {
-    move: playerOrders.move,
-    fire: playerOrders.fire,
-    order: playerOrders.order,
-  };
+  player.plan = plan;
   planEnemies();
   await resolveTurn();
 }
 
-// 적 AI 계획 — AI 레벨(driverLv)에 따라 다르게 행동한다:
-//  Lv1: 플레이어의 현재 칸만 조준 (예측 없음)
-//  Lv2: 지난 턴 이동 방향의 절반만큼 리드 사격 + 능선 굴착
-//  Lv3: 지난 턴 이동을 그대로 외삽한 칸을 리드 사격 + 능선 굴착
-// 재장전 중에는 사격 불가 — 재배치로 시간을 쓴다.
-let playerLastMove = null; // 지난 턴 플레이어 변위 {dx, dz}
+// 적 AI — AI 레벨(driverLv):
+//  Lv1: 현재 칸 조준 / Lv2: 절반 리드 + 굴착 + 경계 / Lv3: 완전 외삽 리드
+let playerLastMove = null;
 function predictPlayerCell(lvl) {
   if (lvl <= 1 || !playerLastMove) return { gx: player.gx, gz: player.gz };
   const f = lvl >= 3 ? 1 : 0.5;
@@ -2455,16 +2402,22 @@ function planEnemies() {
       const aimIsPlayer = aim.gx === player.gx && aim.gz === player.gz;
       const shot = computeShot(enemy, aimIsPlayer ? { unit: player } : aim);
       if (shot.ok && (!aimIsPlayer || shot.chance >= 30)) {
-        enemy.plan = { fire: { cell: aim, shot }, order: 'fire-first' };
+        enemy.plan = { type: 'fire', cell: aim, shot };
         continue;
       }
       // 능선 굴착 (Lv2+): 막힌 능선 지형을 포격해 다음 턴 포각 확보
       if (lvl >= 2 && shot.blockCell) {
         const dig = computeShot(enemy, shot.blockCell);
         if (dig.ok) {
-          enemy.plan = { fire: { cell: shot.blockCell, shot: dig }, order: 'fire-first' };
+          enemy.plan = { type: 'fire', cell: shot.blockCell, shot: dig };
           continue;
         }
+      }
+      // 경계 (Lv2+): 사격은 안 되지만 플레이어가 근처를 지나갈 만하면 매복
+      const distP = Math.hypot(enemy.gx - player.gx, enemy.gz - player.gz);
+      if (lvl >= 2 && distP <= enemy.fireRange + 3 && Math.random() < 0.5) {
+        enemy.plan = { type: 'overwatch' };
+        continue;
       }
     }
     const cells = reachableCells(enemy);
@@ -2476,8 +2429,8 @@ function planEnemies() {
       const score = sShot.ok ? 200 + sShot.chance - info.cost * 2 : 100 - distP * 5 - info.cost;
       if (!best || score > best.score) best = { score, info };
     }
-    if (best && best.info.path.length) enemy.plan = { move: { path: best.info.path.slice(), facing: null } };
-    else enemy.plan = {};
+    if (best && best.info.path.length) enemy.plan = { type: 'move', path: best.info.path.slice(), facing: null };
+    else enemy.plan = { type: 'wait' };
   }
 }
 
@@ -2485,7 +2438,7 @@ function planEnemies() {
 // 근접(체비쇼프 1칸) 진입·자리 맞바꿈·추돌은 충돌 —
 // 이동자는 직전 타일에서 멈추고(경로 절단) 양쪽 모두 피해를 입는다.
 function simulateMoves() {
-  const movers = units.filter((u) => u.alive && u.plan?.move?.path?.length);
+  const movers = units.filter((u) => u.alive && (u.plan?.type === 'move' && u.plan.path?.length));
   const cellOf = new Map();
   const cur = new Map();
   for (const u of units) {
@@ -2496,11 +2449,11 @@ function simulateMoves() {
   const stopped = new Set();
   const cut = new Map();
   const hits = [];
-  const maxLen = Math.max(0, ...movers.map((u) => u.plan.move.path.length));
+  const maxLen = Math.max(0, ...movers.map((u) => u.plan.path.length));
   for (let k = 0; k < maxLen; k++) {
     const intents = movers
-      .filter((u) => !stopped.has(u) && u.plan.move.path.length > k)
-      .map((u) => ({ u, to: u.plan.move.path[k] }));
+      .filter((u) => !stopped.has(u) && u.plan.path.length > k)
+      .map((u) => ({ u, to: u.plan.path[k] }));
     let changed = true;
     while (changed) {
       changed = false;
@@ -2545,7 +2498,7 @@ function simulateMoves() {
       cellOf.set(cellKey(c.gx, c.gz), it.u);
     }
   }
-  for (const u of movers) if (cut.has(u)) u.plan.move.path = u.plan.move.path.slice(0, cut.get(u));
+  for (const u of movers) if (cut.has(u)) u.plan.path = u.plan.path.slice(0, cut.get(u));
   const seen = new Set();
   return hits.filter((h) => {
     const key = [units.indexOf(h.a), units.indexOf(h.b)].sort((x, y) => x - y).join('-');
@@ -2558,7 +2511,7 @@ function simulateMoves() {
 // 계획된 포격 해결: 조준한 셀에 지금 무엇이 있는지로 판정 (예측 사격).
 // 발사 즉시 재장전 시작.
 async function resolvePlannedShot(u) {
-  const { gx, gz } = u.plan.fire.cell;
+  const { gx, gz } = u.plan.cell;
   const occ = units.find((t) => t.alive && t !== u && t.gx === gx && t.gz === gz);
   let target = occ ? { unit: occ } : null;
   let shot = target ? computeShot(u, target) : null;
@@ -2567,8 +2520,9 @@ async function resolvePlannedShot(u) {
     if (prop) { target = { prop }; shot = computeShot(u, target); }
   }
   if (!shot?.ok) { target = { gx, gz }; shot = computeShot(u, target); }
-  if (!shot.ok) { target = { gx, gz }; shot = u.plan.fire.shot; } // 지형 변화 등 — 계획값으로 발사
+  if (!shot.ok) { target = { gx, gz }; shot = u.plan.shot; } // 지형 변화 등 — 계획값으로 발사
   u.reloadLeft = u.gun?.reload ?? 2;
+  u.aimStack = 0; // 조준 스택 소모
   await fireSequence(u, target, shot);
 }
 
@@ -2577,16 +2531,35 @@ async function resolveTurn() {
   busy = true;
   clearHighlights();
   ghost.visible = false;
-  fireMarker.visible = false;
+  aimLine.visible = false;
   turnLabel.textContent = `턴 ${turnNo} ▶`;
   const playerStart = { gx: player.gx, gz: player.gz };
-  // A) 선사격: "쏘고 이동" 오더 + 이동 없는 사격 (적 포함) — 전원 동시
-  const preShooters = units.filter((u) => u.alive && u.plan?.fire && u.plan.order !== 'move-first');
-  await Promise.all(preShooters.map((u) => resolvePlannedShot(u)));
-  // B) 전 차량 동시 이동 + 충돌 (지정한 최종 차체 방향으로 마무리 선회)
+  // A) 사격 (전원 동시) — 정지 표적(경계·조준 중인 적)에게 최고 명중
+  const shooters = units.filter((u) => u.alive && u.plan?.type === 'fire');
+  await Promise.all(shooters.map((u) => resolvePlannedShot(u)));
+  // B) 경계망 구성: 이동 스텝마다 상대편 경계자의 사선을 체크,
+  //    걸리면 즉시 스냅 사격 (경계자당 1회, 스냅 페널티)
+  const overwatchers = units.filter((u) => u.alive && u.plan?.type === 'overwatch' && u.reloadLeft <= 0);
+  for (const ow of overwatchers) ow._snapped = false;
+  const snapShots = [];
+  const onStep = (mover) => {
+    for (const ow of overwatchers) {
+      if (ow._snapped || !ow.alive || !mover.alive) continue;
+      if (ow.isPlayer === mover.isPlayer) continue;
+      const shot = computeShot(ow, { unit: mover });
+      if (!shot.ok) continue;
+      ow._snapped = true;
+      shot.chance = Math.max(5, shot.chance - SNAP_PENALTY);
+      popText(ow.group.position.clone().add(new THREE.Vector3(0, 1.2, 0)), '경계 사격!', '#ffd76e');
+      ow.reloadLeft = ow.gun?.reload ?? 2;
+      ow.aimStack = 0;
+      snapShots.push(fireSequence(ow, { unit: mover }, shot));
+    }
+  };
+  // C) 전 차량 동시 이동 + 충돌
   const collisions = simulateMoves();
-  const movers = units.filter((u) => u.alive && u.plan?.move?.path?.length);
-  await Promise.all(movers.map((u) => moveUnit(u, u.plan.move.path, u.plan.move.facing)));
+  const movers = units.filter((u) => u.alive && u.plan?.type === 'move' && u.plan.path?.length);
+  await Promise.all(movers.map((u) => moveUnit(u, u.plan.path, u.plan.facing, onStep)));
   for (const h of collisions) {
     if (!h.a.alive || !h.b.alive) continue;
     const mid = h.a.group.position.clone().lerp(h.b.group.position, 0.5);
@@ -2596,11 +2569,21 @@ async function resolveTurn() {
     popText(mid, '충돌!', '#ffd24d');
     await Promise.all([applyUnitDamage(h.a, COLLISION_DMG), applyUnitDamage(h.b, COLLISION_DMG)]);
   }
-  // C) 후사격: "이동 후 사격" 오더 — 새 위치에서 발사
-  const postShooters = units.filter((u) => u.alive && u.plan?.fire && u.plan.order === 'move-first');
-  await Promise.all(postShooters.map((u) => resolvePlannedShot(u)));
-  // 정지 사격 판정용: 이번 턴 실제 이동 여부 기록
-  for (const u of units) if (u.alive) u.movedLastTurn = !!(u.plan?.move?.path?.length);
+  await Promise.all(snapShots);
+  // D) 조준 스택: 허탕 경계 = 다음 사격 +15%, 기동은 스택 소실
+  for (const u of units) {
+    if (!u.alive) continue;
+    if (u.plan?.type === 'overwatch' && u.reloadLeft <= 0 && !u._snapped) {
+      if (!u.aimStack) {
+        u.aimStack = 1;
+        popText(u.group.position.clone().add(new THREE.Vector3(0, 1.4, 0)), '🔭 조준 +15%', '#ffe9a8');
+      }
+    } else if (u.plan?.type === 'move') {
+      u.aimStack = 0;
+    }
+    u._snapped = false;
+    u.movedLastTurn = u.plan?.type === 'move' && !!u.plan.path?.length;
+  }
   // AI 예측용: 이번 턴 플레이어 변위 기록
   const pdx = player.gx - playerStart.gx, pdz = player.gz - playerStart.gz;
   playerLastMove = pdx || pdz ? { dx: pdx, dz: pdz } : null;
@@ -2628,9 +2611,10 @@ function checkGameEnd() {
   return false;
 }
 
-btnMoveMode.addEventListener('click', () => setPlanMode('move'));
-btnFireMode.addEventListener('click', () => setPlanMode('fire'));
-btnGo.addEventListener('click', () => goTurn());
+btnGo.addEventListener('click', () => {
+  if (phase !== 'plan' || busy) return;
+  submitPlan(player.reloadLeft > 0 ? { type: 'wait' } : { type: 'overwatch' });
+});
 
 // ---------------------------------------------------------------------------
 // 입력
@@ -2638,7 +2622,9 @@ btnGo.addEventListener('click', () => goTurn());
 const raycaster = new THREE.Raycaster();
 const pointer = new THREE.Vector2();
 let downPos = null;
-let ghostGesture = null; // { cell, info, facing } — 이동 고스트 드래그 중
+let ghostGesture = null; // 기동: { cell, info, facing }
+let fireGesture = null;  // 사격: { cell, shot } — 내 차량에서 바깥으로 드래그
+let hoverAim = null;
 
 function setPointer(e) {
   pointer.x = (e.clientX / window.innerWidth) * 2 - 1;
@@ -2648,90 +2634,55 @@ function setPointer(e) {
 
 renderer.domElement.addEventListener('pointerdown', (e) => {
   downPos = { x: e.clientX, y: e.clientY };
-  if (phase !== 'plan' || busy || planMode !== 'move') return;
+  if (phase !== 'plan' || busy) return;
   setPointer(e);
+  // 1) 내 차량에서 드래그 시작 = 사격 조준 (이동/사격 필드가 겹쳐도 명확)
+  if (raycaster.intersectObject(player.hitbox).length) {
+    if (player.reloadLeft > 0) { setHint(`재장전 중 — ${player.reloadLeft}턴 남음`); return; }
+    fireGesture = { cell: null, shot: null };
+    controls.enabled = false;
+    refreshPlanUI(true); // 사격 필드 강조
+    return;
+  }
+  // 2) 이동 필드 셀 = 기동 고스트 (드래그로 차체 방향)
   const cell = raycastGroundCell(raycaster);
   if (!cell) return;
   const info = currentMoveCells.get(cellKey(cell.gx, cell.gz));
   if (!info) return;
-  // 이동 고스트 시작: 터치한 칸에 고스트, 드래그로 차체 방향 지정
   ghostGesture = { cell, info, facing: dirAngle(info.endDir) };
   controls.enabled = false;
   showGhost(cell, ghostGesture.facing);
 });
 
-renderer.domElement.addEventListener('pointerup', async (e) => {
-  if (ghostGesture) {
-    // 고스트 확정 → 이동 오더 예약 (턴은 ▶ 진행을 눌러야 실행)
-    const g = ghostGesture;
-    ghostGesture = null;
-    controls.enabled = true;
-    downPos = null;
-    setMoveOrder(g.cell, g.info, g.facing);
-    return;
-  }
-  if (!downPos) return;
-  const moved = Math.hypot(e.clientX - downPos.x, e.clientY - downPos.y);
-  downPos = null;
-  if (moved > 7 || busy) return;
-  if (phase !== 'plan') return;
-  setPointer(e);
-
-  // 공격은 오직 🎯 포격 모드에서만 — 이동/공격 혼동 방지
-  if (planMode !== 'fire') {
+renderer.domElement.addEventListener('pointermove', (e) => {
+  if (fireGesture) {
+    setPointer(e);
+    // 적 우선, 아니면 지면 셀
+    let cell = null;
     const enemyHit = raycaster.intersectObjects(
       enemies.filter((en) => en.alive).map((en) => en.hitbox)
     )[0];
-    if (enemyHit) setHint('공격은 🎯 포격 모드에서');
+    if (enemyHit) {
+      const u = enemyHit.object.userData.unit;
+      cell = { gx: u.gx, gz: u.gz };
+    } else {
+      const bridgeHit = bridge.alive && bridge.hit ? raycaster.intersectObject(bridge.hit)[0] : null;
+      if (bridgeHit) cell = worldToCell(bridgeHit.point);
+      else {
+        const ground = raycaster.intersectObject(terrainMesh, false)[0];
+        if (ground) cell = worldToCell(ground.point);
+      }
+    }
+    if (cell) {
+      const f = currentFireCells.get(cellKey(cell.gx, cell.gz));
+      fireGesture.cell = f ? cell : null;
+      fireGesture.shot = f ? f.shot : null;
+      const aimP = aimPointOf(fireGesture.cell ?? cell);
+      updateAimLine(aimP, !!f);
+      hoverAim = aimP;
+    }
     return;
   }
-  if (player.reloadLeft > 0) { setHint(`재장전 중 — ${player.reloadLeft}턴 남음`); return; }
-
-  // 1) 적 클릭 = 그 적의 현재 칸을 예측 사격
-  const enemyHits = raycaster.intersectObjects(
-    enemies.filter((en) => en.alive).map((en) => en.hitbox)
-  );
-  if (enemyHits.length) {
-    const unit = enemyHits[0].object.userData.unit;
-    const f = currentFireCells.get(cellKey(unit.gx, unit.gz));
-    if (!f) { setHint(computeShot(player, { unit }).reason ?? '포격 불가'); return; }
-    setFireOrder({ gx: unit.gx, gz: unit.gz }, f.shot);
-    return;
-  }
-  // 2) 프랍 클릭 = 포격
-  const propHits = raycaster.intersectObjects([...props.values()].map((p) => p.hit));
-  if (propHits.length) {
-    const prop = propHits[0].object.userData.prop;
-    const f = currentFireCells.get(cellKey(prop.gx, prop.gz));
-    if (!f) { setHint(computeShot(player, { prop }).reason ?? '포격 불가'); return; }
-    setFireOrder({ gx: prop.gx, gz: prop.gz }, f.shot);
-    return;
-  }
-  // 3) 지면 = 예측 포격
-  const cell = raycastGroundCell(raycaster);
-  if (!cell) return;
-  const f = currentFireCells.get(cellKey(cell.gx, cell.gz));
-  if (!f) { setHint(computeShot(player, cell).reason ?? '포격 불가'); return; }
-  setFireOrder({ gx: cell.gx, gz: cell.gz }, f.shot);
-});
-
-renderer.domElement.addEventListener('pointercancel', () => {
-  if (ghostGesture) {
-    const g = ghostGesture;
-    ghostGesture = null;
-    controls.enabled = true;
-    setMoveOrder(g.cell, g.info, g.facing);
-  }
-  downPos = null;
-});
-
-// ---------------------------------------------------------------------------
-// 포인터 이동: 고스트 드래그 중이면 차체 방향 지정,
-// 포격 모드에서는 호버 조준 프리뷰 (포탑/포신이 미리 따라 움직임)
-// ---------------------------------------------------------------------------
-let hoverAim = null;
-let lastHoverCheck = 0;
-renderer.domElement.addEventListener('pointermove', (e) => {
   if (ghostGesture) {
     setPointer(e);
     const hit = raycaster.intersectObject(terrainMesh, false)[0];
@@ -2745,23 +2696,55 @@ renderer.domElement.addEventListener('pointermove', (e) => {
     }
     return;
   }
-  if (phase !== 'plan' || busy || planMode !== 'fire') { hoverAim = null; return; }
-  const now = performance.now();
-  if (now - lastHoverCheck < 60) return;
-  lastHoverCheck = now;
+  hoverAim = null;
+});
+
+renderer.domElement.addEventListener('pointerup', async (e) => {
+  if (fireGesture) {
+    const g = fireGesture;
+    fireGesture = null;
+    controls.enabled = true;
+    aimLine.visible = false;
+    hoverAim = null;
+    downPos = null;
+    if (g.cell && g.shot) {
+      await submitPlan({ type: 'fire', cell: g.cell, shot: g.shot });
+    } else {
+      setHint('조준 취소 — 빨간 필드 안에서 놓아야 발사');
+      refreshPlanUI(false);
+    }
+    return;
+  }
+  if (ghostGesture) {
+    const g = ghostGesture;
+    ghostGesture = null;
+    controls.enabled = true;
+    downPos = null;
+    await submitPlan({ type: 'move', path: g.info.path.slice(), facing: g.facing });
+    return;
+  }
+  if (!downPos) return;
+  const moved = Math.hypot(e.clientX - downPos.x, e.clientY - downPos.y);
+  downPos = null;
+  if (moved > 7 || busy || phase !== 'plan') return;
   setPointer(e);
+  // 탭 안내: 적을 탭하면 조작법 힌트
   const enemyHit = raycaster.intersectObjects(
     enemies.filter((en) => en.alive).map((en) => en.hitbox)
   )[0];
-  if (enemyHit) {
-    hoverAim = aimPointOf({ unit: enemyHit.object.userData.unit });
-    return;
-  }
-  const ground = raycaster.intersectObject(terrainMesh, false)[0];
-  hoverAim = ground ? aimPointOf(worldToCell(ground.point)) : null;
+  if (enemyHit) setHint('사격: 내 전차에서 목표까지 드래그');
 });
+
+renderer.domElement.addEventListener('pointercancel', () => {
+  if (fireGesture) { fireGesture = null; aimLine.visible = false; refreshPlanUI(false); }
+  if (ghostGesture) { ghostGesture = null; ghost.visible = false; }
+  controls.enabled = true;
+  downPos = null;
+  hoverAim = null;
+});
+
 function updateAimPreview(dt) {
-  if (!player.alive || phase !== 'plan' || busy || planMode !== 'fire' || !hoverAim) return;
+  if (!player.alive || phase !== 'plan' || busy || !fireGesture || !hoverAim) return;
   const k = 1 - Math.exp(-dt * 9);
   const aim = hoverAim;
   const targetYaw = Math.atan2(aim.x - player.group.position.x, aim.z - player.group.position.z);
@@ -2802,7 +2785,12 @@ function animate(now) {
   const pulse = 1 + Math.sin(now * 0.006) * 0.08;
   for (const ring of targetRings) ring.scale.setScalar(pulse);
   if (ghost.visible) ghostMat.opacity = 0.32 + Math.sin(now * 0.005) * 0.1;
-  if (fireMarker.visible) fireMarker.scale.setScalar(pulse);
+  // 조준 스택 링 (허탕 경계로 얻은 +15%)
+  aimRing.visible = phase === 'plan' && player.alive && player.aimStack > 0;
+  if (aimRing.visible) {
+    aimRing.position.set(player.group.position.x, player.group.position.y + 0.12, player.group.position.z);
+    aimRing.rotation.z = now * 0.001;
+  }
   // 조준 안정(정지 사격 보너스) 링
   haltRing.visible = phase === 'plan' && player.alive && !player.movedLastTurn && player.reloadLeft === 0;
   if (haltRing.visible) {
@@ -2833,15 +2821,12 @@ window.__puratank = {
   hullDown: () => [...hullDownCells],
   get state() {
     return {
-      turnNo, phase, busy, planMode,
+      turnNo, phase, busy,
       reload: player.reloadLeft,
-      orders: {
-        move: playerOrders.move ? { ...playerOrders.move.cell, facing: +playerOrders.move.facing.toFixed(2) } : null,
-        fire: playerOrders.fire ? { ...playerOrders.fire.cell } : null,
-        order: playerOrders.order,
-      },
+      aimStack: player.aimStack,
+      movedLastTurn: player.movedLastTurn,
       player: { gx: player.gx, gz: player.gz, hp: player.hp, alive: player.alive, hullLv: player.hullLv, driverLv: player.driverLv },
-      enemies: enemies.map((e) => ({ gx: e.gx, gz: e.gz, hp: e.hp, alive: e.alive, hullLv: e.hullLv, driverLv: e.driverLv })),
+      enemies: enemies.map((e) => ({ gx: e.gx, gz: e.gz, hp: e.hp, alive: e.alive, hullLv: e.hullLv, driverLv: e.driverLv, reload: e.reloadLeft })),
       props: props.size,
     };
   },
@@ -2849,38 +2834,26 @@ window.__puratank = {
   terrainAt: (gx, gz) => TERRAIN_NAME[terrainAt(gx, gz)],
   reachable: () => [...reachableCells(player).keys()],
   fireCells: () => [...computeFireCells(player).keys()],
-  setPlanMode,
-  setMove(gx, gz, facing = null) {
+  planMoveTo(gx, gz, facing = null) {
     const info = currentMoveCells.get(cellKey(gx, gz));
     if (!info || phase !== 'plan' || busy) return false;
-    setMoveOrder({ gx, gz }, info, facing ?? dirAngle(info.endDir));
-    return true;
-  },
-  setFire(gx, gz) {
-    const f = currentFireCells.get(cellKey(gx, gz));
-    if (!f || phase !== 'plan' || busy) return false;
-    setFireOrder({ gx, gz }, f.shot);
-    return true;
-  },
-  go() {
-    if (phase !== 'plan' || busy) return false;
-    goTurn();
-    return true;
-  },
-  planMoveTo(gx, gz, facing = null) {
-    if (!this.setMove(gx, gz, facing)) return false;
-    goTurn();
+    submitPlan({ type: 'move', path: info.path.slice(), facing: facing ?? dirAngle(info.endDir) });
     return true;
   },
   planFireAt(gx, gz) {
-    if (!this.setFire(gx, gz)) return false;
-    goTurn();
+    const f = currentFireCells.get(cellKey(gx, gz));
+    if (!f || phase !== 'plan' || busy) return false;
+    submitPlan({ type: 'fire', cell: { gx, gz }, shot: f.shot });
+    return true;
+  },
+  planOverwatch() {
+    if (phase !== 'plan' || busy || player.reloadLeft > 0) return false;
+    submitPlan({ type: 'overwatch' });
     return true;
   },
   planWait() {
     if (phase !== 'plan' || busy) return false;
-    playerOrders = { move: null, fire: null, order: null };
-    goTurn();
+    submitPlan({ type: 'wait' });
     return true;
   },
   shotAt: (gx, gz) => {
