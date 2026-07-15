@@ -830,33 +830,40 @@ function placeProp(type, gx, gz) {
 // 드로콜 각 1회. 배치는 연속 지형 가중치를 따라 풀밭/흙 위에만.
 // ---------------------------------------------------------------------------
 {
-  // 풀잎 실루엣 텍스처 (흰색으로 그려 instanceColor로 틴트)
+  // 스태틱 그래스 텍스처: 가는 잎 다발 + 밑동 어둡고 끝 밝은 세로 그라데이션.
+  // 흰색으로 그려 instanceColor로 톤을 입히면 밑동 그늘/끝 하이라이트가 자연스럽다.
   const grassTexCanvas = document.createElement('canvas');
   grassTexCanvas.width = grassTexCanvas.height = 64;
   {
     const ctx = grassTexCanvas.getContext('2d');
     ctx.clearRect(0, 0, 64, 64);
-    ctx.fillStyle = '#fff';
-    for (let i = 0; i < 9; i++) {
-      const bx = 6 + rng() * 52;
-      const lean = (rng() - 0.5) * 14;
-      const hgt = 30 + rng() * 30;
-      const wdt = 2.2 + rng() * 2.4;
+    for (let i = 0; i < 15; i++) {
+      const bx = 4 + rng() * 56;
+      const lean = (rng() - 0.5) * 20;
+      const hgt = 34 + rng() * 28;
+      const wdt = 1.2 + rng() * 1.8;
+      const tipY = 64 - hgt;
+      // 밑동(그늘) → 끝(밝음) 세로 그라데이션
+      const grad = ctx.createLinearGradient(0, 64, 0, tipY);
+      grad.addColorStop(0, 'rgba(150,150,150,1)');
+      grad.addColorStop(0.5, 'rgba(220,220,220,1)');
+      grad.addColorStop(1, 'rgba(255,255,255,1)');
+      ctx.fillStyle = grad;
       ctx.beginPath();
       ctx.moveTo(bx - wdt, 64);
-      ctx.quadraticCurveTo(bx - wdt * 0.4 + lean * 0.4, 64 - hgt * 0.6, bx + lean, 64 - hgt);
-      ctx.quadraticCurveTo(bx + wdt * 0.5 + lean * 0.4, 64 - hgt * 0.6, bx + wdt, 64);
+      ctx.quadraticCurveTo(bx - wdt * 0.35 + lean * 0.4, 64 - hgt * 0.55, bx + lean, tipY);
+      ctx.quadraticCurveTo(bx + wdt * 0.45 + lean * 0.4, 64 - hgt * 0.55, bx + wdt, 64);
       ctx.fill();
     }
   }
   const grassTex = new THREE.CanvasTexture(grassTexCanvas);
 
-  // 교차 쿼드 지오메트리 (2장 십자)
+  // 교차 쿼드 지오메트리 (3장 별 배치로 어느 각도에서도 두툼하게)
   const gPos = [], gUv = [], gIdx = [];
-  for (const rot of [0, Math.PI / 2]) {
+  for (const rot of [0, Math.PI / 3, (Math.PI * 2) / 3]) {
     const c = Math.cos(rot), sn = Math.sin(rot);
     const b = gPos.length / 3;
-    const w = 0.62, h = 0.55;
+    const w = 0.66, h = 0.6;
     gPos.push(-w / 2 * c, 0, -w / 2 * sn,  w / 2 * c, 0, w / 2 * sn,  w / 2 * c, h, w / 2 * sn,  -w / 2 * c, h, -w / 2 * sn);
     gUv.push(0, 0, 1, 0, 1, 1, 0, 1);
     gIdx.push(b, b + 1, b + 2, b, b + 2, b + 3);
@@ -867,10 +874,31 @@ function placeProp(type, gx, gz) {
   grassGeo.setIndex(gIdx);
   grassGeo.computeVertexNormals();
 
-  const GRASS_N = 3200;
+  // 디오라마 스태틱 그래스 팔레트: 저주파 노이즈로 마른/젖은 무리가 뭉쳐 분포.
+  // 톤 6종을 dryness(0=싱싱 초록 … 1=마른 밀짚/고사)로 가중 선택.
+  const patchNoise = makeNoise(10.5); // 저주파: 마른/젖은 무리 크기
+  const grassTone = (dry, out) => {
+    const r = rng();
+    if (dry < 0.34) {
+      // 싱싱한 초록 ~ 짙은 올리브
+      out.setHSL(0.24 + rng() * 0.06, 0.34 + rng() * 0.22, 0.26 + rng() * 0.14);
+    } else if (dry < 0.62) {
+      // 황록 전이대
+      out.setHSL(0.17 + rng() * 0.06, 0.4 + rng() * 0.18, 0.36 + rng() * 0.13);
+    } else if (r < 0.78) {
+      // 마른 밀짚/누런 풀
+      out.setHSL(0.12 + rng() * 0.04, 0.38 + rng() * 0.2, 0.44 + rng() * 0.14);
+    } else {
+      // 고사한 갈색 풀
+      out.setHSL(0.07 + rng() * 0.03, 0.32 + rng() * 0.14, 0.3 + rng() * 0.1);
+    }
+    return out;
+  };
+
+  const GRASS_N = 6400;
   const grassMesh = new THREE.InstancedMesh(
     grassGeo,
-    new THREE.MeshStandardMaterial({ map: grassTex, alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.95 }),
+    new THREE.MeshStandardMaterial({ map: grassTex, alphaTest: 0.42, side: THREE.DoubleSide, roughness: 0.96 }),
     GRASS_N
   );
   grassMesh.receiveShadow = true;
@@ -885,17 +913,26 @@ function placeProp(type, gx, gz) {
     const wx = (rng() - 0.5) * (GRID * TILE - 1.2);
     const wz = (rng() - 0.5) * (GRID * TILE - 1.2);
     const h = sampleHeight(wx, wz);
-    if (h < WATER_Y + 0.07) continue;
+    if (h < WATER_Y + 0.06) continue;
     const w = surfaceWeights(wx, wz, h);
-    const grassW = (1 - w.dirt) * (1 - w.sand) * (1 - w.mud * 0.7) * (1 - w.rock) * (1 - w.bed);
-    if (rng() > grassW * grassW) continue; // 풀밭일수록 촘촘히
-    gq.setFromAxisAngle(up, rng() * Math.PI);
-    gs.setScalar(0.7 + rng() * 0.9);
-    gv.set(wx, h - 0.02, wz);
+    // 풀밭일수록 촘촘, 흙/모래에도 드문드문 잡초가 돋는다
+    const grassW = (1 - w.sand * 0.85) * (1 - w.rock) * (1 - w.bed);
+    const lush = (1 - w.dirt) * (1 - w.mud * 0.6);
+    const chance = grassW * (0.18 + lush * lush * 0.82);
+    if (rng() > chance) continue;
+    gq.setFromAxisAngle(up, rng() * Math.PI * 2);
+    // 키 변주: 대부분 짧고, 12%는 크게 웃자란 다발
+    const tall = rng() < 0.12;
+    const sy = tall ? 1.5 + rng() * 0.8 : 0.55 + rng() * 0.8;
+    const sxz = 0.7 + rng() * 0.7;
+    gs.set(sxz, sy, sxz);
+    gv.set(wx, h - 0.03, wz);
     gm.compose(gv, gq, gs);
     grassMesh.setMatrixAt(placed, gm);
-    if (rng() < 0.38) gCol.setHSL(0.14 + rng() * 0.04, 0.42 + rng() * 0.15, 0.4 + rng() * 0.12); // 마른 풀
-    else gCol.setHSL(0.23 + rng() * 0.07, 0.45 + rng() * 0.2, 0.3 + rng() * 0.13);
+    // dryness: 저주파 패치 + 흙 근처일수록 마른톤 + 약간의 개체 변주
+    const dry = THREE.MathUtils.clamp(
+      patchNoise(wx + HALF, wz + HALF) * 1.15 + w.dirt * 0.4 + (rng() - 0.5) * 0.3 - 0.1, 0, 1);
+    grassTone(dry, gCol);
     grassMesh.setColorAt(placed, gCol);
     placed++;
   }
@@ -904,6 +941,71 @@ function placeProp(type, gx, gz) {
   if (grassMesh.instanceColor) grassMesh.instanceColor.needsUpdate = true;
   noAO(grassMesh);
   scene.add(grassMesh);
+
+  // 들꽃: 풀밭에 노랑/흰 야생화 무리 — 십자 쿼드에 작은 꽃송이 텍스처
+  const flowerCanvas = document.createElement('canvas');
+  flowerCanvas.width = flowerCanvas.height = 48;
+  {
+    const ctx = flowerCanvas.getContext('2d');
+    ctx.clearRect(0, 0, 48, 48);
+    // 가는 줄기 몇 개
+    ctx.strokeStyle = 'rgba(120,160,90,0.9)';
+    ctx.lineWidth = 1.4;
+    const heads = [];
+    for (let i = 0; i < 5; i++) {
+      const bx = 10 + rng() * 28, top = 6 + rng() * 16;
+      ctx.beginPath(); ctx.moveTo(bx, 48); ctx.lineTo(bx + (rng() - 0.5) * 6, top); ctx.stroke();
+      heads.push([bx + (rng() - 0.5) * 6, top]);
+    }
+    for (const [hx, hy] of heads) {
+      ctx.fillStyle = '#fff';
+      ctx.beginPath(); ctx.arc(hx, hy, 2.4 + rng() * 1.6, 0, Math.PI * 2); ctx.fill();
+    }
+  }
+  const flowerTex = new THREE.CanvasTexture(flowerCanvas);
+  const flPos = [], flUv = [], flIdx = [];
+  for (const rot of [0, Math.PI / 2]) {
+    const c = Math.cos(rot), sn = Math.sin(rot);
+    const b = flPos.length / 3; const w = 0.5, hh = 0.5;
+    flPos.push(-w / 2 * c, 0, -w / 2 * sn,  w / 2 * c, 0, w / 2 * sn,  w / 2 * c, hh, w / 2 * sn,  -w / 2 * c, hh, -w / 2 * sn);
+    flUv.push(0, 0, 1, 0, 1, 1, 0, 1);
+    flIdx.push(b, b + 1, b + 2, b, b + 2, b + 3);
+  }
+  const flowerGeo = new THREE.BufferGeometry();
+  flowerGeo.setAttribute('position', new THREE.Float32BufferAttribute(flPos, 3));
+  flowerGeo.setAttribute('uv', new THREE.Float32BufferAttribute(flUv, 2));
+  flowerGeo.setIndex(flIdx);
+  flowerGeo.computeVertexNormals();
+  const FLOWER_N = 520;
+  const flowerMesh = new THREE.InstancedMesh(
+    flowerGeo,
+    new THREE.MeshStandardMaterial({ map: flowerTex, alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.9 }),
+    FLOWER_N
+  );
+  placed = 0; guard = 0;
+  const flowerCols = [0xf4d94a, 0xf6e58d, 0xffffff, 0xe8ecef, 0xe6b8d6];
+  while (placed < FLOWER_N && guard++ < FLOWER_N * 20) {
+    const wx = (rng() - 0.5) * (GRID * TILE - 2);
+    const wz = (rng() - 0.5) * (GRID * TILE - 2);
+    const h = sampleHeight(wx, wz);
+    if (h < WATER_Y + 0.1) continue;
+    const w = surfaceWeights(wx, wz, h);
+    const grassW = (1 - w.dirt) * (1 - w.sand) * (1 - w.mud) * (1 - w.rock) * (1 - w.bed);
+    if (rng() > grassW * grassW * 0.7) continue;
+    gq.setFromAxisAngle(up, rng() * Math.PI);
+    gs.setScalar(0.7 + rng() * 0.7);
+    gv.set(wx, h - 0.02, wz);
+    gm.compose(gv, gq, gs);
+    flowerMesh.setMatrixAt(placed, gm);
+    gCol.set(flowerCols[Math.floor(rng() * flowerCols.length)]);
+    flowerMesh.setColorAt(placed, gCol);
+    placed++;
+  }
+  flowerMesh.count = placed;
+  flowerMesh.instanceMatrix.needsUpdate = true;
+  if (flowerMesh.instanceColor) flowerMesh.instanceColor.needsUpdate = true;
+  noAO(flowerMesh);
+  scene.add(flowerMesh);
 
   // 자갈: 흙/진흙/바위 지대에 낮은 다면체
   const PEB_N = 420;
