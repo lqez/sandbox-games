@@ -21,6 +21,7 @@ const TILE = 2;             // 한 칸의 월드 크기
 const VRES = 4;             // 타일당 하이트필드 분할 수
 const WATER_Y = -0.12;      // 수면 높이
 const MAX_CLIMB = 1.0;      // 궤도로 오를 수 있는 최대 단차
+const FORD_DEPTH = 0.22;    // 도하 가능한 최대 수심 — 더 깊은 물은 진입 불가
 const PITCH_MIN = -14;      // 포신 내림각 한계(도)
 const PITCH_MAX = 20;       // 포신 올림각 한계(도)
 
@@ -301,9 +302,14 @@ function fieldHeight(wx, wz) {
     const d = Math.hypot(wx - s.x, wz - s.z);
     if (d < 5) h = THREE.MathUtils.lerp(s.h, h, smooth01((d - 1.5) / 3.5));
   }
-  // 하천 카빙 (부드러운 강바닥)
+  // 하천 카빙 (부드러운 강바닥) — 구간별 깊이 변화로 여울(얕은 도하 지점) 생성
   const dr = distToRiver(wx, wz);
-  if (dr < 5.5) h = THREE.MathUtils.lerp(-0.45, h, smooth01((dr - 1.3) / 4.2));
+  if (dr < 5.5) {
+    const gzf = wz / TILE + (GRID - 1) / 2;
+    const ford = smooth01((Math.sin(gzf * 0.55 + riverPhase * 2.3) - 0.38) / 0.3);
+    const bed = -0.52 + ford * 0.27; // 여울 -0.25(수심 0.13) ↔ 깊은 곳 -0.52(수심 0.4)
+    h = THREE.MathUtils.lerp(bed, h, smooth01((dr - 1.3) / 4.2));
+  }
   return h;
 }
 
@@ -484,8 +490,8 @@ function makeWaterMaps() {
   const ac = alphaC.getContext('2d');
   const cImg = cc.createImageData(N, N);
   const aImg = ac.createImageData(N, N);
-  const shallow = { r: 150, g: 214, b: 216 };
-  const deep = { r: 30, g: 108, b: 158 };
+  const shallow = { r: 158, g: 218, b: 214 };
+  const deep = { r: 16, g: 78, b: 132 };
   for (let py = 0; py < N; py++) {
     for (let px = 0; px < N; px++) {
       // PlaneGeometry.rotateX(-PI/2) 기준: u→+x, 캔버스 행(py)→+z
@@ -493,7 +499,7 @@ function makeWaterMaps() {
       const wz = (py / (N - 1) - 0.5) * GRID * TILE;
       const depth = WATER_Y - sampleHeight(wx, wz);
       const i = (py * N + px) * 4;
-      const t = smooth01(depth / 0.55);
+      const t = smooth01(depth / 0.38); // 수심 대비: 여울(~0.13)은 밝고 깊은 곳(~0.4)은 진하게
       let r = shallow.r + (deep.r - shallow.r) * t;
       let g = shallow.g + (deep.g - shallow.g) * t;
       let b = shallow.b + (deep.b - shallow.b) * t;
@@ -504,7 +510,7 @@ function makeWaterMaps() {
       b += (246 - b) * foam;
       cImg.data[i] = r; cImg.data[i + 1] = g; cImg.data[i + 2] = b; cImg.data[i + 3] = 255;
       // 알파(green 채널): 물가에서 0으로 부드럽게 — 지형과 만나는 면이 자연스럽다
-      const a = Math.min(0.74, smooth01(depth / 0.35) * 0.5 + smooth01(depth / 1.0) * 0.22 + foam * 0.3) * 255;
+      const a = Math.min(0.82, smooth01(depth / 0.14) * 0.26 + smooth01(depth / 0.4) * 0.52 + foam * 0.3) * 255;
       aImg.data[i] = a; aImg.data[i + 1] = a; aImg.data[i + 2] = a; aImg.data[i + 3] = 255;
     }
   }
@@ -916,6 +922,36 @@ function placeProp(type, gx, gz) {
   rockMesh.instanceMatrix.needsUpdate = true;
   if (rockMesh.instanceColor) rockMesh.instanceColor.needsUpdate = true;
   scene.add(rockMesh);
+
+  // 여울 강돌: 도하 가능한 얕은 물에만 배치 — 수심이 얕은 곳이 한눈에 보인다
+  const STONE_N = 150;
+  const stoneMesh = new THREE.InstancedMesh(
+    new THREE.DodecahedronGeometry(0.11, 0),
+    new THREE.MeshStandardMaterial({ roughness: 0.55 }),
+    STONE_N
+  );
+  stoneMesh.receiveShadow = true;
+  placed = 0; guard = 0;
+  while (placed < STONE_N && guard++ < STONE_N * 60) {
+    const wx = (rng() - 0.5) * (GRID * TILE - 1.6);
+    const wz = (rng() - 0.5) * (GRID * TILE - 1.6);
+    const h = sampleHeight(wx, wz);
+    const depth = WATER_Y - h;
+    if (depth < 0.02 || depth > FORD_DEPTH - 0.03) continue;
+    gq.setFromEuler(new THREE.Euler(rng() * Math.PI, rng() * Math.PI, rng() * Math.PI));
+    const sc = 0.7 + rng() * 1.2;
+    gs.set(sc, sc * (0.55 + rng() * 0.3), sc);
+    gv.set(wx, h + 0.05, wz); // 바닥에 얹혀 머리가 수면 위로 살짝 나온다
+    gm.compose(gv, gq, gs);
+    stoneMesh.setMatrixAt(placed, gm);
+    gCol.setHSL(0.09 + rng() * 0.04, 0.1 + rng() * 0.1, 0.34 + rng() * 0.16);
+    stoneMesh.setColorAt(placed, gCol);
+    placed++;
+  }
+  stoneMesh.count = placed;
+  stoneMesh.instanceMatrix.needsUpdate = true;
+  if (stoneMesh.instanceColor) stoneMesh.instanceColor.needsUpdate = true;
+  scene.add(stoneMesh);
 }
 
 // ---------------------------------------------------------------------------
@@ -1093,6 +1129,8 @@ function stepCost(fromX, fromZ, toX, toZ) {
   const prop = props.get(cellKey(toX, toZ));
   if (prop && prop.def.blockMove) return Infinity;
   if (isOccupied(toX, toZ)) return Infinity;
+  // 깊은 물은 도하 불가 — 여울(얕은 구간)로만 강을 건널 수 있다
+  if (terrainAt(toX, toZ) === T.WATER && WATER_Y - heightAt(toX, toZ) > FORD_DEPTH) return Infinity;
   let c = TERRAIN_COST[terrainAt(toX, toZ)];
   if (prop && prop.def.moveExtra) c += prop.def.moveExtra;
   if (dh > 0) c += dh * 1.6;       // 오르막: 단차 비례
