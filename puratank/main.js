@@ -1380,6 +1380,105 @@ const decorMeshes = []; // 풀/꽃/낙엽/잔가지 — 디버그 토글용
   twigMesh.instanceMatrix.needsUpdate = true;
   if (twigMesh.instanceColor) twigMesh.instanceColor.needsUpdate = true;
   scene.add(twigMesh); decorMeshes.push(twigMesh);
+
+  // 물가 갈대: 얕은 물가 띠에 키 큰 갈대 다발 (레퍼런스 강가 리드)
+  const reedTexCanvas = document.createElement('canvas');
+  reedTexCanvas.width = reedTexCanvas.height = 64;
+  {
+    const ctx = reedTexCanvas.getContext('2d');
+    ctx.clearRect(0, 0, 64, 64);
+    for (let i = 0; i < 7; i++) {
+      const bx = 10 + rng() * 44, lean = (rng() - 0.5) * 10, w = 1.6 + rng() * 1.4;
+      const grad = ctx.createLinearGradient(0, 64, 0, 2);
+      grad.addColorStop(0, 'rgba(150,150,150,1)');
+      grad.addColorStop(1, 'rgba(255,255,255,1)');
+      ctx.strokeStyle = grad; ctx.lineWidth = w; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(bx, 64); ctx.lineTo(bx + lean, 3); ctx.stroke();
+      // 이삭(cattail)
+      if (rng() < 0.4) {
+        ctx.fillStyle = 'rgba(200,200,200,1)';
+        ctx.beginPath(); ctx.ellipse(bx + lean, 10, w * 0.9, 6, 0, 0, Math.PI * 2); ctx.fill();
+      }
+    }
+  }
+  const reedTex = new THREE.CanvasTexture(reedTexCanvas);
+  const rdPos = [], rdUv = [], rdIdx = [];
+  for (const rot of [0, Math.PI / 2]) {
+    const c = Math.cos(rot), sn = Math.sin(rot);
+    const b = rdPos.length / 3; const w = 0.5, hh = 1.4;
+    rdPos.push(-w / 2 * c, 0, -w / 2 * sn,  w / 2 * c, 0, w / 2 * sn,  w / 2 * c, hh, w / 2 * sn,  -w / 2 * c, hh, -w / 2 * sn);
+    rdUv.push(0, 0, 1, 0, 1, 1, 0, 1);
+    rdIdx.push(b, b + 1, b + 2, b, b + 2, b + 3);
+  }
+  const reedGeo = new THREE.BufferGeometry();
+  reedGeo.setAttribute('position', new THREE.Float32BufferAttribute(rdPos, 3));
+  reedGeo.setAttribute('uv', new THREE.Float32BufferAttribute(rdUv, 2));
+  reedGeo.setIndex(rdIdx);
+  reedGeo.computeVertexNormals();
+  const REED_N = 700;
+  const reedMesh = new THREE.InstancedMesh(
+    reedGeo,
+    new THREE.MeshStandardMaterial({ map: reedTex, alphaTest: 0.4, side: THREE.DoubleSide, roughness: 0.94 }),
+    REED_N
+  );
+  reedMesh.receiveShadow = true;
+  const reedCols = [0x5a7a3a, 0x6b8540, 0x4e6a30, 0x8a8a44];
+  placed = 0; guard = 0;
+  while (placed < REED_N && guard++ < REED_N * 14) {
+    const wx = (rng() - 0.5) * (GRID * TILE - 1.2);
+    const wz = (rng() - 0.5) * (GRID * TILE - 1.2);
+    const h = sampleHeight(wx, wz);
+    const depth = WATER_Y - h;
+    // 물가 띠: 살짝 잠긴 곳~물가 위 15cm, 바위 지대 제외
+    if (depth > 0.16 || depth < -0.16) continue;
+    const w = surfaceWeights(wx, wz, h);
+    if (w.rock > 0.4) continue;
+    gq.setFromAxisAngle(up, rng() * Math.PI * 2);
+    const sy = 0.7 + rng() * 0.9, sxz = 0.7 + rng() * 0.6;
+    gs.set(sxz, sy, sxz);
+    gv.set(wx, Math.max(h, WATER_Y - 0.02), wz);
+    gm.compose(gv, gq, gs);
+    reedMesh.setMatrixAt(placed, gm);
+    gCol.set(reedCols[Math.floor(rng() * reedCols.length)]);
+    reedMesh.setColorAt(placed, gCol);
+    placed++;
+  }
+  reedMesh.count = placed;
+  reedMesh.instanceMatrix.needsUpdate = true;
+  if (reedMesh.instanceColor) reedMesh.instanceColor.needsUpdate = true;
+  noAO(reedMesh);
+  scene.add(reedMesh); decorMeshes.push(reedMesh);
+
+  // 이끼: 바위/급경사 지대에 낮게 깔린 초록 이끼 패치
+  const MOSS_N = 380;
+  const mossMesh = new THREE.InstancedMesh(
+    new THREE.IcosahedronGeometry(0.16, 0),
+    new THREE.MeshStandardMaterial({ roughness: 0.98 }),
+    MOSS_N
+  );
+  mossMesh.receiveShadow = true;
+  placed = 0; guard = 0;
+  while (placed < MOSS_N && guard++ < MOSS_N * 22) {
+    const wx = (rng() - 0.5) * (GRID * TILE - 1.4);
+    const wz = (rng() - 0.5) * (GRID * TILE - 1.4);
+    const h = sampleHeight(wx, wz);
+    if (h < WATER_Y + 0.05) continue;
+    const w = surfaceWeights(wx, wz, h);
+    if (w.rock < 0.28 || rng() > w.rock * 1.1) continue;
+    gq.setFromEuler(new THREE.Euler(rng() * 0.4, rng() * Math.PI, rng() * 0.4));
+    gs.set(1 + rng() * 1.4, 0.3 + rng() * 0.3, 1 + rng() * 1.4);
+    gv.set(wx, h + 0.04, wz);
+    gm.compose(gv, gq, gs);
+    mossMesh.setMatrixAt(placed, gm);
+    gCol.setHSL(0.26 + rng() * 0.06, 0.4 + rng() * 0.18, 0.24 + rng() * 0.1);
+    mossMesh.setColorAt(placed, gCol);
+    placed++;
+  }
+  mossMesh.count = placed;
+  mossMesh.instanceMatrix.needsUpdate = true;
+  if (mossMesh.instanceColor) mossMesh.instanceColor.needsUpdate = true;
+  noAO(mossMesh);
+  scene.add(mossMesh); decorMeshes.push(mossMesh);
 }
 
 // ---------------------------------------------------------------------------
