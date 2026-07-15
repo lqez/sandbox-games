@@ -2552,14 +2552,56 @@ aimRing.rotation.x = -Math.PI / 2;
 aimRing.visible = false;
 scene.add(aimRing);
 
-// 조준 UI: 탄도 곡선(직사=낮은 직선, 곡사=높은 포물선) + 펄스 레티클
-const trajLine = new THREE.Line(
-  new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(new Float32Array(33 * 3), 3)),
-  new THREE.LineBasicMaterial({ color: 0xff4433, transparent: true, opacity: 0.95, depthTest: false })
-);
-trajLine.renderOrder = 15;
-trajLine.visible = false;
-scene.add(trajLine);
+// 조준 UI: 탄도 튜브(직사=낮은 직선, 곡사=높은 포물선) + 펄스 레티클.
+// 셰브론(화살표) 텍스처가 탄착점 방향으로 흘러 눈에 잘 띈다
+function makeChevronTex() {
+  const c = document.createElement('canvas');
+  c.width = 64; c.height = 16;
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0, 0, 64, 16);
+  ctx.fillStyle = '#fff';
+  ctx.beginPath();
+  ctx.moveTo(10, 1); ctx.lineTo(34, 8); ctx.lineTo(10, 15);
+  ctx.lineTo(20, 8); ctx.closePath();
+  ctx.fill();
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  return tex;
+}
+const trajTex = makeChevronTex();
+const trajMat = new THREE.MeshBasicMaterial({
+  color: 0xff4433, map: trajTex, transparent: true, opacity: 0.95,
+  blending: THREE.AdditiveBlending, depthTest: false, side: THREE.DoubleSide,
+});
+const trajGlowMat = new THREE.MeshBasicMaterial({
+  color: 0xff4433, transparent: true, opacity: 0.22,
+  blending: THREE.AdditiveBlending, depthTest: false,
+});
+let trajTube = null;
+let trajGlow = null;
+function setTrajCurve(points, color) {
+  if (trajTube) {
+    scene.remove(trajTube); trajTube.geometry.dispose();
+    scene.remove(trajGlow); trajGlow.geometry.dispose();
+  }
+  const curve = new THREE.CatmullRomCurve3(points);
+  const len = points[0].distanceTo(points[points.length - 1]);
+  trajTex.repeat.set(Math.max(4, Math.round(len * 0.9)), 1);
+  trajTube = new THREE.Mesh(new THREE.TubeGeometry(curve, 48, 0.13, 8, false), trajMat);
+  trajGlow = new THREE.Mesh(new THREE.TubeGeometry(curve, 48, 0.3, 8, false), trajGlowMat);
+  trajTube.renderOrder = 15;
+  trajGlow.renderOrder = 14;
+  trajMat.color.set(color);
+  trajGlowMat.color.set(color);
+  scene.add(trajGlow);
+  scene.add(trajTube);
+}
+function hideTrajCurve() {
+  if (trajTube) {
+    scene.remove(trajTube); trajTube.geometry.dispose(); trajTube = null;
+    scene.remove(trajGlow); trajGlow.geometry.dispose(); trajGlow = null;
+  }
+}
 const bowReticle = new THREE.Mesh(
   new THREE.RingGeometry(0.55, 0.78, 26),
   new THREE.MeshBasicMaterial({ color: 0xff4433, transparent: true, opacity: 0.9, side: THREE.DoubleSide, depthWrite: false })
@@ -2576,26 +2618,23 @@ function updateBowUI(aimPoint, shot) {
   const dist = from.distanceTo(to);
   const mid = from.clone().lerp(to, 0.5);
   mid.y = Math.max(from.y, to.y) + (lob ? 7 + dist * 0.5 : 0.5 + dist * 0.04);
-  const tp = trajLine.geometry.attributes.position;
+  const pts = [];
   const a = new THREE.Vector3();
   const b = new THREE.Vector3();
-  for (let i = 0; i <= 32; i++) {
-    const e = i / 32;
+  for (let i = 0; i <= 24; i++) {
+    const e = i / 24;
     a.lerpVectors(from, mid, e);
     b.lerpVectors(mid, to, e);
-    a.lerp(b, e);
-    tp.setXYZ(i, a.x, a.y, a.z);
+    pts.push(a.clone().lerp(b, e));
   }
-  tp.needsUpdate = true;
   const col = !valid ? 0x8b95a8 : lob ? 0xff9430 : 0xff4433;
-  trajLine.material.color.set(col);
-  trajLine.visible = true;
+  setTrajCurve(pts, col);
   bowReticle.position.set(to.x, groundY(to.x, to.z) + 0.12, to.z);
   bowReticle.material.color.set(col);
   bowReticle.visible = true;
 }
 function hideBowUI() {
-  trajLine.visible = false;
+  hideTrajCurve();
   bowReticle.visible = false;
 }
 
@@ -2836,24 +2875,38 @@ async function resolveTurn() {
   for (const u of units) {
     u._track = null;
     if (!u.alive || !u.hasTurret) continue;
-    if (u.plan?.type === 'fire') u._track = { point: aimPointOf({ gx: u.plan.cell.gx, gz: u.plan.cell.gz }) };
-    else if (!u.isPlayer) u._track = { unit: player };
-    else {
-      const near = enemies.filter((e) => e.alive).sort((a, b) =>
-        a.group.position.distanceToSquared(player.group.position) -
-        b.group.position.distanceToSquared(player.group.position))[0];
-      if (near) u._track = { unit: near };
+    if (u.plan?.type === 'fire') {
+      u._track = { point: aimPointOf({ gx: u.plan.cell.gx, gz: u.plan.cell.gz }) };
+      continue;
     }
+    const foes = (u.isPlayer ? enemies : [player]).filter((e) => e.alive);
+    // 경계 중이면 이동 예정인 상대를 우선 추적 (스냅 정렬을 위해)
+    const movers2 = foes.filter((e) => e.plan?.type === 'move');
+    const pool = u.plan?.type === 'overwatch' && movers2.length ? movers2 : foes;
+    const near = pool.sort((a, b) =>
+      a.group.position.distanceToSquared(u.group.position) -
+      b.group.position.distanceToSquared(u.group.position))[0];
+    if (near) u._track = { unit: near };
   }
   // A) 경계망 구성: 이동 스텝마다 상대편 경계자의 사선을 체크,
   //    걸리면 이동 중 "실시간" 스냅 사격 (경계자당 1회, 스냅 페널티)
   const overwatchers = units.filter((u) => u.alive && u.plan?.type === 'overwatch' && u.reloadLeft <= 0);
   for (const ow of overwatchers) ow._snapped = false;
   const snapShots = [];
+  const SNAP_ARC = THREE.MathUtils.degToRad(5); // 현재 포 방향 ±5° 안에 들어와야 발사
   const onStep = (mover) => {
     for (const ow of overwatchers) {
       if (ow._snapped || !ow.alive || !mover.alive) continue;
       if (ow.isPlayer === mover.isPlayer) continue;
+      // 포가 지금 실제로 향한 방향(포탑/고정포 요) 기준 정렬 검사 —
+      // 포탑이 추적으로 목표를 물어야 스냅이 나간다
+      const gunYaw = ow.group.rotation.y +
+        (ow.hasTurret ? ow.turret.rotation.y : (ow.cannon?.rotation.y ?? 0));
+      const bearing = Math.atan2(
+        mover.group.position.x - ow.group.position.x,
+        mover.group.position.z - ow.group.position.z
+      );
+      if (Math.abs(normAngle(bearing - gunYaw)) > SNAP_ARC) continue;
       const shot = computeShot(ow, { unit: mover });
       if (!shot.ok) continue;
       ow._snapped = true;
@@ -3106,6 +3159,8 @@ function animate(now) {
   const pulse = 1 + Math.sin(now * 0.006) * 0.08;
   for (const ring of targetRings) ring.scale.setScalar(pulse);
   if (ghost.visible) ghostMat.opacity = 0.32 + Math.sin(now * 0.005) * 0.1;
+  // 탄도 튜브의 셰브론이 탄착점 방향으로 흐른다
+  if (trajTube) trajTex.offset.x = -((now * 0.0016) % 1);
   // 펄스 조준: 레티클이 랜덤 주기로 탄착점을 향해 크고 작아진다
   if (fireGesture && fireGesture.cell) {
     let el = now - fireGesture.pulseT0;
