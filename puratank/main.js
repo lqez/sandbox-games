@@ -554,8 +554,10 @@ function makeWaterMaps() {
   const ac = alphaC.getContext('2d');
   const cImg = cc.createImageData(N, N);
   const aImg = ac.createImageData(N, N);
-  const shallow = { r: 158, g: 218, b: 214 };
-  const deep = { r: 16, g: 78, b: 132 };
+  // 자연 하천/못 톤: 여울은 탁한 청록, 깊은 곳은 짙은 청록(보라빛 배제)
+  const shallow = { r: 130, g: 182, b: 160 };
+  const mid = { r: 60, g: 124, b: 120 };
+  const deep = { r: 34, g: 82, b: 84 };
   for (let py = 0; py < N; py++) {
     for (let px = 0; px < N; px++) {
       // PlaneGeometry.rotateX(-PI/2) 기준: u→+x, 캔버스 행(py)→+z
@@ -563,18 +565,32 @@ function makeWaterMaps() {
       const wz = (py / (N - 1) - 0.5) * GRID * TILE;
       const depth = WATER_Y - sampleHeight(wx, wz);
       const i = (py * N + px) * 4;
-      const t = smooth01(depth / 0.38); // 수심 대비: 여울(~0.13)은 밝고 깊은 곳(~0.4)은 진하게
-      let r = shallow.r + (deep.r - shallow.r) * t;
-      let g = shallow.g + (deep.g - shallow.g) * t;
-      let b = shallow.b + (deep.b - shallow.b) * t;
+      const t = smooth01(depth / 0.4);
+      // 2구간 보간: shallow→mid→deep (청록 유지)
+      let r, g, b;
+      if (t < 0.5) {
+        const k = t / 0.5;
+        r = shallow.r + (mid.r - shallow.r) * k;
+        g = shallow.g + (mid.g - shallow.g) * k;
+        b = shallow.b + (mid.b - shallow.b) * k;
+      } else {
+        const k = (t - 0.5) / 0.5;
+        r = mid.r + (deep.r - mid.r) * k;
+        g = mid.g + (deep.g - mid.g) * k;
+        b = mid.b + (deep.b - mid.b) * k;
+      }
+      // 유기적 얼룩(수면 탁도/조류) — 평면 슬래브 느낌 제거
+      const mot = 0.93 + 0.07 * (
+        0.5 + 0.5 * Math.sin(wx * 0.9 + wz * 0.5) * Math.cos(wz * 0.8 - wx * 0.3));
+      r *= mot; g *= mot; b *= mot;
       // 물가 거품: 아주 얕은 수심 띠를 밝게
       const foam = smooth01((depth - 0.005) / 0.05) * (1 - smooth01((depth - 0.06) / 0.09));
-      r += (235 - r) * foam;
-      g += (243 - g) * foam;
-      b += (246 - b) * foam;
+      r += (222 - r) * foam;
+      g += (232 - g) * foam;
+      b += (230 - b) * foam;
       cImg.data[i] = r; cImg.data[i + 1] = g; cImg.data[i + 2] = b; cImg.data[i + 3] = 255;
       // 알파(green 채널): 물가에서 0으로 부드럽게 — 지형과 만나는 면이 자연스럽다
-      const a = Math.min(0.82, smooth01(depth / 0.14) * 0.26 + smooth01(depth / 0.4) * 0.52 + foam * 0.3) * 255;
+      const a = Math.min(0.93, smooth01(depth / 0.12) * 0.34 + smooth01(depth / 0.4) * 0.56 + foam * 0.3) * 255;
       aImg.data[i] = a; aImg.data[i + 1] = a; aImg.data[i + 2] = a; aImg.data[i + 3] = 255;
     }
   }
@@ -631,12 +647,12 @@ const waterMesh = new THREE.Mesh(
     map: waterMaps.colorTex,
     alphaMap: waterMaps.alphaTex,
     normalMap: rippleTex,
-    normalScale: new THREE.Vector2(0.26, 0.26),
+    normalScale: new THREE.Vector2(0.38, 0.38),
     transparent: true,
     depthWrite: false,
-    roughness: 0.05,
+    roughness: 0.16,
     metalness: 0,
-    envMapIntensity: 1.35,
+    envMapIntensity: 0.5,
   })
 );
 waterMesh.rotation.x = -Math.PI / 2;
