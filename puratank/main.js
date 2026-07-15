@@ -361,22 +361,57 @@ const terrainAt = (gx, gz) => terrain[gx][gz];
 // ---------------------------------------------------------------------------
 // 지형 렌더링: 스무스 메시 + 수면 + 지면을 따라가는 그리드 라인
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// 연속 지형 블렌딩: 타일 경계가 아니라 노이즈/강 거리/경사 기반 가중치로
+// 풀·흙·모래·진흙·강바닥·바위 색을 정점 단위로 자연스럽게 섞는다.
+// (게임 규칙용 셀 지형 분류는 그대로 — 시각 표현만 연속화)
+// ---------------------------------------------------------------------------
+const BLEND_COLORS = {
+  grass: [new THREE.Color(0x79b055), new THREE.Color(0x639a45)],
+  dirt:  [new THREE.Color(0xa8875a), new THREE.Color(0x8f7048)],
+  sand:  [new THREE.Color(0xd2bb7e), new THREE.Color(0xc3ac6e)],
+  mud:   [new THREE.Color(0x7d6446), new THREE.Color(0x6f583e)],
+  bed:   [new THREE.Color(0x8b7857), new THREE.Color(0x7d6c4e)],
+  rock:  [new THREE.Color(0x8d8371), new THREE.Color(0x7b7263)],
+};
+// 지형 종류 가중치 (0..1) — 셀 분류와 같은 노이즈/규칙을 연속값으로 사용
+function surfaceWeights(wx, wz, h) {
+  const fx = (wx + HALF) / TILE, fz = (wz + HALF) / TILE;
+  // tNoise 격자(size 7, cell 4)의 안전 입력 상한은 (size-2)*cell = 20
+  const tn = tNoise(Math.min(fx - 0.5 + 7, 19.99), Math.min(fz - 0.5 + 3, 19.99));
+  const dirt = smooth01((tn - 0.58) / 0.2);
+  const sand = smooth01((0.3 - tn) / 0.2) * (1 - dirt);
+  const mud = 1 - smooth01((distToRiver(wx, wz) - 2.2) / 2.0);
+  const bed = smooth01((WATER_Y + 0.05 - h) / 0.22);
+  const sxp = sampleHeight(wx + 0.5, wz), sxm = sampleHeight(wx - 0.5, wz);
+  const szp = sampleHeight(wx, wz + 0.5), szm = sampleHeight(wx, wz - 0.5);
+  const rock = smooth01((Math.hypot(sxp - sxm, szp - szm) - 0.72) / 0.6) * 0.85;
+  return { dirt, sand, mud, bed, rock };
+}
+const _sc = new THREE.Color();
+function surfaceColorAt(wx, wz, h, out) {
+  const w = surfaceWeights(wx, wz, h);
+  const fx = (wx + HALF) / TILE, fz = (wz + HALF) / TILE;
+  // 얼룩 노이즈 2종: 팔레트 내 변주 + 밝기 모틀
+  const v1 = hNoise2(fx, fz);
+  const v2 = hNoise(fz * 0.8 + 2, fx * 0.8 + 5);
+  const pick = (pair) => _sc.lerpColors(pair[0], pair[1], v1);
+  out.copy(pick(BLEND_COLORS.grass));
+  out.lerp(pick(BLEND_COLORS.dirt), w.dirt);
+  out.lerp(pick(BLEND_COLORS.sand), w.sand);
+  out.lerp(pick(BLEND_COLORS.mud), w.mud);
+  out.lerp(pick(BLEND_COLORS.rock), w.rock);
+  out.lerp(pick(BLEND_COLORS.bed), w.bed);
+  out.multiplyScalar(0.9 + v2 * 0.2);
+  return out;
+}
 {
-  // 자연스러운 지면 색: 체커 대비를 낮추고(범위 표시는 별도 필드로) 노이즈 얼룩 추가
   const pos = terrainGeo.attributes.position;
   const colors = new Float32Array(pos.count * 3);
   const col = new THREE.Color();
-  const colB = new THREE.Color();
   for (let i = 0; i < pos.count; i++) {
     const wx = pos.getX(i), wz = pos.getZ(i);
-    const c = worldToCell({ x: wx, z: wz });
-    const pair = TERRAIN_COLORS[terrain[c.gx][c.gz]];
-    col.set(pair[0]);
-    colB.set(pair[1]);
-    col.lerp(colB, ((c.gx + c.gz) % 2) * 0.5);
-    // 노이즈 격자 범위(0..GRID)에 맞춘 그리드 좌표로 샘플링
-    const mottle = 0.88 + hNoise2((wx + HALF) / TILE, (wz + HALF) / TILE) * 0.24;
-    col.multiplyScalar(mottle);
+    surfaceColorAt(wx, wz, pos.getY(i), col);
     colors[i * 3] = col.r;
     colors[i * 3 + 1] = col.g;
     colors[i * 3 + 2] = col.b;
@@ -431,16 +466,102 @@ terrainMesh.receiveShadow = true;
 terrainMesh.castShadow = true;
 scene.add(terrainMesh);
 
-// 수면 — 하늘을 반사하는 물 (PMREM 환경맵)
+// ---------------------------------------------------------------------------
+// 수면 — 깊이 기반 색/알파(얕은 곳은 투명하게 지형과 자연스럽게 만나고,
+// 물가에는 거품 라인), 스크롤되는 리플 노멀맵으로 흐름 표현
+// ---------------------------------------------------------------------------
+function makeWaterMaps() {
+  const N = 256;
+  const colorC = document.createElement('canvas');
+  const alphaC = document.createElement('canvas');
+  colorC.width = colorC.height = alphaC.width = alphaC.height = N;
+  const cc = colorC.getContext('2d');
+  const ac = alphaC.getContext('2d');
+  const cImg = cc.createImageData(N, N);
+  const aImg = ac.createImageData(N, N);
+  const shallow = { r: 128, g: 200, b: 214 };
+  const deep = { r: 22, g: 84, b: 140 };
+  for (let py = 0; py < N; py++) {
+    for (let px = 0; px < N; px++) {
+      // PlaneGeometry.rotateX(-PI/2) 기준: u→+x, 캔버스 행(py)→+z
+      const wx = (px / (N - 1) - 0.5) * GRID * TILE;
+      const wz = (py / (N - 1) - 0.5) * GRID * TILE;
+      const depth = WATER_Y - sampleHeight(wx, wz);
+      const i = (py * N + px) * 4;
+      const t = smooth01(depth / 0.55);
+      let r = shallow.r + (deep.r - shallow.r) * t;
+      let g = shallow.g + (deep.g - shallow.g) * t;
+      let b = shallow.b + (deep.b - shallow.b) * t;
+      // 물가 거품: 아주 얕은 수심 띠를 밝게
+      const foam = smooth01((depth - 0.005) / 0.05) * (1 - smooth01((depth - 0.06) / 0.09));
+      r += (235 - r) * foam;
+      g += (243 - g) * foam;
+      b += (246 - b) * foam;
+      cImg.data[i] = r; cImg.data[i + 1] = g; cImg.data[i + 2] = b; cImg.data[i + 3] = 255;
+      // 알파(green 채널): 물가에서 0으로 부드럽게 — 지형과 만나는 면이 자연스럽다
+      const a = Math.min(0.93, smooth01(depth / 0.3) * 0.75 + smooth01(depth / 0.9) * 0.25 + foam * 0.35) * 255;
+      aImg.data[i] = a; aImg.data[i + 1] = a; aImg.data[i + 2] = a; aImg.data[i + 3] = 255;
+    }
+  }
+  cc.putImageData(cImg, 0, 0);
+  ac.putImageData(aImg, 0, 0);
+  const colorTex = new THREE.CanvasTexture(colorC);
+  colorTex.colorSpace = THREE.SRGBColorSpace;
+  const alphaTex = new THREE.CanvasTexture(alphaC);
+  return { colorTex, alphaTex };
+}
+// 리플 노멀맵 (스무스 노이즈 → 소벨 노멀)
+function makeRippleNormal() {
+  const N = 128;
+  const vals = new Float32Array(N * N);
+  const lat = [];
+  const L = 9;
+  for (let i = 0; i < L * L; i++) lat.push(Math.random());
+  const latAt = (x, y) => lat[((y % L) + L) % L * L + ((x % L) + L) % L];
+  for (let py = 0; py < N; py++) {
+    for (let px = 0; px < N; px++) {
+      const x = (px / N) * L, y = (py / N) * L;
+      const x0 = Math.floor(x), y0 = Math.floor(y);
+      const tx = x - x0, ty = y - y0;
+      const sx = tx * tx * (3 - 2 * tx), sy = ty * ty * (3 - 2 * ty);
+      const a = latAt(x0, y0), b = latAt(x0 + 1, y0), c = latAt(x0, y0 + 1), d = latAt(x0 + 1, y0 + 1);
+      vals[py * N + px] = a + (b - a) * sx + (c - a) * sy + (a - b - c + d) * sx * sy;
+    }
+  }
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = N;
+  const ctx = canvas.getContext('2d');
+  const img = ctx.createImageData(N, N);
+  const at = (x, y) => vals[((y + N) % N) * N + ((x + N) % N)];
+  for (let py = 0; py < N; py++) {
+    for (let px = 0; px < N; px++) {
+      const i = (py * N + px) * 4;
+      img.data[i] = 128 + (at(px - 1, py) - at(px + 1, py)) * 340;
+      img.data[i + 1] = 128 + (at(px, py - 1) - at(px, py + 1)) * 340;
+      img.data[i + 2] = 255;
+      img.data[i + 3] = 255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(7, 7);
+  return tex;
+}
+const waterMaps = makeWaterMaps();
+const rippleTex = makeRippleNormal();
 const waterMesh = new THREE.Mesh(
   new THREE.PlaneGeometry(GRID * TILE, GRID * TILE),
   new THREE.MeshStandardMaterial({
-    color: 0x3a7cb4,
+    map: waterMaps.colorTex,
+    alphaMap: waterMaps.alphaTex,
+    normalMap: rippleTex,
+    normalScale: new THREE.Vector2(0.42, 0.42),
     transparent: true,
-    opacity: 0.8,
-    roughness: 0.08,
+    depthWrite: false,
+    roughness: 0.12,
     metalness: 0,
-    envMapIntensity: 1.3,
+    envMapIntensity: 1.15,
   })
 );
 waterMesh.rotation.x = -Math.PI / 2;
@@ -647,6 +768,117 @@ function placeProp(type, gx, gz) {
   scatter('hedgehog', 8);
   scatter('sandbag', 6);
   scatter('bush', 6);
+}
+
+// ---------------------------------------------------------------------------
+// 리얼 디테일 스캐터: 풀 포기(교차 쿼드 컷아웃) + 흙 자갈 — 인스턴싱으로
+// 드로콜 각 1회. 배치는 연속 지형 가중치를 따라 풀밭/흙 위에만.
+// ---------------------------------------------------------------------------
+{
+  // 풀잎 실루엣 텍스처 (흰색으로 그려 instanceColor로 틴트)
+  const grassTexCanvas = document.createElement('canvas');
+  grassTexCanvas.width = grassTexCanvas.height = 64;
+  {
+    const ctx = grassTexCanvas.getContext('2d');
+    ctx.clearRect(0, 0, 64, 64);
+    ctx.fillStyle = '#fff';
+    for (let i = 0; i < 9; i++) {
+      const bx = 6 + rng() * 52;
+      const lean = (rng() - 0.5) * 14;
+      const hgt = 30 + rng() * 30;
+      const wdt = 2.2 + rng() * 2.4;
+      ctx.beginPath();
+      ctx.moveTo(bx - wdt, 64);
+      ctx.quadraticCurveTo(bx - wdt * 0.4 + lean * 0.4, 64 - hgt * 0.6, bx + lean, 64 - hgt);
+      ctx.quadraticCurveTo(bx + wdt * 0.5 + lean * 0.4, 64 - hgt * 0.6, bx + wdt, 64);
+      ctx.fill();
+    }
+  }
+  const grassTex = new THREE.CanvasTexture(grassTexCanvas);
+
+  // 교차 쿼드 지오메트리 (2장 십자)
+  const gPos = [], gUv = [], gIdx = [];
+  for (const rot of [0, Math.PI / 2]) {
+    const c = Math.cos(rot), sn = Math.sin(rot);
+    const b = gPos.length / 3;
+    const w = 0.62, h = 0.55;
+    gPos.push(-w / 2 * c, 0, -w / 2 * sn,  w / 2 * c, 0, w / 2 * sn,  w / 2 * c, h, w / 2 * sn,  -w / 2 * c, h, -w / 2 * sn);
+    gUv.push(0, 0, 1, 0, 1, 1, 0, 1);
+    gIdx.push(b, b + 1, b + 2, b, b + 2, b + 3);
+  }
+  const grassGeo = new THREE.BufferGeometry();
+  grassGeo.setAttribute('position', new THREE.Float32BufferAttribute(gPos, 3));
+  grassGeo.setAttribute('uv', new THREE.Float32BufferAttribute(gUv, 2));
+  grassGeo.setIndex(gIdx);
+  grassGeo.computeVertexNormals();
+
+  const GRASS_N = 2400;
+  const grassMesh = new THREE.InstancedMesh(
+    grassGeo,
+    new THREE.MeshToonMaterial({ map: grassTex, alphaTest: 0.5, side: THREE.DoubleSide, gradientMap }),
+    GRASS_N
+  );
+  grassMesh.receiveShadow = true;
+  const gm = new THREE.Matrix4();
+  const gq = new THREE.Quaternion();
+  const gv = new THREE.Vector3();
+  const gs = new THREE.Vector3();
+  const gCol = new THREE.Color();
+  const up = new THREE.Vector3(0, 1, 0);
+  let placed = 0, guard = 0;
+  while (placed < GRASS_N && guard++ < GRASS_N * 8) {
+    const wx = (rng() - 0.5) * (GRID * TILE - 1.2);
+    const wz = (rng() - 0.5) * (GRID * TILE - 1.2);
+    const h = sampleHeight(wx, wz);
+    if (h < WATER_Y + 0.07) continue;
+    const w = surfaceWeights(wx, wz, h);
+    const grassW = (1 - w.dirt) * (1 - w.sand) * (1 - w.mud * 0.7) * (1 - w.rock) * (1 - w.bed);
+    if (rng() > grassW * grassW) continue; // 풀밭일수록 촘촘히
+    gq.setFromAxisAngle(up, rng() * Math.PI);
+    gs.setScalar(0.7 + rng() * 0.9);
+    gv.set(wx, h - 0.02, wz);
+    gm.compose(gv, gq, gs);
+    grassMesh.setMatrixAt(placed, gm);
+    gCol.setHSL(0.26 + rng() * 0.05, 0.5 + rng() * 0.2, 0.32 + rng() * 0.14);
+    grassMesh.setColorAt(placed, gCol);
+    placed++;
+  }
+  grassMesh.count = placed;
+  grassMesh.instanceMatrix.needsUpdate = true;
+  if (grassMesh.instanceColor) grassMesh.instanceColor.needsUpdate = true;
+  scene.add(grassMesh);
+
+  // 자갈: 흙/진흙/바위 지대에 낮은 다면체
+  const PEB_N = 420;
+  const pebMesh = new THREE.InstancedMesh(
+    new THREE.DodecahedronGeometry(0.09, 0),
+    new THREE.MeshToonMaterial({ gradientMap }),
+    PEB_N
+  );
+  pebMesh.castShadow = true;
+  pebMesh.receiveShadow = true;
+  placed = 0; guard = 0;
+  while (placed < PEB_N && guard++ < PEB_N * 10) {
+    const wx = (rng() - 0.5) * (GRID * TILE - 1.2);
+    const wz = (rng() - 0.5) * (GRID * TILE - 1.2);
+    const h = sampleHeight(wx, wz);
+    if (h < WATER_Y + 0.03) continue;
+    const w = surfaceWeights(wx, wz, h);
+    const dirtW = Math.min(1, w.dirt + w.mud * 0.8 + w.rock * 1.2 + w.sand * 0.35);
+    if (rng() > dirtW * 0.85) continue;
+    gq.setFromEuler(new THREE.Euler(rng() * Math.PI, rng() * Math.PI, rng() * Math.PI));
+    gs.set(0.5 + rng() * 1.1, 0.35 + rng() * 0.5, 0.5 + rng() * 1.1);
+    gv.set(wx, h + 0.015, wz);
+    gm.compose(gv, gq, gs);
+    pebMesh.setMatrixAt(placed, gm);
+    gCol.setHSL(0.08 + rng() * 0.04, 0.12 + rng() * 0.15, 0.3 + rng() * 0.18);
+    pebMesh.setColorAt(placed, gCol);
+    placed++;
+  }
+  pebMesh.count = placed;
+  pebMesh.instanceMatrix.needsUpdate = true;
+  if (pebMesh.instanceColor) pebMesh.instanceColor.needsUpdate = true;
+  scene.add(pebMesh);
 }
 
 // ---------------------------------------------------------------------------
@@ -1140,7 +1372,7 @@ function crater(gx, gz) {
     if (d < R * 0.72) {
       const vc = worldToCell({ x: pos.getX(i), z: pos.getZ(i) });
       if (terrain[vc.gx][vc.gz] !== T.WATER) {
-        dirtCol.set(TERRAIN_COLORS[T.DIRT][(vc.gx + vc.gz) % 2]).multiplyScalar(0.86);
+        dirtCol.set(TERRAIN_COLORS[T.DIRT][0]).multiplyScalar(0.72 + 0.1 * (d / R));
         colAttr.setXYZ(i, dirtCol.r, dirtCol.g, dirtCol.b);
       }
     }
@@ -2006,6 +2238,7 @@ function animate(now) {
   updateAimPreview(dt);
   const pulse = 1 + Math.sin(now * 0.006) * 0.08;
   for (const ring of targetRings) ring.scale.setScalar(pulse);
+  rippleTex.offset.set((now * 0.0000121) % 1, (now * -0.0000324) % 1);
   controls.update();
   renderer.info.reset();
   composer.render();
