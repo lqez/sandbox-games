@@ -675,35 +675,67 @@ const PROP_DEF = {
   sandbag:  { hp: 26, blockMove: true,  blockShotH: 0,   coverH: 0.8, cover: 0.5, name: '모래주머니' },
 };
 
+// 공유 팔레트(toonMat 캐시로 재질 재사용 → 드로콜 절감)
+const TRUNK_COLS = [0x6d5236, 0x7c5e3d, 0x5f4a30];
+const LEAF_COLS = [0x577f3b, 0x678f45, 0x496f32, 0x749a4f, 0x86813c]; // 마지막=누런 잎
+const PINE_COLS = [0x3c6437, 0x47733c, 0x33562f];
+const AUTUMN_COLS = [0xb0894a, 0xa88a3c, 0x9c6f3a];
 function buildTreeMesh() {
   const g = new THREE.Group();
-  const trunk = part(new THREE.CylinderGeometry(0.14, 0.2, 0.9, 8), 0x8a6844);
-  trunk.position.y = 0.45;
+  const pine = rng() < 0.4;
+  const trunkCol = TRUNK_COLS[Math.floor(rng() * TRUNK_COLS.length)];
+  const th = pine ? 1.0 + rng() * 0.3 : 0.7 + rng() * 0.45;
+  const trunk = part(new THREE.CylinderGeometry(0.1, 0.19, th, 7), trunkCol);
+  trunk.position.y = th / 2;
+  trunk.rotation.z = (rng() - 0.5) * 0.12;
   g.add(trunk);
-  if (rng() < 0.45) {
-    // 침엽수
-    for (let i = 0; i < 3; i++) {
-      const cone = part(new THREE.ConeGeometry(0.85 - i * 0.22, 0.9, 8), i % 2 ? 0x5f9e57 : 0x699f4f);
-      cone.position.y = 1.1 + i * 0.55;
+  if (pine) {
+    // 침엽수: 여러 겹 원뿔, 위로 갈수록 좁고 어둡게, 불규칙 지터
+    const layers = 4 + Math.floor(rng() * 2);
+    const base = th * 0.68;
+    for (let i = 0; i < layers; i++) {
+      const t = i / layers;
+      const r = 0.92 * (1 - t * 0.7) + 0.05;
+      const ch = 0.8 - i * 0.05;
+      const cone = part(new THREE.ConeGeometry(r, ch, 8), PINE_COLS[i % PINE_COLS.length]);
+      cone.position.set((rng() - 0.5) * 0.07, base + i * 0.52 + ch * 0.2, (rng() - 0.5) * 0.07);
+      cone.rotation.y = rng() * Math.PI;
+      cone.scale.y = 1 + rng() * 0.18;
       g.add(cone);
     }
   } else {
-    // 활엽수 (브로콜리 스타일)
-    const s1 = part(new THREE.SphereGeometry(0.75, 10, 10), 0x74b25d);
-    s1.position.y = 1.45;
-    g.add(s1);
-    const s2 = part(new THREE.SphereGeometry(0.5, 10, 10), 0x83bd68);
-    s2.position.set(0.42, 1.15, 0.2);
-    g.add(s2);
+    // 활엽수: 불규칙 잎 덩이 6~8개를 흩어 얹어 뭉게진 수관
+    const top = th + 0.3;
+    const clumps = 6 + Math.floor(rng() * 3);
+    const autumn = rng() < 0.24;
+    for (let i = 0; i < clumps; i++) {
+      const ang = rng() * Math.PI * 2, rad = rng() * 0.52;
+      const col = (autumn && rng() < 0.45)
+        ? AUTUMN_COLS[Math.floor(rng() * AUTUMN_COLS.length)]
+        : LEAF_COLS[Math.floor(rng() * LEAF_COLS.length)];
+      const s = 0.3 + rng() * 0.34;
+      const clump = part(new THREE.IcosahedronGeometry(s, 0), col);
+      clump.position.set(Math.cos(ang) * rad, top + (rng() - 0.5) * 0.55, Math.sin(ang) * rad);
+      clump.scale.set(1 + rng() * 0.35, 0.78 + rng() * 0.3, 1 + rng() * 0.35);
+      clump.rotation.set(rng() * 3, rng() * 3, rng() * 3);
+      g.add(clump);
+    }
   }
   return g;
 }
 function buildBushMesh() {
   const g = new THREE.Group();
-  const s = part(new THREE.SphereGeometry(0.55, 9, 9), 0x7fb069);
-  s.scale.y = 0.62;
-  s.position.y = 0.32;
-  g.add(s);
+  const cols = [0x5c8a40, 0x6b9848, 0x4d7534, 0x86823c, 0x74994c];
+  const clumps = 3 + Math.floor(rng() * 3);
+  for (let i = 0; i < clumps; i++) {
+    const ang = rng() * Math.PI * 2, rad = rng() * 0.36;
+    const s = 0.26 + rng() * 0.24;
+    const c = part(new THREE.IcosahedronGeometry(s, 0), cols[Math.floor(rng() * cols.length)]);
+    c.position.set(Math.cos(ang) * rad, 0.2 + rng() * 0.22, Math.sin(ang) * rad);
+    c.scale.set(1 + rng() * 0.35, 0.72 + rng() * 0.26, 1 + rng() * 0.35);
+    c.rotation.set(rng() * 3, rng() * 3, rng() * 3);
+    g.add(c);
+  }
   return g;
 }
 function buildHouseMesh() {
@@ -770,6 +802,9 @@ function placeProp(type, gx, gz) {
   const p = cellToWorld(gx, gz);
   group.position.set(p.x, heightAt(gx, gz), p.z);
   group.rotation.y = rng() * Math.PI * 2;
+  // 수목/덤불은 개체마다 크기 변주 — 같은 종이라도 들쭉날쭉
+  if (type === 'tree') group.scale.setScalar(0.82 + rng() * 0.55);
+  else if (type === 'bush') group.scale.setScalar(0.85 + rng() * 0.5);
   // 클릭 판정용 히트박스
   const hit = new THREE.Mesh(
     new THREE.CylinderGeometry(0.9, 0.9, 2.4, 8),
