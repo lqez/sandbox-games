@@ -4641,7 +4641,8 @@ renderer.domElement.addEventListener('pointerdown', (e) => {
   const info = currentMoveCells.get(cellKey(cell.gx, cell.gz));
   if (!info) return;
   const endFacing = dirAngle(info.endDir);
-  ghostGesture = { cell, info, facing: endFacing, turretYaw: endFacing };
+  const o = projectedOrigin(); // 이 기동의 출발 셀 (취소 판정 기준)
+  ghostGesture = { cell, info, facing: endFacing, turretYaw: endFacing, origin: { gx: o.gx, gz: o.gz } };
   controls.enabled = false;
   showGhost(cell, endFacing, endFacing);
 });
@@ -4729,8 +4730,11 @@ renderer.domElement.addEventListener('pointerup', async (e) => {
     controls.enabled = true;
     downPos = null;
     setPointer(e);
-    // 내 전차 위에서 놓으면 취소
-    if (raycaster.intersectObject(player.hitbox).length) {
+    // 취소는 "출발 셀로 되돌려 놓았을 때"만 — 키 큰 전차 히트박스가 아니라
+    // 지면 셀 기준으로 정확히 판정해야 근거리 기동이 오취소되지 않는다.
+    const gh = raycaster.intersectObject(terrainMesh, false)[0];
+    const rc = gh ? worldToCell(gh.point) : null;
+    if (rc && rc.gx === g.origin.gx && rc.gz === g.origin.gz) {
       ghost.visible = false;
       setHint('이동 취소');
       return;
