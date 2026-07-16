@@ -1094,22 +1094,22 @@ function buildBushMesh() {
   return g;
 }
 // 벽돌 벽 텍스처: 어긋쌓기 벽돌 + 모르타르 줄눈 + 개체 색 변주/풍화
-function makeBrickTexture() {
+// 벽돌 텍스처 (팔레트 파라미터) — 어긋쌓기 + 모르타르 줄눈 + 풍화
+function makeBrickTexture(pal = {}) {
+  const { mortar = '#5f4a3c', gMul = 0.62, bMul = 0.46, base = 120, vary = 55 } = pal;
   const c = document.createElement('canvas');
   c.width = c.height = 256;
   const ctx = c.getContext('2d');
-  ctx.fillStyle = '#5f4a3c'; // 모르타르(어두운 바탕)
+  ctx.fillStyle = mortar;
   ctx.fillRect(0, 0, 256, 256);
   const rows = 13, bh = 256 / rows, bw = 256 / 6;
   for (let r = 0; r < rows; r++) {
     const off = (r % 2) * (bw / 2);
     for (let cx = -1; cx < 7; cx++) {
       const x = cx * bw + off + 1.5, y = r * bh + 1.5;
-      const base = 120 + Math.random() * 55;
-      const rr = base, gg = base * (0.62 + Math.random() * 0.12), bb = base * (0.46 + Math.random() * 0.12);
-      ctx.fillStyle = `rgb(${rr | 0},${gg | 0},${bb | 0})`;
+      const b0 = base + Math.random() * vary;
+      ctx.fillStyle = `rgb(${b0 | 0},${(b0 * (gMul + Math.random() * 0.12)) | 0},${(b0 * (bMul + Math.random() * 0.12)) | 0})`;
       ctx.fillRect(x, y, bw - 3, bh - 3);
-      // 풍화 얼룩
       if (Math.random() < 0.3) {
         ctx.fillStyle = `rgba(40,32,24,${0.1 + Math.random() * 0.2})`;
         ctx.fillRect(x, y, bw - 3, bh - 3);
@@ -1121,20 +1121,65 @@ function makeBrickTexture() {
   tex.anisotropy = 4;
   return tex;
 }
-// 슬레이트 지붕 텍스처: 겹친 기와 가로 켜 + 색 변주
-function makeSlateTexture() {
+// 회벽(플라스터): 얼룩 + 세로 빗물 자국 (WW1 프랑스/벨기에 농촌)
+function makePlasterTexture(tone = 226) {
+  const c = document.createElement('canvas'); c.width = c.height = 256;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = `rgb(${tone},${tone - 6},${tone - 18})`;
+  ctx.fillRect(0, 0, 256, 256);
+  for (let i = 0; i < 700; i++) {
+    const x = Math.random() * 256, y = Math.random() * 256, r = 1 + Math.random() * 5;
+    ctx.fillStyle = Math.random() > 0.5 ? 'rgba(120,108,88,0.06)' : 'rgba(255,255,250,0.05)';
+    ctx.beginPath(); ctx.ellipse(x, y, r, r * 0.7, Math.random() * Math.PI, 0, Math.PI * 2); ctx.fill();
+  }
+  // 빗물 세로 줄
+  for (let i = 0; i < 26; i++) {
+    const x = Math.random() * 256, y0 = Math.random() * 90;
+    ctx.fillStyle = `rgba(96,86,70,${0.04 + Math.random() * 0.07})`;
+    ctx.fillRect(x, y0, 1.5 + Math.random() * 2, 60 + Math.random() * 160);
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  return tex;
+}
+// 석벽: 불규칙 큰 블록
+function makeStoneWallTexture() {
+  const c = document.createElement('canvas'); c.width = c.height = 256;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#4c463e';
+  ctx.fillRect(0, 0, 256, 256);
+  const rows = 7, bh = 256 / rows;
+  for (let r = 0; r < rows; r++) {
+    let x = -(Math.random() * 30);
+    while (x < 256) {
+      const w = 26 + Math.random() * 40;
+      const v = 122 + Math.random() * 46;
+      ctx.fillStyle = `rgb(${v | 0},${(v * 0.96) | 0},${(v * 0.88) | 0})`;
+      ctx.beginPath();
+      ctx.roundRect(x + 1.5, r * bh + 1.5, w - 3, bh - 3, 3);
+      ctx.fill();
+      x += w;
+    }
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  return tex;
+}
+// 지붕 기와 텍스처 (팔레트 파라미터: 슬레이트 청회 / 점토 적갈)
+function makeSlateTexture(pal = {}) {
+  const { bg = '#50555e', v0 = 96, vv = 54, rMul = 1, gMul = 1.03, bMul = 1.12 } = pal;
   const c = document.createElement('canvas');
   c.width = c.height = 256;
   const ctx = c.getContext('2d');
-  ctx.fillStyle = '#50555e';
+  ctx.fillStyle = bg;
   ctx.fillRect(0, 0, 256, 256);
   const rows = 15, th = 256 / rows, tw = 256 / 9;
   for (let r = 0; r < rows; r++) {
     const off = (r % 2) * (tw / 2);
     for (let cx = -1; cx < 10; cx++) {
       const x = cx * tw + off, y = r * th;
-      const v = 96 + Math.random() * 54;
-      ctx.fillStyle = `rgb(${v | 0},${(v * 1.03) | 0},${(v * 1.12) | 0})`;
+      const v = v0 + Math.random() * vv;
+      ctx.fillStyle = `rgb(${(v * rMul) | 0},${(v * gMul) | 0},${(v * bMul) | 0})`;
       ctx.beginPath();
       ctx.roundRect(x + 1, y + 1, tw - 2, th * 1.5, 2);
       ctx.fill();
@@ -1152,6 +1197,21 @@ const brickTex = makeBrickTexture();
 const slateTex = makeSlateTexture();
 const brickMat = new THREE.MeshStandardMaterial({ map: brickTex, roughness: 0.95, color: 0xb9a48c, side: THREE.DoubleSide });
 const slateMat = new THREE.MeshStandardMaterial({ map: slateTex, roughness: 0.9 });
+// 벽/지붕 재질 사전 (스타일 → 재질)
+const WALL_MATS = {
+  brickRed: brickMat,
+  brickBrown: new THREE.MeshStandardMaterial({ map: makeBrickTexture({ mortar: '#544838', base: 96, vary: 40, gMul: 0.74, bMul: 0.56 }), roughness: 0.95, color: 0xb0a693, side: THREE.DoubleSide }),
+  plaster: new THREE.MeshStandardMaterial({ map: makePlasterTexture(228), roughness: 0.9, side: THREE.DoubleSide }),
+  plasterOchre: new THREE.MeshStandardMaterial({ map: makePlasterTexture(214), color: 0xd9c49a, roughness: 0.9, side: THREE.DoubleSide }),
+  stone: new THREE.MeshStandardMaterial({ map: makeStoneWallTexture(), roughness: 0.97, side: THREE.DoubleSide }),
+};
+const ROOF_MATS = {
+  slate: slateMat,
+  tile: new THREE.MeshStandardMaterial({ map: makeSlateTexture({ bg: '#5c3a2c', v0: 120, vv: 50, rMul: 1.18, gMul: 0.72, bMul: 0.52 }), roughness: 0.92 }),
+  wood: new THREE.MeshStandardMaterial({ color: 0x6f5334, roughness: 0.95 }),
+};
+const timberMat = new THREE.MeshStandardMaterial({ color: 0x4a3826, roughness: 0.9 }); // 하프팀버 보
+const shutterMat = new THREE.MeshStandardMaterial({ color: 0x3d5a40, roughness: 0.85 }); // 덧창
 const glassMat = new THREE.MeshStandardMaterial({ color: 0x2b3440, roughness: 0.35, metalness: 0.1, envMapIntensity: 0.5 });
 function texturedPart(geo, mat, uvRepeat) {
   const m = new THREE.Mesh(geo, mat);
@@ -1229,29 +1289,45 @@ const shopMats = [
   new THREE.MeshStandardMaterial({ color: 0x6d3630, roughness: 0.8 }), // 와인 레드
   new THREE.MeshStandardMaterial({ color: 0x3a4a63, roughness: 0.8 }), // 네이비
 ];
+// 1·2차 대전 유럽 시골/시가지 건물 30종: 벽 5종(적벽돌/갈벽돌/회벽/황토회벽/석벽)
+// × 층수 1~3 × 지붕 2종(박공/평지붕 파라펫) — 회벽엔 하프팀버 보와 덧창이 붙기도.
+const BUILDING_STYLES = [];
+for (const wall of ['brickRed', 'brickBrown', 'plaster', 'plasterOchre', 'stone']) {
+  for (const stories of [1, 2, 3]) {
+    for (const roof of ['gable', 'flat']) {
+      BUILDING_STYLES.push({ wall, stories, roof });
+    }
+  }
+}
 function buildBuildingMesh() {
+  const style = BUILDING_STYLES[Math.floor(rng() * BUILDING_STYLES.length)];
+  const wallMat = WALL_MATS[style.wall];
+  const roofMat = style.wall.startsWith('brick') ? ROOF_MATS.tile : ROOF_MATS.slate;
+  const isPlaster = style.wall.startsWith('plaster');
+  const timber = isPlaster && style.stories <= 2 && rng() < 0.5; // 하프팀버
+  const shutters = isPlaster && rng() < 0.6;                      // 덧창
   const g = new THREE.Group();
   const chunks = [];
   const tmp = new THREE.Object3D();
-  const addChunk = (w, h, d, x, y, z, mat, ry = 0) => {
+  const addChunk = (w, h, d, x, y, z, mat, ry = 0, rx = 0) => {
     tmp.position.set(x, y, z);
-    tmp.rotation.set(0, ry, 0);
+    tmp.rotation.set(rx, ry, 0);
     tmp.updateMatrix();
     chunks.push({
       size: [w, h, d], mat, matrix: tmp.matrix.clone(),
       center: new THREE.Vector3(x, y, z), dead: false,
     });
   };
-  const W = 3.0, D = 2.2, WT = 0.18;     // 폭/깊이/벽 두께
-  const ROWS = 4, RH = 0.56;             // 벽 청크 4단 (총높이 ~2.24)
-  const shop = rng() < 0.45;             // 1층 상점 파사드 (레퍼런스 불랑제리풍)
+  const W = 2.7 + rng() * 0.6, D = 2.0 + rng() * 0.4, WT = 0.18;
+  const RH = 0.56;
+  const ROWS = style.stories * 2;        // 층당 2단
+  const shop = style.stories >= 2 && rng() < 0.35;
   const shopMat = shopMats[Math.floor(rng() * shopMats.length)];
-  // 벽 4면을 그리드 청크로 — 창/문 위치는 청크를 창 청크로 교체
   const walls = [
-    { len: W, ry: 0, ox: 0, oz: D / 2 - WT / 2, front: true },   // 전면(+z)
-    { len: W, ry: 0, ox: 0, oz: -D / 2 + WT / 2, front: false }, // 후면
-    { len: D, ry: Math.PI / 2, ox: W / 2 - WT / 2, oz: 0, front: false },  // 우측
-    { len: D, ry: Math.PI / 2, ox: -W / 2 + WT / 2, oz: 0, front: false }, // 좌측
+    { len: W, ry: 0, ox: 0, oz: D / 2 - WT / 2, front: true },
+    { len: W, ry: 0, ox: 0, oz: -D / 2 + WT / 2, front: false },
+    { len: D, ry: Math.PI / 2, ox: W / 2 - WT / 2, oz: 0, front: false },
+    { len: D, ry: Math.PI / 2, ox: -W / 2 + WT / 2, oz: 0, front: false },
   ];
   for (const wall of walls) {
     const cols = Math.round(wall.len / 0.6);
@@ -1263,56 +1339,78 @@ function buildBuildingMesh() {
         const z = wall.ry ? along : wall.oz;
         const y = (r + 0.5) * RH;
         const isDoor = wall.front && r === 0 && c === Math.floor(cols / 2);
-        const isWin = !isDoor && (r === 1 || r === 3) && c % 2 === 1;
+        const isWin = !isDoor && r % 2 === 1 && c % 2 === 1; // 각 층 상단열 홀수 칸
         if (isDoor) {
           addChunk(cw * 0.94, RH, WT + 0.04, x, y, z, shop ? shopMat : trimMat, wall.ry);
         } else if (isWin) {
-          // 창: 유리 + 밝은 틀 (둘 다 청크 — 부서지면 같이 날아간다)
           addChunk(cw * 0.9, RH * 0.92, WT * 0.5, x, y, z, glassMat, wall.ry);
           addChunk(cw * 0.94, RH * 0.2, WT + 0.03, x, y + RH * 0.42, z, trimMat, wall.ry);
+          if (shutters && !wall.ry) {
+            // 좌우 덧창 (짙은 초록)
+            const sdx = cw * 0.55;
+            addChunk(cw * 0.16, RH * 0.8, WT * 0.5, x - sdx, y, z + (wall.front ? 0.02 : -0.02), shutterMat, wall.ry);
+            addChunk(cw * 0.16, RH * 0.8, WT * 0.5, x + sdx, y, z + (wall.front ? 0.02 : -0.02), shutterMat, wall.ry);
+          }
         } else if (shop && wall.front && r === 0) {
           addChunk(cw, RH, WT, x, y, z, shopMat, wall.ry);
         } else {
-          addChunk(cw, RH, WT, x, y, z, brickMat, wall.ry);
+          addChunk(cw, RH, WT, x, y, z, wallMat, wall.ry);
+          if (timber && !wall.ry && r > 0 && c % 2 === 0) {
+            // 하프팀버: 전/후면에 어두운 세로 보 + 층 사이 가로 보
+            addChunk(0.07, RH, WT * 0.4, x, y, z + (wall.front ? 0.06 : -0.06), timberMat, wall.ry);
+          }
         }
+      }
+      // 층 경계 가로 보
+      if (timber && r % 2 === 1) {
+        addChunk(W * 0.98, 0.07, WT * 0.4, 0, (r + 1) * RH, D / 2 - WT / 2 + 0.06, timberMat, 0);
+        addChunk(W * 0.98, 0.07, WT * 0.4, 0, (r + 1) * RH, -D / 2 + WT / 2 - 0.06, timberMat, 0);
       }
     }
   }
   const H = ROWS * RH;
-  // 상점 간판 띠
-  if (shop) addChunk(W * 0.96, 0.22, WT + 0.08, 0, H * 0.28 + RH, D / 2 - WT / 2, trimMat, 0);
-  // 박공(측면 계단식 벽돌) + 지붕 슬레이트 슬랩
-  const RHT = 1.0; // 지붕 높이
-  const gsteps = 4;
-  for (const sx of [-1, 1]) {
-    for (let s = 0; s < gsteps; s++) {
-      const t = s / gsteps;
-      addChunk(WT, RHT / gsteps, D * (1 - t * 0.92), sx * (W / 2 - WT / 2), H + (s + 0.5) * (RHT / gsteps), 0, brickMat, 0);
-    }
-  }
-  const slopeLen = Math.hypot(D / 2 + 0.15, RHT);
-  const slabsA = 5, slabsB = 2; // 경사면당 5×2 슬랩
-  for (const sz of [-1, 1]) {
-    const ang = sz * Math.atan2(RHT, D / 2 + 0.15);
-    for (let a = 0; a < slabsA; a++) {
-      for (let b = 0; b < slabsB; b++) {
-        const alongW = -W / 2 - 0.12 + (a + 0.5) * ((W + 0.24) / slabsA);
-        const alongS = (b + 0.5) / slabsB; // 0(처마)→1(용마루)
-        const zPos = sz * (D / 2 + 0.15) * (1 - alongS);
-        const yPos = H + RHT * alongS;
-        tmp.position.set(alongW, yPos, zPos);
-        tmp.rotation.set(ang, 0, 0);
-        tmp.updateMatrix();
-        chunks.push({
-          size: [(W + 0.24) / slabsA - 0.02, 0.07, slopeLen / slabsB],
-          mat: slateMat, matrix: tmp.matrix.clone(),
-          center: new THREE.Vector3(alongW, yPos, zPos), dead: false,
-        });
+  if (shop) addChunk(W * 0.96, 0.22, WT + 0.08, 0, RH * 2 + 0.1, D / 2 - WT / 2, trimMat, 0);
+  if (style.roof === 'gable') {
+    // 박공(계단식) + 기와/슬레이트 경사면
+    const RHT = 0.62 + style.stories * 0.14;
+    const gsteps = 4;
+    for (const sx of [-1, 1]) {
+      for (let s2 = 0; s2 < gsteps; s2++) {
+        const t = s2 / gsteps;
+        addChunk(WT, RHT / gsteps, D * (1 - t * 0.92), sx * (W / 2 - WT / 2), H + (s2 + 0.5) * (RHT / gsteps), 0, wallMat, 0);
       }
     }
+    const slopeLen = Math.hypot(D / 2 + 0.15, RHT);
+    const slabsA = 5, slabsB = 2;
+    for (const sz of [-1, 1]) {
+      const ang = sz * Math.atan2(RHT, D / 2 + 0.15);
+      for (let a = 0; a < slabsA; a++) {
+        for (let b = 0; b < slabsB; b++) {
+          const alongW = -W / 2 - 0.12 + (a + 0.5) * ((W + 0.24) / slabsA);
+          const alongS = (b + 0.5) / slabsB;
+          addChunk((W + 0.24) / slabsA - 0.02, 0.07, slopeLen / slabsB,
+            alongW, H + RHT * alongS, sz * (D / 2 + 0.15) * (1 - alongS), roofMat, 0, ang);
+        }
+      }
+    }
+    addChunk(0.26, 0.5, 0.26, W * 0.28, H + RHT + 0.2, 0, wallMat, 0);
+    g.userData.height = H + RHT + 0.45;
+  } else {
+    // 평지붕: 슬랩 + 파라펫 (시가지 상가/창고 느낌)
+    const slabs = 4;
+    for (let a = 0; a < slabs; a++) {
+      addChunk(W / slabs - 0.02, 0.1, D - 0.06, -W / 2 + (a + 0.5) * (W / slabs), H + 0.05, 0, ROOF_MATS.wood, 0);
+    }
+    for (const [len, ry, ox, oz] of [[W, 0, 0, D / 2 - 0.07], [W, 0, 0, -D / 2 + 0.07], [D, Math.PI / 2, W / 2 - 0.07, 0], [D, Math.PI / 2, -W / 2 + 0.07, 0]]) {
+      const segs = Math.round(len / 0.75);
+      for (let a = 0; a < segs; a++) {
+        const along = -len / 2 + (a + 0.5) * (len / segs);
+        addChunk(len / segs - 0.02, 0.22, 0.14, ry ? ox : along, H + 0.21, ry ? along : oz, wallMat, ry);
+      }
+    }
+    addChunk(0.26, 0.45, 0.26, -W * 0.3, H + 0.35, -D * 0.2, wallMat, 0);
+    g.userData.height = H + 0.55;
   }
-  // 굴뚝
-  addChunk(0.26, 0.5, 0.26, W * 0.28, H + RHT + 0.2, 0, brickMat, 0);
   g.userData.chunks = chunks;
   return g;
 }
@@ -1465,13 +1563,14 @@ function placeProp(type, gx, gz) {
   if (type === 'tree') group.scale.setScalar(0.82 + rng() * 0.55);
   else if (type === 'bush') group.scale.setScalar(0.85 + rng() * 0.5);
   // 클릭 판정용 히트박스
+  const bh = group.userData.height ?? 3.4; // 건물별 실제 높이
   const hit = foot.length > 1
-    ? new THREE.Mesh(new THREE.BoxGeometry(3.4, 3.4, 3.4), new THREE.MeshBasicMaterial({ visible: false }))
+    ? new THREE.Mesh(new THREE.BoxGeometry(3.4, bh, 3.4), new THREE.MeshBasicMaterial({ visible: false }))
     : new THREE.Mesh(new THREE.CylinderGeometry(0.9, 0.9, 2.4, 8), new THREE.MeshBasicMaterial({ visible: false }));
-  hit.position.y = foot.length > 1 ? 1.7 : 1.2;
+  hit.position.y = foot.length > 1 ? bh / 2 : 1.2;
   group.add(hit);
   scene.add(group);
-  const prop = { type, def, gx, gz, hp: def.hp, group, hit, cells };
+  const prop = { type, def, gx, gz, hp: def.hp, group, hit, cells, blockShotH: group.userData.height ?? null };
   if (group.userData.chunks) {
     // 프리컷 청크 건물: 자체 bake (부분 파괴를 위해 mergeStatic 대신)
     prop.chunks = group.userData.chunks;
@@ -2710,7 +2809,8 @@ function traceDirect(attacker, from, aim, opts = {}) {
     const prop = props.get(cellKey(c.gx, c.gz));
     if (prop) {
       const gH = heightAt(c.gx, c.gz);
-      if (prop.def.blockShotH > 0 && y < gH + prop.def.blockShotH && !nearAim) {
+      const bsh = prop.blockShotH ?? prop.def.blockShotH;
+      if (bsh > 0 && y < gH + bsh && !nearAim) {
         return { x, y, z, prop, cover: 0, reached: false };
       }
       if (prop.def.coverH > 0 && y < gH + prop.def.coverH) coverCells.set(cellKey(c.gx, c.gz), prop.def.cover);
