@@ -1434,7 +1434,19 @@ function bakeChunkProp(prop) {
     if (!byMat.has(ch.mat)) byMat.set(ch.mat, []);
     byMat.get(ch.mat).push(ch);
   }
-  for (const [mat, chs] of byMat) {
+  prop._sootMats ??= new Map();
+  for (const [mat0, chs] of byMat) {
+    // 화재 그을음: 이 건물 전용 어두운 재질 클론으로 교체해 병합
+    let mat = mat0;
+    if (prop._soot) {
+      if (!prop._sootMats.has(mat0)) {
+        const dm = mat0.clone();
+        if (dm.color) dm.color.multiplyScalar(0.45);
+        dm.roughness = 1;
+        prop._sootMats.set(mat0, dm);
+      }
+      mat = prop._sootMats.get(mat0);
+    }
     const geos = [];
     for (const ch of chs) {
       if (!ch._ngeo) ch._ngeo = new THREE.BoxGeometry(...ch.size).toNonIndexed();
@@ -1572,6 +1584,25 @@ function placeProp(type, gx, gz) {
   if (type === 'tree') group.scale.setScalar(0.82 + rng() * 0.55);
   else if (type === 'bush') group.scale.setScalar(0.85 + rng() * 0.5);
   // 클릭 판정용 히트박스
+  // 경사면 위 건물: 바닥과 기초 사이 틈을 나무 데크로 받친다
+  if (foot.length > 1) {
+    let minH = Infinity;
+    for (const [dx, dz] of foot) minH = Math.min(minH, heightAt(gx + dx, gz + dz));
+    const gap = baseY - minH;
+    if (gap > 0.14) {
+      const deckMat = new THREE.MeshStandardMaterial({ color: 0x7a5c3a, roughness: 0.95 });
+      const deck = new THREE.Mesh(new THREE.BoxGeometry(3.15, gap + 0.14, 2.35), deckMat);
+      deck.position.y = -(gap + 0.14) / 2 + 0.05;
+      deck.castShadow = true; deck.receiveShadow = true;
+      group.add(deck);
+      // 데크 널빤지 라인
+      for (let pi = 0; pi < 4; pi++) {
+        const plank = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.05, 0.09), new THREE.MeshStandardMaterial({ color: 0x5e452c, roughness: 0.95 }));
+        plank.position.set(0, 0.03, -0.9 + pi * 0.6);
+        group.add(plank);
+      }
+    }
+  }
   const bh = group.userData.height ?? 3.4; // 건물별 실제 높이
   const hit = foot.length > 1
     ? new THREE.Mesh(new THREE.BoxGeometry(3.4, bh, 3.4), new THREE.MeshBasicMaterial({ visible: false }))
@@ -1674,6 +1705,8 @@ function placeProp(type, gx, gz) {
 // 드로콜 각 1회. 배치는 연속 지형 가중치를 따라 풀밭/흙 위에만.
 // ---------------------------------------------------------------------------
 const decorMeshes = []; // 풀/꽃/낙엽/잔가지 — 디버그 토글용
+let grassBurnData = null;   // 화재용 풀 인스턴스 좌표
+const grassBurnt = new Set();
 {
   // 스태틱 그래스 텍스처: 가는 잎 다발 + 밑동 어둡고 끝 밝은 세로 그라데이션.
   // 흰색으로 그려 instanceColor로 톤을 입히면 밑동 그늘/끝 하이라이트가 자연스럽다.
@@ -1770,6 +1803,7 @@ const decorMeshes = []; // 풀/꽃/낙엽/잔가지 — 디버그 토글용
   const gCol = new THREE.Color();
   const up = new THREE.Vector3(0, 1, 0);
   let placed = 0, guard = 0;
+  const grassPts = [];
   while (placed < GRASS_N && guard++ < GRASS_N * 8) {
     const wx = (rng() - 0.5) * (GW * TILE - 1.2);
     const wz = (rng() - 0.5) * (GH * TILE - 1.2);
@@ -1799,8 +1833,10 @@ const decorMeshes = []; // 풀/꽃/낙엽/잔가지 — 디버그 토글용
       patchNoise(wx + HALFW, wz + HALFH) * 1.15 + w.dirt * 0.4 + (rng() - 0.5) * 0.3 - 0.1, 0, 1);
     grassTone(dry, gCol);
     grassMesh.setColorAt(placed, gCol);
+    grassPts.push(wx, wz);
     placed++;
   }
+  grassBurnData = { mesh: grassMesh, pts: new Float32Array(grassPts) };
   grassMesh.count = placed;
   grassMesh.instanceMatrix.needsUpdate = true;
   if (grassMesh.instanceColor) grassMesh.instanceColor.needsUpdate = true;
@@ -3161,19 +3197,25 @@ async function moveUnit(unit, path, finalFacing = null, onStep = null) {
     await rotateTo(unit, reverse ? travel + Math.PI : travel, DRIVE_TURN_RATE);
     sfx(terrainAt(cell.gx, cell.gz) === T.WATER ? 'splash' : 'step');
     unit._trailLast ??= { x: from.x, z: from.z };
+    unit._trailSm ??= { x: from.x, z: from.z };
     await tween(reverse ? 145 : 105, (e) => {
       const x = THREE.MathUtils.lerp(from.x, to.x, e);
       const z = THREE.MathUtils.lerp(from.z, to.z, e);
       unit.group.position.set(x, driveHeight(x, z) + Math.sin(e * Math.PI) * 0.08, z);
       alignToGround(unit);
-      // 궤도 자국 샘플링 (0.5유닛 간격)
+      // 궤도 자국: 지수 평활 점을 따라 그린다 — 8방향 꺾임이 부드러운
+      // 곡선으로 뭉개지고, 이따금 끊겨 자연스러운 자국이 된다
+      unit._trailSm.x += (x - unit._trailSm.x) * 0.32;
+      unit._trailSm.z += (z - unit._trailSm.z) * 0.32;
+      const smx = unit._trailSm.x, smz = unit._trailSm.z;
       const tl = unit._trailLast;
-      if (Math.hypot(x - tl.x, z - tl.z) > 0.5) {
-        addTrackRibbon(unit, tl.x, tl.z, x, z);
+      if (Math.hypot(smx - tl.x, smz - tl.z) > 0.34) {
+        if (rng() < 0.14) unit._trailEdge = [null, null]; // 끊긴 자국 (남기다 말다)
+        else addTrackRibbon(unit, tl.x, tl.z, smx, smz);
         // 지나가며 풀/잎을 튕겨 날린다 (풀밭 위에서만)
         kickFoliage(x, z);
-        tl.x = x;
-        tl.z = z;
+        tl.x = smx;
+        tl.z = smz;
       }
     });
     unit.gx = cell.gx;
@@ -3760,8 +3802,26 @@ function destroyToWreck(unit) {
       });
     });
     part.parent.remove(part);
+    // 프록시 소부품(로드휠/해치)도 함께 터져 나간다 — 부품 단위 파괴감
+    const wp0 = unit.group.position;
+    for (let pi = 0; pi < 4; pi++) {
+      const small = pi % 2
+        ? new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.08, 10), new THREE.MeshStandardMaterial({ color: 0x3c424e, roughness: 0.8 }))
+        : new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.06, 0.22), new THREE.MeshStandardMaterial({ color: 0x4a5160, roughness: 0.8 }));
+      small.position.set(wp0.x + (rng() - 0.5) * 0.8, wp0.y + 0.7, wp0.z + (rng() - 0.5) * 0.8);
+      small.rotation.set(rng() * 3, rng() * 3, rng() * 3);
+      small.castShadow = true;
+      scene.add(small);
+      pieces.push({
+        mesh: small,
+        vel: new THREE.Vector3((rng() - 0.5) * 5, 4 + rng() * 3.5, (rng() - 0.5) * 5),
+        spin: new THREE.Vector3(rng() * 12 - 6, rng() * 12 - 6, rng() * 12 - 6),
+      });
+    }
+    let trailT = 0;
     tween(2200, (e, k) => {
       const dt = 0.016;
+      trailT += dt;
       for (const p of pieces) {
         p.vel.y -= 13 * dt;
         p.mesh.position.addScaledVector(p.vel, dt);
@@ -3773,8 +3833,24 @@ function destroyToWreck(unit) {
         }
         p.mesh.rotation.x += p.spin.x * dt;
         p.mesh.rotation.z += p.spin.z * dt;
+        // 공중에 떠 있는 동안 화염 꼬리를 문다
+        if (k < 0.45 && p.mesh.position.y > fy + 0.25 && rng() < 0.2) {
+          const fp = makePuff(0xffa03a, THREE.AdditiveBlending);
+          fp.position.copy(p.mesh.position);
+          fp.scale.setScalar(0.18 + rng() * 0.14);
+          scene.add(fp);
+          tween(420, (e2, k2) => {
+            fp.position.y += 0.01;
+            fp.material.opacity = 0.85 * (1 - k2);
+            fp.scale.multiplyScalar(1.015);
+          }, linear).then(() => { scene.remove(fp); fp.material.dispose(); });
+        }
       }
-    }, linear); // 착지한 부품은 잔해로 그 자리에 남는다
+    }, linear).then(() => {
+      // 가장 큰 부품(포탑) 착지점에 잔불 — 부서진 부품이 떨어져 불탄다
+      const big = pieces[0];
+      if (big) wreckFires.push({ x: big.mesh.position.x, y: big.mesh.position.y + 0.2, z: big.mesh.position.z, t0: performance.now(), last: 0, dur: 12 });
+    });
   }
   // 차체를 그을린 잔해로: 재질을 어둡게 복제 (공유 재질 훼손 방지)
   const darkCache = new Map();
@@ -3800,8 +3876,9 @@ function updateWreckFires(now) {
   for (let i = wreckFires.length - 1; i >= 0; i--) {
     const f = wreckFires[i];
     const age = (now - f.t0) / 1000;
-    if (age > 34) { wreckFires.splice(i, 1); continue; }
-    const firePhase = age < 7;
+    const dur = f.dur ?? 34;
+    if (age > dur) { wreckFires.splice(i, 1); continue; }
+    const firePhase = age < Math.min(7, dur * 0.45);
     const interval = firePhase ? 120 : 300;
     if (now - f.last < interval) continue;
     f.last = now;
@@ -3833,6 +3910,126 @@ function updateWreckFires(now) {
         sp.material.color.setHSL(0.085 - k * 0.05, 1, Math.max(0.15, 0.55 - k * 0.4));
         sp.material.opacity = 0.9 * (1 - k * k);
       }, linear).then(() => { scene.remove(sp); sp.material.dispose(); });
+    }
+  }
+}
+
+// ── 화재 전파: 포탄 폭약이 주변 풀/나무/건물에 불을 붙인다 ──
+// 풀은 타서 사라지고, 나무는 까맣게 그을리며 잎이 잿불로 날아가고,
+// 건물은 그을음+지연 피해(불이 크게 나면 무너진다).
+function emberFx(x, y, z) {
+  const sp = makePuff(0xff9540, THREE.AdditiveBlending);
+  sp.scale.setScalar(0.08 + rng() * 0.08);
+  sp.position.set(x, y, z);
+  scene.add(sp);
+  const vx = 0.4 + rng() * 0.55, vy = 0.5 + rng() * 0.75, vz = (rng() - 0.5) * 0.5;
+  tween(1800 + rng() * 1300, (e, k) => {
+    sp.position.x += vx * 0.016;
+    sp.position.y += vy * 0.016 * (1 - k * 0.5);
+    sp.position.z += vz * 0.016;
+    sp.material.opacity = (1 - k) * (0.55 + 0.45 * Math.abs(Math.sin(k * 34))); // 잿불 깜빡임
+  }, linear).then(() => { scene.remove(sp); sp.material.dispose(); });
+}
+function burnGrassAt(cx, cz, r) {
+  if (!grassBurnData) return;
+  const { mesh, pts } = grassBurnData;
+  const idx = [];
+  const r2 = r * r;
+  for (let i = 0; i < mesh.count; i++) {
+    const dx = pts[i * 2] - cx, dz = pts[i * 2 + 1] - cz;
+    if (dx * dx + dz * dz < r2 && !grassBurnt.has(i)) { grassBurnt.add(i); idx.push(i); }
+  }
+  if (!idx.length) return;
+  const m = new THREE.Matrix4();
+  // 몇 가닥은 잿불로 날아오른다
+  for (let i = 0; i < Math.min(6, idx.length); i++) {
+    const gi = idx[Math.floor(rng() * idx.length)];
+    emberFx(pts[gi * 2], sampleHeight(pts[gi * 2], pts[gi * 2 + 1]) + 0.3, pts[gi * 2 + 1]);
+  }
+  tween(850, (e, k) => {
+    const sc = 0.85; // 프레임당 수축 → 타서 사라짐
+    for (const i of idx) {
+      mesh.getMatrixAt(i, m);
+      const el = m.elements;
+      el[0] *= sc; el[1] *= sc; el[2] *= sc;
+      el[4] *= sc; el[5] *= sc; el[6] *= sc;
+      el[8] *= sc; el[9] *= sc; el[10] *= sc;
+      mesh.setMatrixAt(i, m);
+    }
+    mesh.instanceMatrix.needsUpdate = true;
+  }, linear);
+}
+// 지면 그을음: 정점 색을 검게 (크레이터와 달리 높이는 유지)
+function scorchTerrain(cx, cz, R) {
+  const pos = terrainGeo.attributes.position;
+  const colAttr = terrainGeo.attributes.color;
+  const ix0 = Math.max(0, Math.floor((cx - R + HALFW) / VSTEP));
+  const ix1 = Math.min(VNW, Math.ceil((cx + R + HALFW) / VSTEP));
+  const iz0 = Math.max(0, Math.floor((cz - R + HALFH) / VSTEP));
+  const iz1 = Math.min(VNH, Math.ceil((cz + R + HALFH) / VSTEP));
+  const sc = new THREE.Color(0x241d14);
+  const cur = new THREE.Color();
+  for (let iz = iz0; iz <= iz1; iz++) {
+    for (let ix = ix0; ix <= ix1; ix++) {
+      const i = vIndex(ix, iz);
+      const d = Math.hypot(pos.getX(i) - cx, pos.getZ(i) - cz);
+      if (d >= R) continue;
+      cur.setRGB(colAttr.getX(i), colAttr.getY(i), colAttr.getZ(i));
+      cur.lerp(sc, (1 - d / R) * 0.62);
+      colAttr.setXYZ(i, cur.r, cur.g, cur.b);
+    }
+  }
+  colAttr.needsUpdate = true;
+}
+function burnProp(prop) {
+  if (prop._burning) return;
+  prop._burning = true;
+  const p = prop.group.position;
+  if (prop.type === 'tree') {
+    // 수피는 까맣게, 잎은 잿불로 날아가며 사라진다 — 그을린 채 서 있는다
+    const bark = prop.group.children[0], leaf = prop.group.children[1];
+    if (bark?.isMesh) {
+      bark.material = bark.material.clone();
+      const c0 = bark.material.color.clone();
+      tween(2000, (e, k) => { bark.material.color.copy(c0).multiplyScalar(1 - k * 0.85); }, linear);
+    }
+    if (leaf?.isMesh) {
+      leaf.material = leaf.material.clone();
+      leaf.material.transparent = true;
+      for (let i = 0; i < 13; i++) {
+        emberFx(p.x + (rng() - 0.5) * 1.4, p.y + 1.1 + rng() * 0.9, p.z + (rng() - 0.5) * 1.4);
+      }
+      tween(2400, (e, k) => { leaf.material.opacity = 1 - k; }, linear).then(() => { leaf.visible = false; });
+    }
+    wreckFires.push({ x: p.x, y: p.y + 1.0, z: p.z, t0: performance.now(), last: 0, dur: 10 });
+  } else if (prop.type === 'building' || prop.type === 'house') {
+    // 그을음(재질 어둡게 재병합) + 화재 → 지연 피해 3틱 (크면 무너진다)
+    if (prop.chunks) { prop._soot = true; bakeChunkProp(prop); }
+    wreckFires.push({ x: p.x, y: p.y + 1.7, z: p.z, t0: performance.now(), last: 0, dur: 16 });
+    let ticks = 0;
+    const iv = setInterval(() => {
+      ticks++;
+      if (!props.has(cellKey(prop.gx, prop.gz))) { clearInterval(iv); return; }
+      damageProp(prop, 15, new THREE.Vector3(p.x + (rng() - 0.5) * 1.6, p.y + 1 + rng() * 1.4, p.z + (rng() - 0.5) * 1.6));
+      if (ticks >= 3) clearInterval(iv);
+    }, 2300);
+  } else if (prop.type === 'bush') {
+    wreckFires.push({ x: p.x, y: p.y + 0.4, z: p.z, t0: performance.now(), last: 0, dur: 6 });
+    for (let i = 0; i < 6; i++) emberFx(p.x + (rng() - 0.5) * 0.7, p.y + 0.5, p.z + (rng() - 0.5) * 0.7);
+    damageProp(prop, 999); // 덤불은 타서 사라진다
+  }
+}
+function igniteArea(center, r) {
+  burnGrassAt(center.x, center.z, r * 0.9);
+  scorchTerrain(center.x, center.z, r);
+  const c = worldToCell(center);
+  const seenP = new Set();
+  for (let dx = -2; dx <= 2; dx++) {
+    for (let dz = -2; dz <= 2; dz++) {
+      const prop = props.get(cellKey(c.gx + dx, c.gz + dz));
+      if (!prop || seenP.has(prop)) continue;
+      seenP.add(prop);
+      if (prop.group.position.distanceTo(center) < r + 1.2 && rng() < 0.8) burnProp(prop);
     }
   }
 }
@@ -3917,6 +4114,15 @@ async function applyUnitDamage(target, rawDmg, fromPos = null) {
     sfx('explode');
     await explosionFx(target.group.position.clone().add(new THREE.Vector3(0, 1, 0)), true);
     destroyToWreck(target); // 포탑이 날아가고 차체는 그을린 잔해 — 화재→매연
+    // 유폭 파편: 근처 전차가 파편 직격으로 소량 피해를 입는다
+    for (const u2 of units) {
+      if (!u2.alive || u2 === target) continue;
+      const d2 = u2.group.position.distanceTo(target.group.position);
+      if (d2 < 3.4) {
+        popText(u2.group.position.clone().add(new THREE.Vector3(0, 1.6, 0)), '💥 파편!', '#ffb08a');
+        await applyUnitDamage(u2, Math.max(4, Math.round(13 - d2 * 2.6)), target.group.position);
+      }
+    }
   } else {
     const base = target.group.position.clone();
     await tween(240, (e, rawK) => {
@@ -4000,6 +4206,7 @@ async function resolveImpact(impact, attacker, directUnit = null) {
       : [0x8a6f4a, 0x6f5a3e, 0xa8875a];
     await explosionFx(impact.clone().add(new THREE.Vector3(0, 0.4, 0)), !!directUnit, cols);
     crater(c.gx, c.gz);
+    igniteArea(impact, 1.9); // 폭약 화재: 풀/나무/건물이 불붙는다
   }
   // 다리 피해: 착탄 셀이 다리면 직격, 옆 칸이면 여파
   if (bridge.alive) {
