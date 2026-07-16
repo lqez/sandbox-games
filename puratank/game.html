@@ -95,6 +95,19 @@
     display: flex; gap: 10px;
     padding: 10px;
   }
+  /* 확정 바: 계획 미리보기 상태에서만 표시 — 탭 2단계 조작(모바일) */
+  #confirm {
+    bottom: 88px; left: 50%;
+    transform: translateX(-50%);
+    display: none;
+    padding: 8px;
+  }
+  #confirm.show { display: block; }
+  #confirm button {
+    background: #2ea04f;
+    font-size: 17px;
+    padding: 12px 34px;
+  }
   button {
     font-family: inherit;
     font-size: 14px;
@@ -174,6 +187,9 @@
     <div class="row" id="perf-tri">TRI --</div>
   </div>
 
+  <div id="confirm" class="panel">
+    <button id="btn-ok">✓ 확정</button>
+  </div>
   <div id="controls" class="panel">
     <button id="btn-go">👁 경계</button>
     <button id="btn-cancel" class="secondary">✕ 취소</button>

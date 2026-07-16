@@ -4850,6 +4850,17 @@ ${gunTxt} · 부앙 ${g.pitchMin}°~+${g.pitchMax}°<br>
 function makeThumb(el, u, portrait, label) {
   el.innerHTML = `<img src="${portrait}" alt=""><span class="tag">${label}</span><span class="lv">Lv${u.driverLv}</span><span class="hpbar"><i style="width:100%"></i></span>`;
 }
+// 섬네일 탭 → 해당 전차로 카메라 이동 (오프셋 유지, 부드럽게)
+function focusCamera(u) {
+  const from = controls.target.clone();
+  const off = camera.position.clone().sub(controls.target);
+  const to = u.group.position.clone();
+  to.y += 1;
+  tween(500, (e) => {
+    controls.target.lerpVectors(from, to, e);
+    camera.position.copy(controls.target).add(off);
+  }, easeOut);
+}
 {
   const portraits = renderKitPortraits([playerKit, enemyKit]);
   makeThumb(thumbPlayerEl, player, portraits[playerKit], KIT_INFO[playerKit].label);
@@ -4858,6 +4869,7 @@ function makeThumb(el, u, portrait, label) {
     div.className = 'thumb';
     makeThumb(div, e, portraits[enemyKit], KIT_INFO[enemyKit].label);
     div.addEventListener('click', () => {
+      focusCamera(e);
       if (detailFor === i) { detailFor = null; thumbDetail.classList.remove('show'); return; }
       detailFor = i;
       thumbDetail.className = 'panel right show';
@@ -4867,6 +4879,7 @@ function makeThumb(el, u, portrait, label) {
     e._thumbEl = div;
   });
   thumbPlayerEl.addEventListener('click', () => {
+    focusCamera(player);
     if (detailFor === 'player') { detailFor = null; thumbDetail.classList.remove('show'); return; }
     detailFor = 'player';
     thumbDetail.className = 'panel show';
@@ -5243,6 +5256,7 @@ function startPlanning() {
   busy = false;
   planQueue = [];
   for (const u of units) if (u.alive && u.reloadLeft > 0) u.reloadLeft -= 1;
+  clearPending();
   ghost.visible = false;
   hideBowUI();
   turnLabel.textContent = `턴 ${turnNo}`;
@@ -5271,6 +5285,7 @@ function enqueuePlan(plan) {
 // 예약된 플랜들을 순차 서브턴으로 실행. 적은 매 서브턴 새로 반응한다.
 async function resolveQueue() {
   if (phase !== 'plan' || busy || !planQueue.length) return;
+  clearPending();
   const queue = planQueue;
   planQueue = [];
   ghost.visible = false;
@@ -5616,6 +5631,31 @@ let downPos = null;
 let ghostGesture = null; // 기동: { cell, info, facing }
 let fireGesture = null;  // 사격: { cell, shot } — 내 차량에서 바깥으로 드래그
 let hoverAim = null;
+// ── 모바일 탭 2단계 조작 ──
+// 내 전차 "탭" = 사격 모드 토글 → 목표 탭 = 미리보기 → ✓ 확정.
+// 이동도 셀 "탭" = 고스트 미리보기 → (고스트 드래그로 포탑 조정) → ✓ 확정.
+// 드래그 제스처(데스크톱)는 기존 그대로 즉시 확정.
+let fireMode = false;
+let pendingPlan = null;
+const confirmEl = document.getElementById('confirm');
+const btnOk = document.getElementById('btn-ok');
+function setConfirm(show, label = '✓ 확정') {
+  btnOk.textContent = label;
+  confirmEl.classList.toggle('show', !!show);
+}
+function clearPending(keepMode = false) {
+  pendingPlan = null;
+  setConfirm(false);
+  ghost.visible = false;
+  hideBowUI();
+  if (!keepMode) fireMode = false;
+}
+btnOk.addEventListener('click', () => {
+  if (!pendingPlan || phase !== 'plan' || busy) return;
+  const p = pendingPlan;
+  clearPending();
+  enqueuePlan(p);
+});
 
 function setPointer(e) {
   pointer.x = (e.clientX / window.innerWidth) * 2 - 1;
@@ -5628,7 +5668,7 @@ renderer.domElement.addEventListener('pointerdown', (e) => {
   if (phase !== 'plan' || busy) return;
   setPointer(e);
   // 1) 사격 출발점(예약 이동이 있으면 마지막 고스트, 없으면 현재 전차)에서
-  //    드래그 시작 = 사격 조준. 사격은 그 지점에서 나간다.
+  //    드래그 시작 = 사격 조준 / "탭"이면 사격 모드 토글 (pointerup에서 판정)
   const fo = fireOrigin();
   if (raycaster.intersectObject(fo.hitbox).length) {
     if (projReload > 0) { setHint(`재장전 중 — ${projReload}턴 남음`); return; }
@@ -5636,6 +5676,17 @@ renderer.domElement.addEventListener('pointerdown', (e) => {
     controls.enabled = false;
     refreshPlanUI(true); // 사격 필드 강조
     return;
+  }
+  // 사격 모드: 셀 탭으로 조준하므로 여기선 제스처를 만들지 않는다 (궤도만)
+  if (fireMode) return;
+  // 이동 미리보기 중 고스트를 잡으면 = 포탑 방향 조정 드래그
+  if (pendingPlan?.type === 'move') {
+    const gcell = raycastGroundCell(raycaster);
+    if (gcell && Math.abs(gcell.gx - pendingPlan.cell.gx) <= 1 && Math.abs(gcell.gz - pendingPlan.cell.gz) <= 1) {
+      ghostGesture = { adjust: true, cell: pendingPlan.cell, info: pendingPlan.info, facing: pendingPlan.facingRad, turretYaw: pendingPlan.turretYaw, origin: pendingPlan.origin };
+      controls.enabled = false;
+      return;
+    }
   }
   // 2) 이동 필드 셀 = 기동 고스트 (드래그로 차체 방향)
   const cell = raycastGroundCell(raycaster);
@@ -5711,13 +5762,24 @@ renderer.domElement.addEventListener('pointermove', (e) => {
 });
 
 renderer.domElement.addEventListener('pointerup', async (e) => {
+  const movedPx = downPos ? Math.hypot(e.clientX - downPos.x, e.clientY - downPos.y) : 99;
+  const isTap = movedPx <= 8;
   if (fireGesture) {
     const g = fireGesture;
     fireGesture = null;
     controls.enabled = true;
-    hideBowUI();
     hoverAim = null;
     downPos = null;
+    // 내 전차를 "탭" = 사격 모드 토글 (드래그 없이 목표를 탭해서 조준)
+    if (isTap && !g.cell) {
+      fireMode = !fireMode;
+      clearPending(true);
+      hideBowUI();
+      refreshPlanUI(fireMode);
+      setHint(fireMode ? '🎯 사격 모드 — 목표를 탭하세요' : '사격 모드 해제');
+      return;
+    }
+    hideBowUI();
     if (g.cell && g.shot) {
       enqueuePlan({ type: 'fire', cell: g.cell, shot: g.shot });
     } else {
@@ -5732,8 +5794,12 @@ renderer.domElement.addEventListener('pointerup', async (e) => {
     controls.enabled = true;
     downPos = null;
     setPointer(e);
-    // 취소는 "출발 셀로 되돌려 놓았을 때"만 — 키 큰 전차 히트박스가 아니라
-    // 지면 셀 기준으로 정확히 판정해야 근거리 기동이 오취소되지 않는다.
+    // 포탑 조정 드래그였다면 미리보기에 반영만
+    if (g.adjust && pendingPlan?.type === 'move') {
+      pendingPlan.turretYaw = g.turretYaw;
+      return;
+    }
+    // 취소는 "출발 셀로 되돌려 놓았을 때"만
     const gh = raycaster.intersectObject(terrainMesh, false)[0];
     const rc = gh ? worldToCell(gh.point) : null;
     if (rc && rc.gx === g.origin.gx && rc.gz === g.origin.gz) {
@@ -5741,25 +5807,64 @@ renderer.domElement.addEventListener('pointerup', async (e) => {
       setHint('이동 취소');
       return;
     }
+    if (isTap) {
+      // 탭 = 미리보기 + ✓ 확정 대기 (모바일 2단계)
+      pendingPlan = {
+        type: 'move', path: g.info.path.slice(), facing: null, turretYaw: g.turretYaw,
+        endDir: g.info.endDir, cell: g.cell, info: g.info, facingRad: g.facing, origin: g.origin,
+      };
+      setConfirm(true, '✓ 이동');
+      setHint('고스트를 드래그해 포탑 방향 조정 · ✓로 확정');
+      return;
+    }
     enqueuePlan({ type: 'move', path: g.info.path.slice(), facing: null, turretYaw: g.turretYaw, endDir: g.info.endDir });
     return;
   }
   if (!downPos) return;
-  const moved = Math.hypot(e.clientX - downPos.x, e.clientY - downPos.y);
   downPos = null;
-  if (moved > 7 || busy || phase !== 'plan') return;
+  if (!isTap || busy || phase !== 'plan') return;
   setPointer(e);
+  // 사격 모드: 목표 탭 → 탄도 미리보기 + ✓ 발사
+  if (fireMode) {
+    let cell = null;
+    const enemyHit = raycaster.intersectObjects(
+      enemies.filter((en) => en.alive).map((en) => en.hitbox)
+    )[0];
+    if (enemyHit) {
+      const u = enemyHit.object.userData.unit;
+      cell = { gx: u.gx, gz: u.gz };
+    } else {
+      const bridgeHit = bridge.alive && bridge.hit ? raycaster.intersectObject(bridge.hit)[0] : null;
+      if (bridgeHit) cell = worldToCell(bridgeHit.point);
+      else {
+        const ground = raycaster.intersectObject(terrainMesh, false)[0];
+        if (ground) cell = worldToCell(ground.point);
+      }
+    }
+    if (!cell) return;
+    const f = currentFireCells.get(cellKey(cell.gx, cell.gz));
+    if (!f) { setHint('사격 불가 지점'); return; }
+    const aimP = aimPointOf({ gx: cell.gx, gz: cell.gz });
+    updateBowUI(aimP, f.shot);
+    pendingPlan = { type: 'fire', cell: { gx: cell.gx, gz: cell.gz }, shot: f.shot };
+    const fo2 = fireOrigin();
+    const d = Math.hypot(cell.gx - fo2.gx, cell.gz - fo2.gz).toFixed(0);
+    setConfirm(true, `✓ 발사 ${f.shot.chance}%`);
+    setHint(`${f.shot.lob ? '🌕 곡사' : '➡ 직사'} ${d}칸 · ${f.shot.chance}%`);
+    return;
+  }
   // 탭 안내: 적을 탭하면 조작법 힌트
   const enemyHit = raycaster.intersectObjects(
     enemies.filter((en) => en.alive).map((en) => en.hitbox)
   )[0];
-  if (enemyHit) setHint('사격: 내 전차를 잡고 반대쪽으로 시위를 당기세요');
+  if (enemyHit) setHint('내 전차를 탭하면 🎯 사격 모드');
 });
 
 // 취소 동작 (ESC / 모바일 ✕ 버튼 공용): 진행 중 제스처 → 마지막 예약 순
 function cancelAction() {
   if (fireGesture) { fireGesture = null; hideBowUI(); hoverAim = null; controls.enabled = true; downPos = null; refreshPlanUI(false); setHint('취소'); return; }
   if (ghostGesture) { ghostGesture = null; ghost.visible = false; controls.enabled = true; downPos = null; refreshPlanUI(false); setHint('취소'); return; }
+  if (pendingPlan || fireMode) { clearPending(); refreshPlanUI(false); setHint('취소'); return; }
   if (phase === 'plan' && !busy && planQueue.length) {
     planQueue.pop();
     setHint(`예약 취소 (${planQueue.length}턴 남음)`);
