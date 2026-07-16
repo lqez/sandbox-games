@@ -902,9 +902,19 @@ function genTreeGeometry(spec) {
       return;
     }
     const kids = spec.kids[0] + Math.floor(rng() * (spec.kids[1] - spec.kids[0] + 1));
+    // 자식 가지를 부모 방향 둘레로 고르게(휘돌이) 분산 — 한쪽 쏠림 방지.
+    // dir에 수직인 프레임(u,v)을 만들고 방위각 φ를 균등 분할해 원뿔로 벌린다.
+    const u = new THREE.Vector3();
+    if (Math.abs(dir.y) < 0.92) u.set(0, 1, 0).cross(dir).normalize();
+    else u.set(1, 0, 0).cross(dir).normalize();
+    const vv = dir.clone().cross(u).normalize();
+    const basePhi = rng() * Math.PI * 2;
     for (let i = 0; i < kids; i++) {
-      const axis = new THREE.Vector3(rng() - 0.5, rng() - 0.5, rng() - 0.5).normalize();
-      const nd = dir.clone().applyAxisAngle(axis, spec.spread * (0.6 + rng() * 0.8));
+      const phi = basePhi + (i / kids) * Math.PI * 2 + (rng() - 0.5) * (Math.PI / kids);
+      const tilt = spec.spread * (0.78 + rng() * 0.5);
+      const nd = dir.clone().multiplyScalar(Math.cos(tilt))
+        .addScaledVector(u, Math.sin(tilt) * Math.cos(phi))
+        .addScaledVector(vv, Math.sin(tilt) * Math.sin(phi));
       nd.y += spec.upBias;
       if (spec.droop) nd.y -= spec.droop * (depth + 1) * 0.5;
       nd.normalize();
@@ -917,7 +927,7 @@ function genTreeGeometry(spec) {
     // 침엽수: 곧은 줄기 + 높이별 방사형 가지 고리 (위로 갈수록 짧게)
     const th = spec.trunkLen;
     branchStraight(barkGeos, tmpO, new THREE.Vector3(0, 0, 0), th, spec.trunkRad);
-    const rings = 5;
+    const rings = spec.rings ?? 5;
     for (let r = 0; r < rings; r++) {
       const hh = th * (0.32 + 0.62 * (r / (rings - 1)));
       const blen = spec.leafSize * 2.4 * (1 - (r / rings) * 0.72) + 0.15;
@@ -987,6 +997,8 @@ const TREE_SPECS = {
   birch:  { trunkLen: 1.15, trunkRad: 0.08, depth: 3, kids: [2, 2], spread: 0.5, upBias: 0.4, lenK: 0.66, leafFrom: 2, leafSize: 0.5, bark: 'birch', leaves: ['birch'] },
   willow: { trunkLen: 0.85, trunkRad: 0.12, depth: 3, kids: [2, 3], spread: 0.8, upBias: 0.05, droop: 0.55, lenK: 0.8, leafFrom: 1, leafSize: 0.58, bark: 'willow', leaves: ['willow'] },
   pine:   { trunkLen: 1.7, trunkRad: 0.1, depth: 2, kids: [1, 2], spread: 0.4, upBias: -0.05, lenK: 0.6, leafFrom: 0, leafSize: 0.5, pine: true, bark: 'pine', leaves: ['pine', 'pine2'] },
+  // 키 큰 침엽수(전나무형) — 곧고 높이 솟는다
+  fir:    { trunkLen: 2.9, trunkRad: 0.13, depth: 2, kids: [1, 2], spread: 0.38, upBias: -0.03, lenK: 0.58, leafFrom: 0, leafSize: 0.46, pine: true, rings: 8, bark: 'pine', leaves: ['pine', 'pine2'] },
 };
 const TREE_PROTOS = {}; // species -> [{barkGeo, leafGeo, leafMat}]
 for (const [sp, spec] of Object.entries(TREE_SPECS)) {
@@ -1012,14 +1024,22 @@ function leafPart(geo, color) {
   m.castShadow = true; m.receiveShadow = true;
   return m;
 }
+const speciesNoise = makeNoise(9); // 저주파 — 수종 군락 크기
 function buildTreeMesh(gx = 0, gz = 0) {
-  // 수종 선택: 강가(2.5칸 이내)는 버드나무/자작 위주, 그 외 참나무/소나무/자작
+  // 수종 선택: 저주파 수종 노이즈로 "비슷한 나무끼리 군락"을 이룬다.
+  // 강가(2.5칸 이내)는 버드나무/자작 위주.
   const p = cellToWorld(gx, gz);
   const nearRiver = distToRiver(p.x, p.z) < 2.5;
-  const roll = rng();
-  const sp = nearRiver
-    ? (roll < 0.55 ? 'willow' : roll < 0.85 ? 'birch' : 'oak')
-    : (roll < 0.42 ? 'oak' : roll < 0.68 ? 'pine' : roll < 0.88 ? 'birch' : 'willow');
+  const sn = speciesNoise(gx + 3, gz + 5); // 0..1, 위치별 완만 변화 → 군락
+  let sp;
+  if (nearRiver) {
+    sp = sn < 0.5 ? 'willow' : sn < 0.8 ? 'birch' : 'oak';
+  } else {
+    // 노이즈 대역별 우점종: 참나무숲 / 침엽수림(소나무·전나무) / 자작나무숲
+    if (sn < 0.36) sp = rng() < 0.85 ? 'oak' : 'birch';
+    else if (sn < 0.68) sp = rng() < 0.55 ? 'pine' : rng() < 0.6 ? 'fir' : 'oak';
+    else sp = rng() < 0.7 ? 'birch' : 'willow';
+  }
   const proto = TREE_PROTOS[sp][Math.floor(rng() * TREE_PROTOS[sp].length)];
   const g = new THREE.Group();
   const bark = new THREE.Mesh(proto.barkGeo, proto.barkMat);
@@ -1627,8 +1647,12 @@ const decorMeshes = []; // 풀/꽃/낙엽/잔가지 — 디버그 토글용
     if (rng() > chance) continue;
     gq.setFromAxisAngle(up, rng() * Math.PI * 2);
     // 키 변주: 대부분 짧고, 12%는 크게 웃자란 다발
-    const tall = rng() < 0.12;
-    const sy = tall ? 1.5 + rng() * 0.8 : 0.55 + rng() * 0.8;
+    // 키 변주를 크게 — 짧은 잔풀 다수 + 드문 큰 다발 (연속 분포)
+    const r1 = rng();
+    let sy;
+    if (r1 < 0.1) sy = 1.7 + rng() * 1.1;        // 웃자란 큰 다발
+    else if (r1 < 0.35) sy = 0.9 + rng() * 0.8;  // 중간
+    else sy = 0.32 + rng() * 0.6;                // 짧은 잔풀 다수
     const sxz = 0.5 + rng() * 0.5; // 밑동 좁게 — 대신 더 빽빽하게 심는다
     gs.set(sxz, sy, sxz);
     gv.set(wx, h - 0.03, wz);
