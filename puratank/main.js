@@ -2637,6 +2637,8 @@ async function moveUnit(unit, path, finalFacing = null, onStep = null) {
       const tl = unit._trailLast;
       if (Math.hypot(x - tl.x, z - tl.z) > 0.5) {
         addTrackRibbon(unit, tl.x, tl.z, x, z);
+        // 지나가며 풀/잎을 튕겨 날린다 (풀밭 위에서만)
+        kickFoliage(x, z);
         tl.x = x;
         tl.z = z;
       }
@@ -2659,19 +2661,57 @@ async function moveUnit(unit, path, finalFacing = null, onStep = null) {
 // ---------------------------------------------------------------------------
 // 궤도 자국: 지나간 자리에 부드럽게 이어지는 리본 데칼 (좌우 궤도 2줄, 링버퍼)
 // ---------------------------------------------------------------------------
+// 궤도 트레드 텍스처 + 노멀맵 (반투명 데칼, 지면 눌린 자국 + 클리트 요철)
+function makeTreadTextures() {
+  const c = document.createElement('canvas'); c.width = c.height = 32;
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0, 0, 32, 32);
+  // 눌린 띠 — 가장자리로 갈수록 투명 (지면과 부드럽게 섞임)
+  const grad = ctx.createLinearGradient(0, 0, 32, 0);
+  grad.addColorStop(0, 'rgba(58,46,32,0)');
+  grad.addColorStop(0.2, 'rgba(58,46,32,0.62)');
+  grad.addColorStop(0.8, 'rgba(58,46,32,0.62)');
+  grad.addColorStop(1, 'rgba(58,46,32,0)');
+  ctx.fillStyle = grad; ctx.fillRect(0, 0, 32, 32);
+  // 클리트 (V방향 가로 바)
+  ctx.fillStyle = 'rgba(28,20,12,0.8)';
+  for (let y = 1; y < 32; y += 8) ctx.fillRect(3, y, 26, 4);
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = THREE.ClampToEdgeWrapping; tex.wrapT = THREE.RepeatWrapping;
+  // 노멀맵: 클리트 앞/뒤 경사로 요철감
+  const n = document.createElement('canvas'); n.width = n.height = 32;
+  const nx = n.getContext('2d');
+  nx.fillStyle = '#8080ff'; nx.fillRect(0, 0, 32, 32);
+  for (let y = 1; y < 32; y += 8) {
+    nx.fillStyle = '#80b0ff'; nx.fillRect(3, y, 26, 2);     // 앞 경사(G↑)
+    nx.fillStyle = '#8050ff'; nx.fillRect(3, y + 2, 26, 2); // 뒤 경사(G↓)
+  }
+  const ntex = new THREE.CanvasTexture(n);
+  ntex.wrapS = THREE.ClampToEdgeWrapping; ntex.wrapT = THREE.RepeatWrapping;
+  return { tex, ntex };
+}
+const { tex: treadTex, ntex: treadNorm } = makeTreadTextures();
 const TRAIL_SEG = 1100;
 const trailPosArr = new Float32Array(TRAIL_SEG * 12 * 3);
+const trailNorArr = new Float32Array(TRAIL_SEG * 12 * 3);
+const trailUvArr = new Float32Array(TRAIL_SEG * 12 * 2);
+for (let i = 0; i < TRAIL_SEG * 12; i++) trailNorArr[i * 3 + 1] = 1; // 모두 위쪽 노멀
 const trailGeoBuf = new THREE.BufferGeometry();
 trailGeoBuf.setAttribute('position', new THREE.BufferAttribute(trailPosArr, 3));
+trailGeoBuf.setAttribute('normal', new THREE.BufferAttribute(trailNorArr, 3));
+trailGeoBuf.setAttribute('uv', new THREE.BufferAttribute(trailUvArr, 2));
 const trailMesh = new THREE.Mesh(
   trailGeoBuf,
-  new THREE.MeshBasicMaterial({
-    color: 0x35291c, transparent: true, opacity: 0.42, depthWrite: false,
+  new THREE.MeshStandardMaterial({
+    map: treadTex, normalMap: treadNorm, normalScale: new THREE.Vector2(0.9, 0.9),
+    transparent: true, opacity: 0.72, depthWrite: false,
+    roughness: 1, metalness: 0, envMapIntensity: 0,
     polygonOffset: true, polygonOffsetFactor: -2,
   })
 );
 trailMesh.frustumCulled = false;
 trailMesh.renderOrder = 1;
+trailMesh.receiveShadow = true;
 noAO(trailMesh);
 scene.add(trailMesh);
 let trailIdx = 0;
@@ -2684,7 +2724,11 @@ function addTrackRibbon(unit, x0, z0, x1, z1) {
   const HW = 0.17;  // 리본 반폭
   const OFF = 0.55; // 차체 중심 → 궤도 중심
   let vi = trailIdx * 36;
+  let ui = trailIdx * 24;
   unit._trailEdge ??= [null, null];
+  unit._trailV ??= 0;
+  const v0 = unit._trailV;
+  const v1 = v0 + len * 2.9; // 클리트 반복 간격 ~0.34u
   for (const side of [-1, 1]) {
     const si = side < 0 ? 0 : 1;
     const cx1 = x1 + nx * side * OFF, cz1 = z1 + nz * side * OFF;
@@ -2702,10 +2746,17 @@ function addTrackRibbon(unit, x0, z0, x1, z1) {
       ax0, ya0, az0, bx0, yb0, bz0, ax1, ya1, az1,
       bx0, yb0, bz0, bx1, yb1, bz1, ax1, ya1, az1,
     ], vi);
-    vi += 18;
+    // UV: U 0(안)→1(밖), V 누적 거리 (a=안쪽 U0, b=바깥 U1)
+    trailUvArr.set([
+      0, v0, 1, v0, 0, v1,
+      1, v0, 1, v1, 0, v1,
+    ], ui);
+    vi += 18; ui += 12;
     unit._trailEdge[si] = [ax1, az1, bx1, bz1];
   }
+  unit._trailV = v1;
   trailGeoBuf.attributes.position.needsUpdate = true;
+  trailGeoBuf.attributes.uv.needsUpdate = true;
   trailIdx = (trailIdx + 1) % TRAIL_SEG;
 }
 
@@ -2790,6 +2841,55 @@ function makeTracer(startPos) {
 }
 const flashMat = new THREE.MeshBasicMaterial({ color: 0xffd24d, transparent: true });
 const debrisGeo = new RoundedBoxGeometry(0.22, 0.22, 0.22, 1, 0.05);
+
+// 지나가며 튕겨 날리는 풀/잎 조각 — 위로 튀었다가 바람에 실려 천천히 사라진다.
+// (인스턴스 풀을 실제로 지우지 않고, 날리는 파편으로 "뜯긴" 느낌만 준다)
+const kickBladeGeo = new THREE.PlaneGeometry(0.1, 0.22);
+const kickPool = [];
+function kickFoliage(x, z) {
+  const h = sampleHeight(x, z);
+  if (h < WATER_Y + 0.05) return; // 물 위에선 물 튀김(splash)만
+  const w = surfaceWeights(x, z, h);
+  const grassiness = (1 - w.dirt) * (1 - w.sand * 0.8) * (1 - w.rock) * (1 - w.bed);
+  if (grassiness < 0.3 || rng() > grassiness) return;
+  const n = 2 + Math.floor(rng() * 3);
+  const cols = [0x6f9c4a, 0x86823c, 0x577f3b, 0x9c7b3c];
+  const pieces = [];
+  for (let i = 0; i < n; i++) {
+    const mesh = new THREE.Mesh(kickBladeGeo, new THREE.MeshStandardMaterial({
+      color: cols[Math.floor(rng() * cols.length)], side: THREE.DoubleSide,
+      roughness: 1, envMapIntensity: 0, transparent: true, depthWrite: false,
+    }));
+    mesh.position.set(x + (rng() - 0.5) * 0.6, h + 0.1, z + (rng() - 0.5) * 0.6);
+    mesh.rotation.set(rng() * 3, rng() * 3, rng() * 3);
+    noAO(mesh);
+    scene.add(mesh);
+    const a = rng() * Math.PI * 2;
+    pieces.push({
+      mesh,
+      vel: new THREE.Vector3(Math.cos(a) * (0.6 + rng()), 1.6 + rng() * 1.8, Math.sin(a) * (0.6 + rng())),
+      spin: new THREE.Vector3(rng() * 6 - 3, rng() * 6 - 3, rng() * 6 - 3),
+      drift: new THREE.Vector3(0.5 + rng() * 0.6, 0, 0.2), // 바람 방향으로 흘러감
+    });
+  }
+  // 조금씩 날리다가 서서히 사라진다 (~1.6s)
+  tween(1400 + rng() * 500, (e, k) => {
+    const dt = 0.016;
+    for (const p of pieces) {
+      p.vel.y -= 5 * dt;                       // 약한 중력 — 오래 떠 있게
+      p.vel.addScaledVector(p.drift, dt);       // 바람에 실려 표류
+      p.vel.multiplyScalar(0.97);
+      p.mesh.position.addScaledVector(p.vel, dt);
+      p.mesh.rotation.x += p.spin.x * dt;
+      p.mesh.rotation.y += p.spin.y * dt;
+      p.mesh.material.opacity = k < 0.55 ? 1 : 1 - (k - 0.55) / 0.45; // 후반부 페이드아웃
+      if (p.mesh.position.y < sampleHeight(p.mesh.position.x, p.mesh.position.z) + 0.03) {
+        p.mesh.position.y = sampleHeight(p.mesh.position.x, p.mesh.position.z) + 0.03;
+        p.vel.set(0, 0, 0);
+      }
+    }
+  }, linear).then(() => pieces.forEach((p) => { scene.remove(p.mesh); p.mesh.material.dispose(); }));
+}
 
 function spawnDebris(center, colors, count, power) {
   const pieces = [];
