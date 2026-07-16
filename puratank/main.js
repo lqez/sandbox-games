@@ -231,6 +231,30 @@ composer.addPass(gradePass);
 const NO_AO_LAYER = 1;
 camera.layers.enable(NO_AO_LAYER);
 const noAO = (obj) => obj.traverse((o) => o.layers.set(NO_AO_LAYER));
+
+// ── 바람: 식생 버텍스 셰이더에 살랑임 주입 (공유 시간 유니폼) ──
+const windUniform = { value: 0 };
+function addWind(mat, strength = 0.06, freq = 1.4) {
+  mat.onBeforeCompile = (shader) => {
+    shader.uniforms.uWindT = windUniform;
+    shader.vertexShader = ('uniform float uWindT;\n' + shader.vertexShader).replace(
+      '#include <begin_vertex>',
+      `#include <begin_vertex>
+      {
+        float wPhase = position.x * 0.9 + position.z * 0.7;
+        #ifdef USE_INSTANCING
+          wPhase += instanceMatrix[3][0] * 0.45 + instanceMatrix[3][2] * 0.45;
+        #endif
+        // 높이(uv.y)에 비례해 끝만 크게 흔들린다 + 느린 큰 물결 + 빠른 잔떨림
+        float wAmp = uv.y * uv.y;
+        float sway = sin(uWindT * ${freq.toFixed(2)} + wPhase) * ${strength.toFixed(3)}
+                   + sin(uWindT * ${(freq * 2.7).toFixed(2)} + wPhase * 1.7) * ${(strength * 0.35).toFixed(3)};
+        transformed.x += sway * wAmp;
+        transformed.z += sway * 0.6 * wAmp;
+      }`
+    );
+  };
+}
 {
   const orig = ssaoPass.render.bind(ssaoPass);
   ssaoPass.render = (r, w, rd, dt, mask) => {
@@ -778,12 +802,185 @@ const PROP_DEF = {
   sandbag:  { hp: 26, blockMove: true,  blockShotH: 0,   coverH: 0.8, cover: 0.5, name: '모래주머니' },
 };
 
-// 공유 팔레트(toonMat 캐시로 재질 재사용 → 드로콜 절감)
-const TRUNK_COLS = [0x6d5236, 0x7c5e3d, 0x5f4a30];
-const LEAF_COLS = [0x577f3b, 0x678f45, 0x496f32, 0x749a4f, 0x86813c]; // 마지막=누런 잎
-const PINE_COLS = [0x3c6437, 0x47733c, 0x33562f];
-const AUTUMN_COLS = [0xb0894a, 0xa88a3c, 0x9c6f3a];
-// 잎 덩이용 플랫 셰이딩 재질(캐시) — 이코사면이 각지게 잡혀 잎사귀 느낌
+// ---------------------------------------------------------------------------
+// 프로시저럴 수목: 재귀 가지 스켈레톤(원통) + 가지에 겹쳐 얹는 잎 카드 쿼드.
+// 종별 프로토타입 세트를 미리 구워 두고, 심을 때는 클론(지오메트리 공유)
+// + 랜덤 크기/각도만 준다 — 나무당 드로콜 2(수피+잎).
+// ---------------------------------------------------------------------------
+// 잎 카드 텍스처: 잎 무리 실루엣 (흰색 → 재질 색으로 틴트)
+function makeLeafCardTexture(needle = false) {
+  const c = document.createElement('canvas');
+  c.width = c.height = 64;
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0, 0, 64, 64);
+  ctx.filter = 'blur(0.6px)';
+  if (needle) {
+    // 침엽: 중심 줄기에서 뻗는 바늘 다발
+    ctx.strokeStyle = 'rgba(230,230,230,0.95)';
+    for (let i = 0; i < 26; i++) {
+      const a = (i / 26) * Math.PI * 2;
+      const l = 18 + Math.random() * 12;
+      ctx.lineWidth = 1.6 + Math.random();
+      ctx.beginPath();
+      ctx.moveTo(32, 34);
+      ctx.lineTo(32 + Math.cos(a) * l, 34 + Math.sin(a) * l * 0.8);
+      ctx.stroke();
+    }
+  } else {
+    // 활엽: 작은 잎 타원 뭉치 (틈이 보이는 성근 실루엣)
+    for (let i = 0; i < 34; i++) {
+      const a = Math.random() * Math.PI * 2, r = Math.random() * 22;
+      const x = 32 + Math.cos(a) * r, y = 32 + Math.sin(a) * r * 0.85;
+      const s = 2.4 + Math.random() * 3.4;
+      const v = 170 + Math.random() * 85;
+      ctx.fillStyle = `rgba(${v},${v},${v},0.95)`;
+      ctx.beginPath();
+      ctx.ellipse(x, y, s, s * 0.62, Math.random() * Math.PI, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  return new THREE.CanvasTexture(c);
+}
+const leafCardTex = makeLeafCardTexture(false);
+const needleCardTex = makeLeafCardTexture(true);
+const UP = new THREE.Vector3(0, 1, 0);
+// 종별 재질 (잎은 바람 셰이더 적용)
+function leafCardMat(color, needle = false) {
+  const m = new THREE.MeshStandardMaterial({
+    map: needle ? needleCardTex : leafCardTex, color,
+    alphaTest: 0.38, side: THREE.DoubleSide, roughness: 0.92, envMapIntensity: 0,
+  });
+  addWind(m, 0.035, 1.8);
+  return m;
+}
+const BARK_MATS = {
+  oak: new THREE.MeshStandardMaterial({ color: 0x5f4a30, roughness: 0.95 }),
+  birch: new THREE.MeshStandardMaterial({ color: 0xd3cfc1, roughness: 0.9 }),
+  pine: new THREE.MeshStandardMaterial({ color: 0x54402c, roughness: 0.95 }),
+  willow: new THREE.MeshStandardMaterial({ color: 0x6b5638, roughness: 0.95 }),
+};
+const LEAF_MATS = {
+  oak: leafCardMat(0x5d7f3c), oak2: leafCardMat(0x71914a), autumn: leafCardMat(0xa8823c),
+  birch: leafCardMat(0x86a352), willow: leafCardMat(0x8aa45e),
+  pine: leafCardMat(0x3d5c33, true), pine2: leafCardMat(0x476b3a, true),
+};
+// 가지 스켈레톤 생성 → {barkGeo, leafGeo}
+function genTreeGeometry(spec) {
+  const barkGeos = [];
+  const leafAnchors = []; // {p, s}
+  const tmpO = new THREE.Object3D();
+  const branch = (origin, dir, len, rad, depth) => {
+    const end = origin.clone().addScaledVector(dir, len);
+    const geo = new THREE.CylinderGeometry(Math.max(rad * 0.62, 0.012), rad, len, 5).toNonIndexed();
+    tmpO.position.copy(origin).addScaledVector(dir, len / 2);
+    tmpO.quaternion.setFromUnitVectors(UP, dir.clone().normalize());
+    tmpO.updateMatrix();
+    geo.applyMatrix4(tmpO.matrix);
+    barkGeos.push(geo);
+    if (depth >= spec.depth) {
+      leafAnchors.push({ p: end, s: spec.leafSize * (0.85 + rng() * 0.5) });
+      if (rng() < 0.7) leafAnchors.push({ p: origin.clone().lerp(end, 0.45), s: spec.leafSize * (0.7 + rng() * 0.4) });
+      return;
+    }
+    const kids = spec.kids[0] + Math.floor(rng() * (spec.kids[1] - spec.kids[0] + 1));
+    for (let i = 0; i < kids; i++) {
+      const axis = new THREE.Vector3(rng() - 0.5, rng() - 0.5, rng() - 0.5).normalize();
+      const nd = dir.clone().applyAxisAngle(axis, spec.spread * (0.6 + rng() * 0.8));
+      nd.y += spec.upBias;
+      if (spec.droop) nd.y -= spec.droop * (depth + 1) * 0.5;
+      nd.normalize();
+      branch(end, nd, len * spec.lenK * (0.72 + rng() * 0.4), rad * 0.6, depth + 1);
+    }
+    // 가지 중간에도 잎을 겹쳐 무성하게
+    if (depth >= spec.leafFrom) leafAnchors.push({ p: origin.clone().lerp(end, 0.65), s: spec.leafSize * (0.75 + rng() * 0.45) });
+  };
+  if (spec.pine) {
+    // 침엽수: 곧은 줄기 + 높이별 방사형 가지 고리 (위로 갈수록 짧게)
+    const th = spec.trunkLen;
+    branchStraight(barkGeos, tmpO, new THREE.Vector3(0, 0, 0), th, spec.trunkRad);
+    const rings = 5;
+    for (let r = 0; r < rings; r++) {
+      const hh = th * (0.32 + 0.62 * (r / (rings - 1)));
+      const blen = spec.leafSize * 2.4 * (1 - (r / rings) * 0.72) + 0.15;
+      const n = 6 - Math.floor(r * 0.5);
+      for (let i = 0; i < n; i++) {
+        const a = (i / n) * Math.PI * 2 + rng();
+        const dir = new THREE.Vector3(Math.cos(a), -0.12 - rng() * 0.1, Math.sin(a)).normalize();
+        branch(new THREE.Vector3(0, hh, 0), dir, blen, spec.trunkRad * 0.3, spec.depth - 1);
+      }
+    }
+    leafAnchors.push({ p: new THREE.Vector3(0, th + 0.1, 0), s: spec.leafSize });
+  } else {
+    branch(new THREE.Vector3(0, 0, 0), new THREE.Vector3((rng() - 0.5) * 0.14, 1, (rng() - 0.5) * 0.14).normalize(), spec.trunkLen, spec.trunkRad, 0);
+  }
+  // 수피 병합
+  let total = 0;
+  for (const g of barkGeos) total += g.attributes.position.count;
+  const bpos = new Float32Array(total * 3), bnor = new Float32Array(total * 3);
+  let off = 0;
+  for (const g of barkGeos) {
+    bpos.set(g.attributes.position.array, off * 3);
+    bnor.set(g.attributes.normal.array, off * 3);
+    off += g.attributes.position.count;
+    g.dispose();
+  }
+  const barkGeo = new THREE.BufferGeometry();
+  barkGeo.setAttribute('position', new THREE.BufferAttribute(bpos, 3));
+  barkGeo.setAttribute('normal', new THREE.BufferAttribute(bnor, 3));
+  // 잎 카드 병합: 앵커마다 랜덤 방향 쿼드 1~2장
+  const lp = [], luv = [], lidx = [];
+  const q = new THREE.Quaternion(), e = new THREE.Euler();
+  const corners = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
+  for (const a of leafAnchors) {
+    const nCards = 1 + (rng() < 0.6 ? 1 : 0);
+    for (let ci = 0; ci < nCards; ci++) {
+      const s = a.s * (0.8 + rng() * 0.45);
+      e.set((rng() - 0.5) * 1.2, rng() * Math.PI * 2, (rng() - 0.5) * 1.2);
+      q.setFromEuler(e);
+      corners[0].set(-s / 2, -s / 2, 0); corners[1].set(s / 2, -s / 2, 0);
+      corners[2].set(s / 2, s / 2, 0); corners[3].set(-s / 2, s / 2, 0);
+      const b = lp.length / 3;
+      for (const cn of corners) {
+        cn.applyQuaternion(q).add(a.p);
+        lp.push(cn.x, cn.y, cn.z);
+      }
+      luv.push(0, 0, 1, 0, 1, 1, 0, 1);
+      lidx.push(b, b + 1, b + 2, b, b + 2, b + 3);
+    }
+  }
+  const leafGeo = new THREE.BufferGeometry();
+  leafGeo.setAttribute('position', new THREE.Float32BufferAttribute(lp, 3));
+  leafGeo.setAttribute('uv', new THREE.Float32BufferAttribute(luv, 2));
+  leafGeo.setIndex(lidx);
+  leafGeo.computeVertexNormals();
+  return { barkGeo, leafGeo };
+}
+function branchStraight(barkGeos, tmpO, origin, len, rad) {
+  const geo = new THREE.CylinderGeometry(rad * 0.5, rad, len, 6).toNonIndexed();
+  tmpO.position.copy(origin); tmpO.position.y += len / 2;
+  tmpO.quaternion.identity(); tmpO.updateMatrix();
+  geo.applyMatrix4(tmpO.matrix);
+  barkGeos.push(geo);
+}
+// 종 스펙 → 프로토타입 여러 세트 사전 생성
+const TREE_SPECS = {
+  oak:    { trunkLen: 0.8, trunkRad: 0.13, depth: 3, kids: [2, 3], spread: 0.65, upBias: 0.22, lenK: 0.72, leafFrom: 1, leafSize: 0.66, bark: 'oak', leaves: ['oak', 'oak2', 'autumn'] },
+  birch:  { trunkLen: 1.15, trunkRad: 0.08, depth: 3, kids: [2, 2], spread: 0.5, upBias: 0.4, lenK: 0.66, leafFrom: 2, leafSize: 0.5, bark: 'birch', leaves: ['birch'] },
+  willow: { trunkLen: 0.85, trunkRad: 0.12, depth: 3, kids: [2, 3], spread: 0.8, upBias: 0.05, droop: 0.55, lenK: 0.8, leafFrom: 1, leafSize: 0.58, bark: 'willow', leaves: ['willow'] },
+  pine:   { trunkLen: 1.7, trunkRad: 0.1, depth: 2, kids: [1, 2], spread: 0.4, upBias: -0.05, lenK: 0.6, leafFrom: 0, leafSize: 0.5, pine: true, bark: 'pine', leaves: ['pine', 'pine2'] },
+};
+const TREE_PROTOS = {}; // species -> [{barkGeo, leafGeo, leafMat}]
+for (const [sp, spec] of Object.entries(TREE_SPECS)) {
+  TREE_PROTOS[sp] = [];
+  const variants = sp === 'oak' ? 3 : 2;
+  for (let v = 0; v < variants; v++) {
+    const g = genTreeGeometry(spec);
+    g.leafMat = LEAF_MATS[spec.leaves[Math.floor(rng() * spec.leaves.length)]];
+    g.barkMat = BARK_MATS[spec.bark];
+    TREE_PROTOS[sp].push(g);
+  }
+}
+// 덤불용 플랫 셰이딩 잎 덩이 (캐시)
 const foliageCache = new Map();
 function foliageMat(color) {
   if (!foliageCache.has(color)) {
@@ -796,47 +993,25 @@ function leafPart(geo, color) {
   m.castShadow = true; m.receiveShadow = true;
   return m;
 }
-function buildTreeMesh() {
+function buildTreeMesh(gx = 0, gz = 0) {
+  // 수종 선택: 강가(2.5칸 이내)는 버드나무/자작 위주, 그 외 참나무/소나무/자작
+  const p = cellToWorld(gx, gz);
+  const nearRiver = distToRiver(p.x, p.z) < 2.5;
+  const roll = rng();
+  const sp = nearRiver
+    ? (roll < 0.55 ? 'willow' : roll < 0.85 ? 'birch' : 'oak')
+    : (roll < 0.42 ? 'oak' : roll < 0.68 ? 'pine' : roll < 0.88 ? 'birch' : 'willow');
+  const proto = TREE_PROTOS[sp][Math.floor(rng() * TREE_PROTOS[sp].length)];
   const g = new THREE.Group();
-  const pine = rng() < 0.4;
-  const trunkCol = TRUNK_COLS[Math.floor(rng() * TRUNK_COLS.length)];
-  const th = pine ? 1.0 + rng() * 0.3 : 0.7 + rng() * 0.45;
-  const trunk = part(new THREE.CylinderGeometry(0.1, 0.19, th, 7), trunkCol);
-  trunk.position.y = th / 2;
-  trunk.rotation.z = (rng() - 0.5) * 0.12;
-  g.add(trunk);
-  if (pine) {
-    // 침엽수: 여러 겹 원뿔, 위로 갈수록 좁고 어둡게, 불규칙 지터
-    const layers = 4 + Math.floor(rng() * 2);
-    const base = th * 0.68;
-    for (let i = 0; i < layers; i++) {
-      const t = i / layers;
-      const r = 0.92 * (1 - t * 0.7) + 0.05;
-      const ch = 0.8 - i * 0.05;
-      const cone = part(new THREE.ConeGeometry(r, ch, 8), PINE_COLS[i % PINE_COLS.length]);
-      cone.position.set((rng() - 0.5) * 0.07, base + i * 0.52 + ch * 0.2, (rng() - 0.5) * 0.07);
-      cone.rotation.y = rng() * Math.PI;
-      cone.scale.y = 1 + rng() * 0.18;
-      g.add(cone);
-    }
-  } else {
-    // 활엽수: 불규칙 잎 덩이 6~8개를 흩어 얹어 뭉게진 수관
-    const top = th + 0.3;
-    const clumps = 6 + Math.floor(rng() * 3);
-    const autumn = rng() < 0.24;
-    for (let i = 0; i < clumps; i++) {
-      const ang = rng() * Math.PI * 2, rad = rng() * 0.52;
-      const col = (autumn && rng() < 0.45)
-        ? AUTUMN_COLS[Math.floor(rng() * AUTUMN_COLS.length)]
-        : LEAF_COLS[Math.floor(rng() * LEAF_COLS.length)];
-      const s = 0.3 + rng() * 0.34;
-      const clump = leafPart(new THREE.IcosahedronGeometry(s, 0), col);
-      clump.position.set(Math.cos(ang) * rad, top + (rng() - 0.5) * 0.55, Math.sin(ang) * rad);
-      clump.scale.set(1 + rng() * 0.35, 0.78 + rng() * 0.3, 1 + rng() * 0.35);
-      clump.rotation.set(rng() * 3, rng() * 3, rng() * 3);
-      g.add(clump);
-    }
-  }
+  const bark = new THREE.Mesh(proto.barkGeo, proto.barkMat);
+  const leaf = new THREE.Mesh(proto.leafGeo, proto.leafMat);
+  bark.castShadow = true; bark.receiveShadow = true;
+  leaf.castShadow = true;
+  leaf.customDepthMaterial = new THREE.MeshDepthMaterial({
+    depthPacking: THREE.RGBADepthPacking, map: proto.leafMat.map, alphaTest: 0.38,
+  });
+  g.add(bark, leaf);
+  g.userData.shared = true; // 지오메트리 공유 — mergeStatic 금지
   return g;
 }
 function buildBushMesh() {
@@ -1210,7 +1385,7 @@ const PROP_BUILDERS = {
 
 function placeProp(type, gx, gz) {
   const def = PROP_DEF[type];
-  const group = PROP_BUILDERS[type]();
+  const group = PROP_BUILDERS[type](gx, gz);
   // 다중 칸 풋프린트: 점유 칸 전부에 프랍을 등록, 그룹은 풋프린트 중심에
   const foot = def.footprint ?? [[0, 0]];
   const cells = foot.map(([dx, dz]) => cellKey(gx + dx, gz + dz));
@@ -1238,7 +1413,8 @@ function placeProp(type, gx, gz) {
     prop.chunks = group.userData.chunks;
     prop.baked = [];
     bakeChunkProp(prop);
-  } else {
+  } else if (!group.userData.shared) {
+    // 프로토타입 공유 수목은 병합 금지(지오메트리 복제 방지) — 이미 2드로
     mergeStatic(group, [hit]); // 드로콜 절감: 프랍 메시 재질별 병합
   }
   hit.userData.prop = prop;
@@ -1269,6 +1445,20 @@ function placeProp(type, gx, gz) {
       const f = fNoise(gx, gz);
       if (f > 0.62 && rng() < 0.65) { placeProp('tree', gx, gz); trees++; }
       else if (f > 0.5 && rng() < 0.16) { placeProp('bush', gx, gz); }
+    }
+  }
+  // 강가 수목: 물가 1.2~2.8칸 띠에 버드나무/자작이 드문드문 늘어선다
+  {
+    let riverTrees = 0, guard = 0;
+    while (riverTrees < 16 && guard++ < 3000) {
+      const gx = 1 + Math.floor(rng() * (GRID - 2)), gz = 1 + Math.floor(rng() * (GRID - 2));
+      if (!free(gx, gz) || terrainAt(gx, gz) === T.WATER) continue;
+      const p = cellToWorld(gx, gz);
+      const d = distToRiver(p.x, p.z);
+      if (d < 1.1 || d > 2.8) continue;
+      if (heightAt(gx, gz) < WATER_Y + 0.03) continue;
+      placeProp('tree', gx, gz);
+      riverTrees++;
     }
   }
   const scatter = (type, count, pred = () => true) => {
@@ -1309,30 +1499,6 @@ function placeProp(type, gx, gz) {
 // 드로콜 각 1회. 배치는 연속 지형 가중치를 따라 풀밭/흙 위에만.
 // ---------------------------------------------------------------------------
 const decorMeshes = []; // 풀/꽃/낙엽/잔가지 — 디버그 토글용
-
-// ── 바람: 식생 버텍스 셰이더에 살랑임 주입 (공유 시간 유니폼) ──
-const windUniform = { value: 0 };
-function addWind(mat, strength = 0.06, freq = 1.4) {
-  mat.onBeforeCompile = (shader) => {
-    shader.uniforms.uWindT = windUniform;
-    shader.vertexShader = ('uniform float uWindT;\n' + shader.vertexShader).replace(
-      '#include <begin_vertex>',
-      `#include <begin_vertex>
-      {
-        float wPhase = position.x * 0.9 + position.z * 0.7;
-        #ifdef USE_INSTANCING
-          wPhase += instanceMatrix[3][0] * 0.45 + instanceMatrix[3][2] * 0.45;
-        #endif
-        // 높이(uv.y)에 비례해 끝만 크게 흔들린다 + 느린 큰 물결 + 빠른 잔떨림
-        float wAmp = uv.y * uv.y;
-        float sway = sin(uWindT * ${freq.toFixed(2)} + wPhase) * ${strength.toFixed(3)}
-                   + sin(uWindT * ${(freq * 2.7).toFixed(2)} + wPhase * 1.7) * ${(strength * 0.35).toFixed(3)};
-        transformed.x += sway * wAmp;
-        transformed.z += sway * 0.6 * wAmp;
-      }`
-    );
-  };
-}
 {
   // 스태틱 그래스 텍스처: 가는 잎 다발 + 밑동 어둡고 끝 밝은 세로 그라데이션.
   // 흰색으로 그려 instanceColor로 톤을 입히면 밑동 그늘/끝 하이라이트가 자연스럽다.
