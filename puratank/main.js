@@ -17,9 +17,7 @@ const enemyKits = KIT_KEYS.filter((k) => k !== playerKit);
 // ---------------------------------------------------------------------------
 // 상수
 // ---------------------------------------------------------------------------
-const GRID = 60;            // 60x60 그리드 (기존 40에서 1.5배 — 더 넓은 전장)
 const TILE = 1;             // 한 칸의 월드 크기
-const VRES = 8;             // 타일당 하이트필드 분할 수 — 조밀하게(거친 지형·자연스런 강 테두리)
 const WATER_Y = -0.12;      // 수면 높이
 const MAX_CLIMB = 0.5;      // 궤도로 오를 수 있는 최대 단차 (1유닛 스텝 기준)
 const FORD_DEPTH = 0.22;    // 도하 가능한 최대 수심 — 더 깊은 물은 진입 불가
@@ -28,12 +26,6 @@ const PITCH_MAX = 20;       // 포신 올림각 한계(도)
 
 const PLAYER_STATS = KIT_INFO[playerKit].stats;
 const ENEMY_BASE   = { mp: 12, fireRange: 14, damage: 24 };
-
-const PLAYER_SPAWN = { gx: 30, gz: 51 };
-const ENEMY_SPAWNS = [
-  { gx: 21, gz: 9 },
-  { gx: 40, gz: 12 },
-];
 
 // 지형 종류
 const T = { GRASS: 0, DIRT: 1, SAND: 2, MUD: 3, WATER: 4 };
@@ -55,6 +47,24 @@ function mulberry32(a) {
   };
 }
 const rng = mulberry32(seed);
+
+// 맵 크기: 60~120 가로세로 독립 (비정사각 가능) — 시드 기반.
+// GW = x축(가로) 칸 수, GH = z축(세로) 칸 수.
+const GW = 60 + Math.floor(rng() * 61);
+const GH = 60 + Math.floor(rng() * 61);
+const GRID = Math.max(GW, GH); // 노이즈 격자 등 단일 스케일용
+const AREA_F = (GW * GH) / 3600;  // 60×60 기준 면적 배율 (식생/프랍 개수)
+const MSCALE = GRID / 60;         // 카메라/포그/섀도 스케일
+// 하이트필드 밀도: 큰 맵일수록 낮춰 정점 예산(~480² 수준) 유지
+const VRES = Math.max(3, Math.min(8, Math.round(480 / GRID)));
+// 스폰: 플레이어는 남쪽 중앙부, 적은 북쪽 좌/우
+const PLAYER_SPAWN = { gx: Math.round(GW * 0.5), gz: GH - 9 };
+const ENEMY_SPAWNS = [
+  { gx: Math.round(GW * 0.35), gz: 9 },
+  { gx: Math.round(GW * 0.67), gz: 12 },
+];
+// 강: 82% 확률로 존재, 폭도 구간별로 변한다 (아예 없을 수도)
+const hasRiver = rng() < 0.82;
 
 // 2옥타브 밸류 노이즈
 function makeNoise(cell) {
@@ -91,13 +101,13 @@ renderer.toneMappingExposure = 0.92;
 app.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
-scene.fog = new THREE.Fog(0xaecbe8, 95, 230);
+scene.fog = new THREE.Fog(0xaecbe8, 95 * MSCALE, 230 * MSCALE);
 
 const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 400);
-camera.position.set(32, 37, 44);
+camera.position.set(32 * MSCALE, 37 * MSCALE, 44 * MSCALE);
 
 const controls = new OrbitControls(camera, renderer.domElement);
-controls.target.set(0, 0, 6);
+controls.target.set(0, 0, 6 * MSCALE);
 controls.enableDamping = true;
 controls.dampingFactor = 0.08;
 controls.minDistance = 12;
@@ -111,11 +121,11 @@ const sun = new THREE.DirectionalLight(0xffe9c8, 1.95);
 sun.position.set(24, 34, 16);
 sun.castShadow = true;
 sun.shadow.mapSize.set(4096, 4096);
-sun.shadow.camera.left = -40;
-sun.shadow.camera.right = 40;
-sun.shadow.camera.top = 40;
-sun.shadow.camera.bottom = -40;
-sun.shadow.camera.far = 130;
+sun.shadow.camera.left = -40 * MSCALE;
+sun.shadow.camera.right = 40 * MSCALE;
+sun.shadow.camera.top = 40 * MSCALE;
+sun.shadow.camera.bottom = -40 * MSCALE;
+sun.shadow.camera.far = 130 * MSCALE;
 sun.shadow.bias = -0.0004;
 sun.shadow.radius = 4;
 scene.add(sun);
@@ -299,21 +309,21 @@ function part(geo, color, { outline = false, shadow = true, outlineScale = 1.05 
 // 좌표 유틸
 // ---------------------------------------------------------------------------
 const cellKey = (gx, gz) => `${gx},${gz}`;
-const inBounds = (gx, gz) => gx >= 0 && gx < GRID && gz >= 0 && gz < GRID;
+const inBounds = (gx, gz) => gx >= 0 && gx < GW && gz >= 0 && gz < GH;
 const cellToWorld = (gx, gz) =>
-  new THREE.Vector3((gx - (GRID - 1) / 2) * TILE, 0, (gz - (GRID - 1) / 2) * TILE);
+  new THREE.Vector3((gx - (GW - 1) / 2) * TILE, 0, (gz - (GH - 1) / 2) * TILE);
 function worldToCell(p) {
   return {
-    gx: Math.max(0, Math.min(GRID - 1, Math.round(p.x / TILE + (GRID - 1) / 2))),
-    gz: Math.max(0, Math.min(GRID - 1, Math.round(p.z / TILE + (GRID - 1) / 2))),
+    gx: Math.max(0, Math.min(GW - 1, Math.round(p.x / TILE + (GW - 1) / 2))),
+    gz: Math.max(0, Math.min(GH - 1, Math.round(p.z / TILE + (GH - 1) / 2))),
   };
 }
 
 // ---------------------------------------------------------------------------
 // 지형 생성: 부드러운 하이트필드 + 하천 + 지형 종류
 // ---------------------------------------------------------------------------
-const VN = GRID * VRES;               // 하이트필드 분할 수
-const HALF = (GRID * TILE) / 2;
+const VNW = GW * VRES, VNH = GH * VRES; // 하이트필드 분할 수 (축별)
+const HALFW = (GW * TILE) / 2, HALFH = (GH * TILE) / 2;
 const VSTEP = TILE / VRES;
 
 const hNoise = makeNoise(10);
@@ -331,7 +341,7 @@ let riverCx, riverAmp, riverPhase;
 {
   let tries = 0;
   do {
-    riverCx = 14 + rng() * 34;
+    riverCx = 12 + rng() * (GW - 24);
     riverAmp = 6.5 + rng() * 5.0;
     riverPhase = rng() * Math.PI * 2;
     tries++;
@@ -344,12 +354,13 @@ let riverCx, riverAmp, riverPhase;
   );
 }
 const riverPoints = [];
-for (let zw = -HALF; zw <= HALF; zw += 0.5) {
-  const gzf = zw / TILE + (GRID - 1) / 2;
+if (hasRiver) for (let zw = -HALFH; zw <= HALFH; zw += 0.5) {
+  const gzf = zw / TILE + (GH - 1) / 2;
   const rx = riverCx + Math.sin(gzf * 0.21 + riverPhase) * riverAmp;
-  riverPoints.push({ x: (rx - (GRID - 1) / 2) * TILE, z: zw });
+  riverPoints.push({ x: (rx - (GW - 1) / 2) * TILE, z: zw });
 }
 function distToRiver(wx, wz) {
+  if (!hasRiver) return Infinity;
   let d = Infinity;
   for (const p of riverPoints) {
     const dd = Math.hypot(wx - p.x, wz - p.z);
@@ -361,8 +372,8 @@ function distToRiver(wx, wz) {
 const smooth01 = (x) => { const t = THREE.MathUtils.clamp(x, 0, 1); return t * t * (3 - 2 * t); };
 function baseHeight(wx, wz) {
   // 노이즈 좌표는 0 이상이어야 함 (격자 인덱스)
-  const fx = (wx + HALF) / TILE;
-  const fz = (wz + HALF) / TILE;
+  const fx = (wx + HALFW) / TILE;
+  const fz = (wz + HALFH) / TILE;
   const n = hNoise(fx, fz) * 0.72 + hNoise2(fx, fz) * 0.28;
   let h = n * 5.2 - 1.0;
   // 고주파 프랙탈 옥타브 — 표면을 자잘하게 울퉁불퉁하게
@@ -384,20 +395,23 @@ function fieldHeight(wx, wz) {
   }
   // 하천 카빙 — 물가를 완만한 저주파 노이즈로만 사행시키고(급경사 방지),
   // 강둑은 넓은 전이로 완만하게 올라간다. 얕은 선반(beach)을 거쳐 뭍으로.
-  const fx = (wx + HALF) / TILE, fz = (wz + HALF) / TILE;
+  const fx = (wx + HALFW) / TILE, fz = (wz + HALFH) / TILE;
   const drRaw = distToRiver(wx, wz);
   const bankWobble = (bankNoise(fx, fz) - 0.5) * 2.0 + (bankNoise2(fx, fz) - 0.5) * 0.5;
   const dr = drRaw + bankWobble;
-  if (dr < 9) {
-    const gzf = wz / TILE + (GRID - 1) / 2;
+  if (dr < 11) {
+    const gzf = wz / TILE + (GH - 1) / 2;
     const ford = smooth01((Math.sin(gzf * 0.275 + riverPhase * 2.3) - 0.38) / 0.3);
+    // 강 폭 가변: 구간별로 0.6~1.6배 — 좁은 여울목과 넓은 소(pool)가 생긴다
+    const rw = 1.05 + Math.sin(gzf * 0.09 + riverPhase * 1.7) * 0.35
+             + Math.sin(gzf * 0.041 + riverPhase * 4.1) * 0.2;
     const bedNoise = (dNoise2(fx, fz) - 0.5) * 0.15;
     const bed = -0.5 + ford * 0.26 + bedNoise;
     // 얕은 물가 선반: 수면 살짝 아래에서 완만하게 시작 (급격히 깎이지 않게)
     const shelf = -0.16 + bedNoise * 0.4;
     // 2단 전이: 강바닥 → 얕은 선반(짧고 완만) → 뭍(넓고 완만한 강둑)
-    const tShelf = smooth01((dr - 0.3) / 2.4);       // 바닥→선반
-    const tLand = smooth01((dr - 2.0) / 6.4);         // 선반→뭍 (넓게)
+    const tShelf = smooth01((dr - 0.3 * rw) / (2.4 * rw));  // 바닥→선반
+    const tLand = smooth01((dr - 2.0 * rw) / 6.4);           // 선반→뭍 (넓게)
     const nearShore = THREE.MathUtils.lerp(bed, shelf, tShelf);
     h = THREE.MathUtils.lerp(nearShore, h, tLand);
   }
@@ -412,16 +426,16 @@ const TERRAIN_COLORS = {
   [T.MUD]: [0x80664a, 0x775f44],
   [T.WATER]: [0x94805d, 0x8b7857], // 강바닥
 };
-const terrainGeo = new THREE.PlaneGeometry(GRID * TILE, GRID * TILE, VN, VN);
+const terrainGeo = new THREE.PlaneGeometry(GW * TILE, GH * TILE, VNW, VNH);
 terrainGeo.rotateX(-Math.PI / 2);
 {
   const pos = terrainGeo.attributes.position;
   for (let i = 0; i < pos.count; i++) pos.setY(i, fieldHeight(pos.getX(i), pos.getZ(i)));
 }
-const vIndex = (ix, iz) => iz * (VN + 1) + ix;
+const vIndex = (ix, iz) => iz * (VNW + 1) + ix;
 function sampleHeight(wx, wz) {
-  const fx = THREE.MathUtils.clamp((wx + HALF) / VSTEP, 0, VN - 1e-6);
-  const fz = THREE.MathUtils.clamp((wz + HALF) / VSTEP, 0, VN - 1e-6);
+  const fx = THREE.MathUtils.clamp((wx + HALFW) / VSTEP, 0, VNW - 1e-6);
+  const fz = THREE.MathUtils.clamp((wz + HALFH) / VSTEP, 0, VNH - 1e-6);
   const ix = Math.floor(fx), iz = Math.floor(fz);
   const tx = fx - ix, tz = fz - iz;
   const pos = terrainGeo.attributes.position;
@@ -433,10 +447,10 @@ function sampleHeight(wx, wz) {
 // 셀 단위 캐시: 높이 / 지형 종류
 const cellH = [];
 const terrain = [];
-for (let gx = 0; gx < GRID; gx++) {
+for (let gx = 0; gx < GW; gx++) {
   cellH.push([]);
   terrain.push([]);
-  for (let gz = 0; gz < GRID; gz++) {
+  for (let gz = 0; gz < GH; gz++) {
     const p = cellToWorld(gx, gz);
     const h = sampleHeight(p.x, p.z);
     cellH[gx].push(h);
@@ -475,7 +489,7 @@ const BLEND_COLORS = {
 };
 // 지형 종류 가중치 (0..1) — 셀 분류와 같은 노이즈/규칙을 연속값으로 사용
 function surfaceWeights(wx, wz, h) {
-  const fx = (wx + HALF) / TILE, fz = (wz + HALF) / TILE;
+  const fx = (wx + HALFW) / TILE, fz = (wz + HALFH) / TILE;
   // at()가 인덱스를 클램프하므로 상한 걱정 없이 직접 샘플
   const tn = tNoise(fx - 0.5 + 7, fz - 0.5 + 3);
   const dirt = smooth01((tn - 0.58) / 0.2);
@@ -490,7 +504,7 @@ function surfaceWeights(wx, wz, h) {
 const _sc = new THREE.Color();
 function surfaceColorAt(wx, wz, h, out) {
   const w = surfaceWeights(wx, wz, h);
-  const fx = (wx + HALF) / TILE, fz = (wz + HALF) / TILE;
+  const fx = (wx + HALFW) / TILE, fz = (wz + HALFH) / TILE;
   // 얼룩 노이즈 2종: 팔레트 내 변주 + 밝기 모틀
   const v1 = hNoise2(fx, fz);
   const v2 = hNoise(fz * 0.8 + 2, fx * 0.8 + 5);
@@ -608,14 +622,14 @@ function makeWaterMaps() {
   const cImg = cc.createImageData(N, N);
   const aImg = ac.createImageData(N, N);
   // 자연 하천/못 톤: 여울은 탁한 청록, 깊은 곳은 짙은 청록(보라빛 배제)
-  const shallow = { r: 130, g: 182, b: 160 };
-  const mid = { r: 60, g: 124, b: 120 };
-  const deep = { r: 34, g: 82, b: 84 };
+  const shallow = { r: 148, g: 198, b: 184 };
+  const mid = { r: 74, g: 142, b: 142 };
+  const deep = { r: 40, g: 96, b: 104 };
   for (let py = 0; py < N; py++) {
     for (let px = 0; px < N; px++) {
       // PlaneGeometry.rotateX(-PI/2) 기준: u→+x, 캔버스 행(py)→+z
-      const wx = (px / (N - 1) - 0.5) * GRID * TILE;
-      const wz = (py / (N - 1) - 0.5) * GRID * TILE;
+      const wx = (px / (N - 1) - 0.5) * GW * TILE;
+      const wz = (py / (N - 1) - 0.5) * GH * TILE;
       const depth = WATER_Y - sampleHeight(wx, wz);
       const i = (py * N + px) * 4;
       const t = smooth01(depth / 0.4);
@@ -644,7 +658,7 @@ function makeWaterMaps() {
       cImg.data[i] = r; cImg.data[i + 1] = g; cImg.data[i + 2] = b; cImg.data[i + 3] = 255;
       // 알파(green 채널): 물가에서 0으로 부드럽게 — 지형과 만나는 면이 자연스럽다
       // 더 투명하게 — 얕은 곳은 바닥이 훤히 비치고 깊어도 은은히 비친다
-      const a = Math.min(0.85, smooth01(depth / 0.12) * 0.26 + smooth01(depth / 0.4) * 0.5 + foam * 0.3) * 255;
+      const a = Math.min(0.78, smooth01(depth / 0.12) * 0.22 + smooth01(depth / 0.4) * 0.44 + foam * 0.3) * 255;
       aImg.data[i] = a; aImg.data[i + 1] = a; aImg.data[i + 2] = a; aImg.data[i + 3] = 255;
     }
   }
@@ -718,7 +732,7 @@ function makeSparkleTexture() {
 }
 const sparkleTex = makeSparkleTexture();
 const waterMesh = new THREE.Mesh(
-  new THREE.PlaneGeometry(GRID * TILE, GRID * TILE),
+  new THREE.PlaneGeometry(GW * TILE, GH * TILE),
   new THREE.MeshStandardMaterial({
     map: waterMaps.colorTex,
     alphaMap: waterMaps.alphaTex,
@@ -738,7 +752,7 @@ const waterMesh = new THREE.Mesh(
 waterMesh.rotation.x = -Math.PI / 2;
 waterMesh.position.y = WATER_Y;
 noAO(waterMesh);
-scene.add(waterMesh);
+if (hasRiver) scene.add(waterMesh);
 
 // 지형 테두리 스커트 — 하이트필드 가장자리가 뚫려 보이지 않게 측면을 막는다
 {
@@ -751,11 +765,13 @@ scene.add(waterMesh);
     verts.push(x0, h0, z0, x0, yBot, z0, x1, h1, z1);
     verts.push(x1, h1, z1, x0, yBot, z0, x1, yBot, z1);
   };
-  for (let t = -HALF; t < HALF - 1e-6; t += step) {
-    pushWall(t, -HALF, t + step, -HALF);
-    pushWall(t + step, HALF, t, HALF);
-    pushWall(-HALF, t + step, -HALF, t);
-    pushWall(HALF, t, HALF, t + step);
+  for (let t = -HALFW; t < HALFW - 1e-6; t += step) {
+    pushWall(t, -HALFH, t + step, -HALFH);
+    pushWall(t + step, HALFH, t, HALFH);
+  }
+  for (let t = -HALFH; t < HALFH - 1e-6; t += step) {
+    pushWall(-HALFW, t + step, -HALFW, t);
+    pushWall(HALFW, t, HALFW, t + step);
   }
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(verts), 3));
@@ -770,8 +786,7 @@ scene.add(waterMesh);
 
 // 받침대
 {
-  const baseSize = GRID * TILE + 2.2;
-  const base = part(new RoundedBoxGeometry(baseSize, 1.6, baseSize, 4, 0.3), 0x5c667a, { outline: false });
+  const base = part(new RoundedBoxGeometry(GW * TILE + 2.2, 1.6, GH * TILE + 2.2, 4, 0.3), 0x5c667a, { outline: false });
   base.position.y = -1.35;
   scene.add(base);
 }
@@ -786,11 +801,16 @@ function rebuildGridLines() {
   const pts = [];
   const step = 0.5;
   const yAt = (x, z) => Math.max(sampleHeight(x, z), WATER_Y) + 0.035;
-  for (let i = 0; i <= GRID; i++) {
-    const c = -HALF + i * TILE;
-    for (let s = -HALF; s < HALF - 1e-6; s += step) {
-      pts.push(c, yAt(c, s), s, c, yAt(c, s + step), s + step);
-      pts.push(s, yAt(s, c), c, s + step, yAt(s + step, c), c);
+  for (let i = 0; i <= GW; i++) {
+    const c = -HALFW + i * TILE;
+    for (let sv = -HALFH; sv < HALFH - 1e-6; sv += step) {
+      pts.push(c, yAt(c, sv), sv, c, yAt(c, sv + step), sv + step);
+    }
+  }
+  for (let i = 0; i <= GH; i++) {
+    const c = -HALFH + i * TILE;
+    for (let sv = -HALFW; sv < HALFW - 1e-6; sv += step) {
+      pts.push(sv, yAt(sv, c), c, sv + step, yAt(sv + step, c), c);
     }
   }
   const geo = new THREE.BufferGeometry();
@@ -1482,8 +1502,9 @@ function placeProp(type, gx, gz) {
   // 수목: 숲 노이즈 군락
   const fNoise = makeNoise(6.8);
   let trees = 0;
-  for (let gx = 0; gx < GRID && trees < 74; gx++) {
-    for (let gz = 0; gz < GRID && trees < 74; gz++) {
+  const TREE_MAX = Math.round(74 * AREA_F);
+  for (let gx = 0; gx < GW && trees < TREE_MAX; gx++) {
+    for (let gz = 0; gz < GH && trees < TREE_MAX; gz++) {
       if (!free(gx, gz)) continue;
       if (terrainAt(gx, gz) !== T.GRASS) continue;
       const f = fNoise(gx, gz);
@@ -1494,8 +1515,9 @@ function placeProp(type, gx, gz) {
   // 강가 수목: 물가 1.2~2.8칸 띠에 버드나무/자작이 드문드문 늘어선다
   {
     let riverTrees = 0, guard = 0;
-    while (riverTrees < 16 && guard++ < 3000) {
-      const gx = 1 + Math.floor(rng() * (GRID - 2)), gz = 1 + Math.floor(rng() * (GRID - 2));
+    const RT_MAX = hasRiver ? Math.round(16 * AREA_F) : 0;
+    while (riverTrees < RT_MAX && guard++ < 3000) {
+      const gx = 1 + Math.floor(rng() * (GW - 2)), gz = 1 + Math.floor(rng() * (GH - 2));
       if (!free(gx, gz) || terrainAt(gx, gz) === T.WATER) continue;
       const p = cellToWorld(gx, gz);
       const d = distToRiver(p.x, p.z);
@@ -1508,7 +1530,7 @@ function placeProp(type, gx, gz) {
   const scatter = (type, count, pred = () => true) => {
     let placed = 0, guard = 0;
     while (placed < count && guard++ < 600) {
-      const gx = Math.floor(rng() * GRID), gz = Math.floor(rng() * GRID);
+      const gx = Math.floor(rng() * GW), gz = Math.floor(rng() * GH);
       if (!free(gx, gz) || !pred(gx, gz)) continue;
       placeProp(type, gx, gz);
       placed++;
@@ -1518,8 +1540,9 @@ function placeProp(type, gx, gz) {
   // 벽돌 건물이 주가 되고 작은 농가는 보조
   {
     let placedB = 0, guard = 0;
-    while (placedB < 7 && guard++ < 1600) {
-      const gx = 1 + Math.floor(rng() * (GRID - 3)), gz = 1 + Math.floor(rng() * (GRID - 3));
+    const BLD_MAX = Math.round(7 * AREA_F);
+    while (placedB < BLD_MAX && guard++ < 2600) {
+      const gx = 1 + Math.floor(rng() * (GW - 3)), gz = 1 + Math.floor(rng() * (GH - 3));
       const foot = PROP_DEF.building.footprint;
       if (!foot.every(([dx, dz]) => free(gx + dx, gz + dz) && terrainAt(gx + dx, gz + dz) !== T.MUD)) continue;
       let hMin = Infinity, hMax = -Infinity;
@@ -1622,7 +1645,7 @@ const decorMeshes = []; // 풀/꽃/낙엽/잔가지 — 디버그 토글용
     return out;
   };
 
-  const GRASS_N = 16000;
+  const GRASS_N = Math.round(16000 * AREA_F);
   const grassWindMat = new THREE.MeshStandardMaterial({ map: grassTex, alphaTest: 0.42, side: THREE.DoubleSide, roughness: 1.0, metalness: 0, envMapIntensity: 0 });
   addWind(grassWindMat, 0.055, 1.3);
   const grassMesh = new THREE.InstancedMesh(grassGeo, grassWindMat, GRASS_N);
@@ -1640,8 +1663,8 @@ const decorMeshes = []; // 풀/꽃/낙엽/잔가지 — 디버그 토글용
   const up = new THREE.Vector3(0, 1, 0);
   let placed = 0, guard = 0;
   while (placed < GRASS_N && guard++ < GRASS_N * 8) {
-    const wx = (rng() - 0.5) * (GRID * TILE - 1.2);
-    const wz = (rng() - 0.5) * (GRID * TILE - 1.2);
+    const wx = (rng() - 0.5) * (GW * TILE - 1.2);
+    const wz = (rng() - 0.5) * (GH * TILE - 1.2);
     const h = sampleHeight(wx, wz);
     if (h < WATER_Y + 0.06) continue;
     const w = surfaceWeights(wx, wz, h);
@@ -1665,7 +1688,7 @@ const decorMeshes = []; // 풀/꽃/낙엽/잔가지 — 디버그 토글용
     grassMesh.setMatrixAt(placed, gm);
     // dryness: 저주파 패치 + 흙 근처일수록 마른톤 + 약간의 개체 변주
     const dry = THREE.MathUtils.clamp(
-      patchNoise(wx + HALF, wz + HALF) * 1.15 + w.dirt * 0.4 + (rng() - 0.5) * 0.3 - 0.1, 0, 1);
+      patchNoise(wx + HALFW, wz + HALFH) * 1.15 + w.dirt * 0.4 + (rng() - 0.5) * 0.3 - 0.1, 0, 1);
     grassTone(dry, gCol);
     grassMesh.setColorAt(placed, gCol);
     placed++;
@@ -1710,7 +1733,7 @@ const decorMeshes = []; // 풀/꽃/낙엽/잔가지 — 디버그 토글용
   flowerGeo.setAttribute('uv', new THREE.Float32BufferAttribute(flUv, 2));
   flowerGeo.setIndex(flIdx);
   flowerGeo.computeVertexNormals();
-  const FLOWER_N = 880;
+  const FLOWER_N = Math.round(880 * AREA_F);
   const flowerMesh = new THREE.InstancedMesh(
     flowerGeo,
     (() => { const m = new THREE.MeshStandardMaterial({ map: flowerTex, alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.9 }); addWind(m, 0.05, 1.6); return m; })(),
@@ -1723,8 +1746,8 @@ const decorMeshes = []; // 풀/꽃/낙엽/잔가지 — 디버그 토글용
   placed = 0; guard = 0;
   const flowerCols = [0xf4d94a, 0xf6e58d, 0xffffff, 0xe8ecef, 0xe6b8d6];
   while (placed < FLOWER_N && guard++ < FLOWER_N * 20) {
-    const wx = (rng() - 0.5) * (GRID * TILE - 2);
-    const wz = (rng() - 0.5) * (GRID * TILE - 2);
+    const wx = (rng() - 0.5) * (GW * TILE - 2);
+    const wz = (rng() - 0.5) * (GH * TILE - 2);
     const h = sampleHeight(wx, wz);
     if (h < WATER_Y + 0.1) continue;
     const w = surfaceWeights(wx, wz, h);
@@ -1746,7 +1769,7 @@ const decorMeshes = []; // 풀/꽃/낙엽/잔가지 — 디버그 토글용
   scene.add(flowerMesh); decorMeshes.push(flowerMesh);
 
   // 자갈: 흙/진흙/바위 지대에 낮은 다면체
-  const PEB_N = 720;
+  const PEB_N = Math.round(720 * AREA_F);
   const pebMesh = new THREE.InstancedMesh(
     new THREE.DodecahedronGeometry(0.09, 0),
     new THREE.MeshStandardMaterial({ roughness: 0.92 }),
@@ -1756,8 +1779,8 @@ const decorMeshes = []; // 풀/꽃/낙엽/잔가지 — 디버그 토글용
   pebMesh.receiveShadow = true;
   placed = 0; guard = 0;
   while (placed < PEB_N && guard++ < PEB_N * 10) {
-    const wx = (rng() - 0.5) * (GRID * TILE - 1.2);
-    const wz = (rng() - 0.5) * (GRID * TILE - 1.2);
+    const wx = (rng() - 0.5) * (GW * TILE - 1.2);
+    const wz = (rng() - 0.5) * (GH * TILE - 1.2);
     const h = sampleHeight(wx, wz);
     if (h < WATER_Y + 0.03) continue;
     const w = surfaceWeights(wx, wz, h);
@@ -1820,7 +1843,7 @@ const decorMeshes = []; // 풀/꽃/낙엽/잔가지 — 디버그 토글용
     }
     rockGeo.computeVertexNormals();
   }
-  const ROCK_N = 200;
+  const ROCK_N = Math.round(200 * AREA_F);
   const rockMesh = new THREE.InstancedMesh(
     rockGeo,
     new THREE.MeshStandardMaterial({ map: rockTex, roughness: 1, metalness: 0, envMapIntensity: 0, flatShading: true }),
@@ -1830,8 +1853,8 @@ const decorMeshes = []; // 풀/꽃/낙엽/잔가지 — 디버그 토글용
   rockMesh.receiveShadow = true;
   placed = 0; guard = 0;
   while (placed < ROCK_N && guard++ < ROCK_N * 40) {
-    const wx = (rng() - 0.5) * (GRID * TILE - 1.6);
-    const wz = (rng() - 0.5) * (GRID * TILE - 1.6);
+    const wx = (rng() - 0.5) * (GW * TILE - 1.6);
+    const wz = (rng() - 0.5) * (GH * TILE - 1.6);
     const h = sampleHeight(wx, wz);
     if (h < WATER_Y + 0.05) continue;
     const w = surfaceWeights(wx, wz, h);
@@ -1854,7 +1877,7 @@ const decorMeshes = []; // 풀/꽃/낙엽/잔가지 — 디버그 토글용
   scene.add(rockMesh);
 
   // 여울 강돌: 도하 가능한 얕은 물에만 배치 — 수심이 얕은 곳이 한눈에 보인다
-  const STONE_N = 250;
+  const STONE_N = Math.round(250 * AREA_F);
   const stoneMesh = new THREE.InstancedMesh(
     new THREE.DodecahedronGeometry(0.11, 0),
     new THREE.MeshStandardMaterial({ roughness: 0.55 }),
@@ -1863,8 +1886,8 @@ const decorMeshes = []; // 풀/꽃/낙엽/잔가지 — 디버그 토글용
   stoneMesh.receiveShadow = true;
   placed = 0; guard = 0;
   while (placed < STONE_N && guard++ < STONE_N * 60) {
-    const wx = (rng() - 0.5) * (GRID * TILE - 1.6);
-    const wz = (rng() - 0.5) * (GRID * TILE - 1.6);
+    const wx = (rng() - 0.5) * (GW * TILE - 1.6);
+    const wz = (rng() - 0.5) * (GH * TILE - 1.6);
     const h = sampleHeight(wx, wz);
     const depth = WATER_Y - h;
     if (depth < 0.02 || depth > FORD_DEPTH - 0.03) continue;
@@ -1885,7 +1908,7 @@ const decorMeshes = []; // 풀/꽃/낙엽/잔가지 — 디버그 토글용
 
   // 낙엽 리터: 지면에 깔린 작은 평면 나뭇잎 — 흙/풀 위, 수목 근처 밀도↑
   const leafGeo = new THREE.PlaneGeometry(0.17, 0.13);
-  const LEAF_N = 1500;
+  const LEAF_N = Math.round(1500 * AREA_F);
   const leafMesh = new THREE.InstancedMesh(
     leafGeo,
     new THREE.MeshStandardMaterial({ roughness: 0.95, side: THREE.DoubleSide }),
@@ -1895,8 +1918,8 @@ const decorMeshes = []; // 풀/꽃/낙엽/잔가지 — 디버그 토글용
   const leafCols = [0x8a6a34, 0x9c7b3c, 0x74582c, 0xa98a44, 0x6f7a38];
   placed = 0; guard = 0;
   while (placed < LEAF_N && guard++ < LEAF_N * 12) {
-    const wx = (rng() - 0.5) * (GRID * TILE - 1.4);
-    const wz = (rng() - 0.5) * (GRID * TILE - 1.4);
+    const wx = (rng() - 0.5) * (GW * TILE - 1.4);
+    const wz = (rng() - 0.5) * (GH * TILE - 1.4);
     const h = sampleHeight(wx, wz);
     if (h < WATER_Y + 0.05) continue;
     const w = surfaceWeights(wx, wz, h);
@@ -1922,7 +1945,7 @@ const decorMeshes = []; // 풀/꽃/낙엽/잔가지 — 디버그 토글용
   // 잔가지: 흙/풀 위에 흩어진 가는 나뭇가지
   const twigGeo = new THREE.CylinderGeometry(0.018, 0.026, 0.55, 5);
   twigGeo.rotateZ(Math.PI / 2); // 눕힌다
-  const TWIG_N = 440;
+  const TWIG_N = Math.round(440 * AREA_F);
   const twigMesh = new THREE.InstancedMesh(
     twigGeo,
     new THREE.MeshStandardMaterial({ roughness: 0.95 }),
@@ -1932,8 +1955,8 @@ const decorMeshes = []; // 풀/꽃/낙엽/잔가지 — 디버그 토글용
   twigMesh.receiveShadow = true;
   placed = 0; guard = 0;
   while (placed < TWIG_N && guard++ < TWIG_N * 14) {
-    const wx = (rng() - 0.5) * (GRID * TILE - 1.4);
-    const wz = (rng() - 0.5) * (GRID * TILE - 1.4);
+    const wx = (rng() - 0.5) * (GW * TILE - 1.4);
+    const wz = (rng() - 0.5) * (GH * TILE - 1.4);
     const h = sampleHeight(wx, wz);
     if (h < WATER_Y + 0.06) continue;
     const w = surfaceWeights(wx, wz, h);
@@ -1987,7 +2010,7 @@ const decorMeshes = []; // 풀/꽃/낙엽/잔가지 — 디버그 토글용
   reedGeo.setAttribute('uv', new THREE.Float32BufferAttribute(rdUv, 2));
   reedGeo.setIndex(rdIdx);
   reedGeo.computeVertexNormals();
-  const REED_N = 700;
+  const REED_N = Math.round(700 * AREA_F);
   const reedMesh = new THREE.InstancedMesh(
     reedGeo,
     (() => { const m = new THREE.MeshStandardMaterial({ map: reedTex, alphaTest: 0.4, side: THREE.DoubleSide, roughness: 1.0, envMapIntensity: 0 }); addWind(m, 0.07, 1.1); return m; })(),
@@ -2001,8 +2024,8 @@ const decorMeshes = []; // 풀/꽃/낙엽/잔가지 — 디버그 토글용
   const reedCols = [0x5a7a3a, 0x6b8540, 0x4e6a30, 0x8a8a44];
   placed = 0; guard = 0;
   while (placed < REED_N && guard++ < REED_N * 14) {
-    const wx = (rng() - 0.5) * (GRID * TILE - 1.2);
-    const wz = (rng() - 0.5) * (GRID * TILE - 1.2);
+    const wx = (rng() - 0.5) * (GW * TILE - 1.2);
+    const wz = (rng() - 0.5) * (GH * TILE - 1.2);
     const h = sampleHeight(wx, wz);
     const depth = WATER_Y - h;
     // 물가 띠: 살짝 잠긴 곳~물가 위 15cm, 바위 지대 제외
@@ -2026,7 +2049,7 @@ const decorMeshes = []; // 풀/꽃/낙엽/잔가지 — 디버그 토글용
   scene.add(reedMesh); decorMeshes.push(reedMesh);
 
   // 이끼: 바위/급경사 지대에 낮게 깔린 초록 이끼 패치
-  const MOSS_N = 620;
+  const MOSS_N = Math.round(620 * AREA_F);
   const mossMesh = new THREE.InstancedMesh(
     new THREE.IcosahedronGeometry(0.16, 0),
     new THREE.MeshStandardMaterial({ roughness: 1, envMapIntensity: 0, flatShading: true }),
@@ -2035,8 +2058,8 @@ const decorMeshes = []; // 풀/꽃/낙엽/잔가지 — 디버그 토글용
   mossMesh.receiveShadow = true;
   placed = 0; guard = 0;
   while (placed < MOSS_N && guard++ < MOSS_N * 22) {
-    const wx = (rng() - 0.5) * (GRID * TILE - 1.4);
-    const wz = (rng() - 0.5) * (GRID * TILE - 1.4);
+    const wx = (rng() - 0.5) * (GW * TILE - 1.4);
+    const wz = (rng() - 0.5) * (GH * TILE - 1.4);
     const h = sampleHeight(wx, wz);
     if (h < WATER_Y + 0.05) continue;
     const w = surfaceWeights(wx, wz, h);
@@ -2064,9 +2087,10 @@ const decorMeshes = []; // 풀/꽃/낙엽/잔가지 — 디버그 토글용
 // ---------------------------------------------------------------------------
 const bridge = { cells: new Set(), gz: -1, deckY: WATER_Y + 0.5, hp: 100, maxHp: 100, alive: false, group: null, hit: null };
 {
-  // 여울에서 먼(=깊은) 강 구간을 고른다
+  // 여울에서 먼(=깊은) 강 구간을 고른다 (강이 없으면 다리도 없다)
   let bestGz = -1, bestFord = Infinity;
-  for (let gz = 10; gz <= GRID - 10; gz++) {
+  if (!hasRiver) bestGz = -2;
+  if (bestGz !== -2) for (let gz = 10; gz <= GH - 10; gz++) {
     const ford = smooth01((Math.sin((gz + 0.5) * 0.275 + riverPhase * 2.3) - 0.38) / 0.3);
     if (ford < bestFord) { bestFord = ford; bestGz = gz; }
   }
@@ -2078,9 +2102,9 @@ const bridge = { cells: new Set(), gz: -1, deckY: WATER_Y + 0.5, hp: 100, maxHp:
     let g0 = cgx, g1 = cgx;
     const isWet = (gx) => inBounds(gx, bestGz) && WATER_Y - heightAt(gx, bestGz) > 0.0;
     while (g0 > 1 && isWet(g0 - 1) && cgx - g0 < 6) g0--;
-    while (g1 < GRID - 2 && isWet(g1 + 1) && g1 - cgx < 6) g1++;
+    while (g1 < GW - 2 && isWet(g1 + 1) && g1 - cgx < 6) g1++;
     g0 = Math.max(0, g0 - 1);
-    g1 = Math.min(GRID - 1, g1 + 1);
+    g1 = Math.min(GW - 1, g1 + 1);
     for (let gx = g0; gx <= g1; gx++) bridge.cells.add(cellKey(gx, bestGz));
     bridge.gz = bestGz;
     bridge.minGx = g0;
@@ -2181,8 +2205,8 @@ function driveHeight(x, z) {
 const hullDownCells = new Set();
 {
   const candidates = [];
-  for (let gx = 2; gx < GRID - 2; gx++) {
-    for (let gz = 2; gz < GRID - 2; gz++) {
+  for (let gx = 2; gx < GW - 2; gx++) {
+    for (let gz = 2; gz < GH - 2; gz++) {
       if (terrainAt(gx, gz) === T.WATER) continue;
       if (props.has(cellKey(gx, gz))) continue;
       const h = heightAt(gx, gz);
@@ -2546,7 +2570,7 @@ function traceDirect(attacker, from, aim, opts = {}) {
     x = from.x + dirx * t;
     z = from.z + dirz * t;
     y = from.y + slope * t;
-    if (Math.abs(x) > HALF + 1 || Math.abs(z) > HALF + 1) break; // 맵 밖
+    if (Math.abs(x) > HALFW + 1 || Math.abs(z) > HALFH + 1) break; // 맵 밖
     const nearAim = !opts.throughAim && t > horiz - 0.8;
     // 유닛 충돌 (사수 제외; 계획 단계에서는 목표 유닛도 제외)
     for (const u of units) {
@@ -3126,9 +3150,9 @@ function breakApartGroup(group, power = 8) {
 function recomputeTerrainNormals(ix0, ix1, iz0, iz1) {
   const pos = terrainGeo.attributes.position;
   const nor = terrainGeo.attributes.normal;
-  const cx0 = Math.max(0, ix0), cx1 = Math.min(VN, ix1);
-  const cz0 = Math.max(0, iz0), cz1 = Math.min(VN, iz1);
-  const gY = (ix, iz) => pos.getY(vIndex(THREE.MathUtils.clamp(ix, 0, VN), THREE.MathUtils.clamp(iz, 0, VN)));
+  const cx0 = Math.max(0, ix0), cx1 = Math.min(VNW, ix1);
+  const cz0 = Math.max(0, iz0), cz1 = Math.min(VNH, iz1);
+  const gY = (ix, iz) => pos.getY(vIndex(THREE.MathUtils.clamp(ix, 0, VNW), THREE.MathUtils.clamp(iz, 0, VNH)));
   const s2 = 2 * VSTEP;
   const n = new THREE.Vector3();
   for (let iz = cz0; iz <= cz1; iz++) {
@@ -3148,10 +3172,10 @@ function crater(gx, gz) {
   const colAttr = terrainGeo.attributes.color;
   const dirtCol = new THREE.Color();
   // 크레이터 반경의 정점만 순회 (조밀 하이트필드 성능 — 전체 순회 회피)
-  const ix0 = Math.max(0, Math.floor((c.x - R + HALF) / VSTEP));
-  const ix1 = Math.min(VN, Math.ceil((c.x + R + HALF) / VSTEP));
-  const iz0 = Math.max(0, Math.floor((c.z - R + HALF) / VSTEP));
-  const iz1 = Math.min(VN, Math.ceil((c.z + R + HALF) / VSTEP));
+  const ix0 = Math.max(0, Math.floor((c.x - R + HALFW) / VSTEP));
+  const ix1 = Math.min(VNW, Math.ceil((c.x + R + HALFW) / VSTEP));
+  const iz0 = Math.max(0, Math.floor((c.z - R + HALFH) / VSTEP));
+  const iz1 = Math.min(VNH, Math.ceil((c.z + R + HALFH) / VSTEP));
   for (let iz = iz0; iz <= iz1; iz++) {
     for (let ix = ix0; ix <= ix1; ix++) {
       const i = vIndex(ix, iz);
@@ -4531,8 +4555,8 @@ function predictPlayerCell(lvl) {
   if (lvl <= 1 || !playerLastMove) return { gx: player.gx, gz: player.gz };
   const f = lvl >= 3 ? 1 : 0.5;
   return {
-    gx: THREE.MathUtils.clamp(Math.round(player.gx + playerLastMove.dx * f), 0, GRID - 1),
-    gz: THREE.MathUtils.clamp(Math.round(player.gz + playerLastMove.dz * f), 0, GRID - 1),
+    gx: THREE.MathUtils.clamp(Math.round(player.gx + playerLastMove.dx * f), 0, GW - 1),
+    gz: THREE.MathUtils.clamp(Math.round(player.gz + playerLastMove.dz * f), 0, GH - 1),
   };
 }
 function planEnemies() {
