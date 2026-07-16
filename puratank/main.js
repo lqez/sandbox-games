@@ -19,7 +19,7 @@ const enemyKits = KIT_KEYS.filter((k) => k !== playerKit);
 // ---------------------------------------------------------------------------
 const GRID = 60;            // 60x60 그리드 (기존 40에서 1.5배 — 더 넓은 전장)
 const TILE = 1;             // 한 칸의 월드 크기
-const VRES = 2;             // 타일당 하이트필드 분할 수 (하이트필드 해상도는 동일)
+const VRES = 8;             // 타일당 하이트필드 분할 수 — 조밀하게(거친 지형·자연스런 강 테두리)
 const WATER_Y = -0.12;      // 수면 높이
 const MAX_CLIMB = 0.5;      // 궤도로 오를 수 있는 최대 단차 (1유닛 스텝 기준)
 const FORD_DEPTH = 0.22;    // 도하 가능한 최대 수심 — 더 깊은 물은 진입 불가
@@ -319,6 +319,12 @@ const VSTEP = TILE / VRES;
 const hNoise = makeNoise(10);
 const hNoise2 = makeNoise(4.8);
 const tNoise = makeNoise(8);
+// 고주파 프랙탈 디테일 — 울퉁불퉁한 지면 + 강 테두리 불규칙화
+const dNoise = makeNoise(2.4);
+const dNoise2 = makeNoise(1.15);
+const dNoise3 = makeNoise(0.6);
+const bankNoise = makeNoise(1.8);
+const bankNoise2 = makeNoise(0.7);
 
 // 하천 경로: 스폰 지점과 겹치지 않을 때까지 리샘플링
 let riverCx, riverAmp, riverPhase;
@@ -358,7 +364,12 @@ function baseHeight(wx, wz) {
   const fx = (wx + HALF) / TILE;
   const fz = (wz + HALF) / TILE;
   const n = hNoise(fx, fz) * 0.72 + hNoise2(fx, fz) * 0.28;
-  return THREE.MathUtils.clamp(n * 5.2 - 1.0, 0, 2.6);
+  let h = n * 5.2 - 1.0;
+  // 고주파 프랙탈 옥타브 — 표면을 자잘하게 울퉁불퉁하게
+  h += (dNoise(fx, fz) - 0.5) * 0.72
+     + (dNoise2(fx, fz) - 0.5) * 0.4
+     + (dNoise3(fx, fz) - 0.5) * 0.22;
+  return THREE.MathUtils.clamp(h, 0, 3.1);
 }
 const spawnTargets = [PLAYER_SPAWN, ...ENEMY_SPAWNS].map((s) => {
   const p = cellToWorld(s.gx, s.gz);
@@ -371,13 +382,19 @@ function fieldHeight(wx, wz) {
     const d = Math.hypot(wx - s.x, wz - s.z);
     if (d < 5) h = THREE.MathUtils.lerp(s.h, h, smooth01((d - 1.5) / 3.5));
   }
-  // 하천 카빙 (부드러운 강바닥) — 구간별 깊이 변화로 여울(얕은 도하 지점) 생성
-  const dr = distToRiver(wx, wz);
+  // 하천 카빙 — 강 테두리(뭍과 만나는 면)를 노이즈로 크게 흔들어 불규칙하게.
+  // 강둑 거리에 저주파+고주파 노이즈를 더해 매끈한 곡선 대신 들쭉날쭉한 물가.
+  const fx = (wx + HALF) / TILE, fz = (wz + HALF) / TILE;
+  const drRaw = distToRiver(wx, wz);
+  const bankWobble = (bankNoise(fx, fz) - 0.5) * 2.6 + (bankNoise2(fx, fz) - 0.5) * 1.5;
+  const dr = drRaw + bankWobble;
   if (dr < 5.5) {
     const gzf = wz / TILE + (GRID - 1) / 2;
     const ford = smooth01((Math.sin(gzf * 0.275 + riverPhase * 2.3) - 0.38) / 0.3);
-    const bed = -0.52 + ford * 0.27; // 여울 -0.25(수심 0.13) ↔ 깊은 곳 -0.52(수심 0.4)
-    h = THREE.MathUtils.lerp(bed, h, smooth01((dr - 1.3) / 4.2));
+    // 강바닥도 자잘하게 울퉁불퉁 (매끈한 트로프 방지)
+    const bedNoise = (dNoise2(fx, fz) - 0.5) * 0.18;
+    const bed = -0.52 + ford * 0.27 + bedNoise;
+    h = THREE.MathUtils.lerp(bed, h, smooth01((dr - 1.1) / 3.6));
   }
   return h;
 }
@@ -567,7 +584,9 @@ const terrainMesh = new THREE.Mesh(
   })
 );
 terrainMesh.receiveShadow = true;
-terrainMesh.castShadow = true;
+// 조밀 하이트필드 — 지형 자체 캐스트는 끄고(섀도 패스 비용↓) 받기만 한다.
+// 언덕 그림자는 SSAO/명암이 대체, 프랍·전차 그림자는 그대로 지면에 진다.
+terrainMesh.castShadow = false;
 scene.add(terrainMesh);
 
 // ---------------------------------------------------------------------------
@@ -2974,16 +2993,24 @@ function crater(gx, gz) {
   const pos = terrainGeo.attributes.position;
   const colAttr = terrainGeo.attributes.color;
   const dirtCol = new THREE.Color();
-  for (let i = 0; i < pos.count; i++) {
-    const d = Math.hypot(pos.getX(i) - c.x, pos.getZ(i) - c.z);
-    if (d >= R) continue;
-    const dep = DEPTH * (0.5 + 0.5 * Math.cos((d / R) * Math.PI));
-    pos.setY(i, Math.max(pos.getY(i) - dep, WATER_Y + 0.04));
-    if (d < R * 0.72) {
-      const vc = worldToCell({ x: pos.getX(i), z: pos.getZ(i) });
-      if (terrain[vc.gx][vc.gz] !== T.WATER) {
-        dirtCol.set(TERRAIN_COLORS[T.DIRT][0]).multiplyScalar(0.72 + 0.1 * (d / R));
-        colAttr.setXYZ(i, dirtCol.r, dirtCol.g, dirtCol.b);
+  // 크레이터 반경의 정점만 순회 (조밀 하이트필드 성능 — 전체 순회 회피)
+  const ix0 = Math.max(0, Math.floor((c.x - R + HALF) / VSTEP));
+  const ix1 = Math.min(VN, Math.ceil((c.x + R + HALF) / VSTEP));
+  const iz0 = Math.max(0, Math.floor((c.z - R + HALF) / VSTEP));
+  const iz1 = Math.min(VN, Math.ceil((c.z + R + HALF) / VSTEP));
+  for (let iz = iz0; iz <= iz1; iz++) {
+    for (let ix = ix0; ix <= ix1; ix++) {
+      const i = vIndex(ix, iz);
+      const d = Math.hypot(pos.getX(i) - c.x, pos.getZ(i) - c.z);
+      if (d >= R) continue;
+      const dep = DEPTH * (0.5 + 0.5 * Math.cos((d / R) * Math.PI));
+      pos.setY(i, Math.max(pos.getY(i) - dep, WATER_Y + 0.04));
+      if (d < R * 0.72) {
+        const vc = worldToCell({ x: pos.getX(i), z: pos.getZ(i) });
+        if (terrain[vc.gx][vc.gz] !== T.WATER) {
+          dirtCol.set(TERRAIN_COLORS[T.DIRT][0]).multiplyScalar(0.72 + 0.1 * (d / R));
+          colAttr.setXYZ(i, dirtCol.r, dirtCol.g, dirtCol.b);
+        }
       }
     }
   }
