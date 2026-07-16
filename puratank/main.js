@@ -348,13 +348,13 @@ let riverCx, riverAmp, riverPhase;
   let tries = 0;
   do {
     riverCx = 12 + rng() * (GW - 24);
-    riverAmp = 6.5 + rng() * 5.0;
+    riverAmp = 4.5 + rng() * 3.5; // 휨 축소 — 느긋한 곡류
     riverPhase = rng() * Math.PI * 2;
     tries++;
   } while (
     tries < 40 &&
     [PLAYER_SPAWN, ...ENEMY_SPAWNS].some((s) => {
-      const rx = riverCx + Math.sin(s.gz * 0.21 + riverPhase) * riverAmp;
+      const rx = riverCx + Math.sin(s.gz * 0.085 + riverPhase) * riverAmp;
       return Math.abs(rx - s.gx) < (s === PLAYER_SPAWN ? 8 : 6);
     })
   );
@@ -362,7 +362,7 @@ let riverCx, riverAmp, riverPhase;
 const riverPoints = [];
 if (hasRiver) for (let zw = -HALFH; zw <= HALFH; zw += 0.5) {
   const gzf = zw / TILE + (GH - 1) / 2;
-  const rx = riverCx + Math.sin(gzf * 0.21 + riverPhase) * riverAmp;
+  const rx = riverCx + Math.sin(gzf * 0.085 + riverPhase) * riverAmp; // 사행 주기 완화
   riverPoints.push({ x: (rx - (GW - 1) / 2) * TILE, z: zw });
 }
 function distToRiver(wx, wz) {
@@ -405,12 +405,14 @@ function fieldHeight(wx, wz) {
   const drRaw = distToRiver(wx, wz);
   const bankWobble = (bankNoise(fx, fz) - 0.5) * 2.0 + (bankNoise2(fx, fz) - 0.5) * 0.5;
   const dr = drRaw + bankWobble;
-  if (dr < 11) {
+  if (dr < 15) {
     const gzf = wz / TILE + (GH - 1) / 2;
     const ford = smooth01((Math.sin(gzf * 0.275 + riverPhase * 2.3) - 0.38) / 0.3);
-    // 강 폭 가변: 구간별로 0.6~1.6배 — 좁은 여울목과 넓은 소(pool)가 생긴다
-    const rw = 1.05 + Math.sin(gzf * 0.09 + riverPhase * 1.7) * 0.35
-             + Math.sin(gzf * 0.041 + riverPhase * 4.1) * 0.2;
+    // 강 폭 가변: 구간별 ~0.55×에서 최대 ~3.2×(기존의 2배)까지 —
+    // 좁은 여울목과 훨씬 넓은 소(pool)가 생긴다
+    const rw = Math.max(0.55,
+      1.45 + Math.sin(gzf * 0.055 + riverPhase * 1.7) * 0.95
+           + Math.sin(gzf * 0.026 + riverPhase * 4.1) * 0.8);
     const bedNoise = (dNoise2(fx, fz) - 0.5) * 0.15;
     const bed = -0.5 + ford * 0.26 + bedNoise;
     // 얕은 물가 선반: 수면 살짝 아래에서 완만하게 시작 (급격히 깎이지 않게)
@@ -2361,8 +2363,8 @@ const bridge = { cells: new Set(), gz: -1, deckY: WATER_Y + 0.5, hp: 100, maxHp:
     const cgx = Math.round(rxGrid - 0.5);
     let g0 = cgx, g1 = cgx;
     const isWet = (gx) => inBounds(gx, bestGz) && WATER_Y - heightAt(gx, bestGz) > 0.0;
-    while (g0 > 1 && isWet(g0 - 1) && cgx - g0 < 6) g0--;
-    while (g1 < GW - 2 && isWet(g1 + 1) && g1 - cgx < 6) g1++;
+    while (g0 > 1 && isWet(g0 - 1) && cgx - g0 < 11) g0--;
+    while (g1 < GW - 2 && isWet(g1 + 1) && g1 - cgx < 11) g1++;
     g0 = Math.max(0, g0 - 1);
     g1 = Math.min(GW - 1, g1 + 1);
     for (let gx = g0; gx <= g1; gx++) bridge.cells.add(cellKey(gx, bestGz));
@@ -2862,7 +2864,7 @@ function stepCost(fromX, fromZ, toX, toZ, mover = null) {
 // 후진(차체는 반대를 유지, 속도 페널티 ×1.3)을 선택할 수 있어
 // 목표 각도를 유지한 채 뒤로 빠지는 경로가 나온다.
 // turned: 차체 회전 없이(전/후진만으로) 도달했는지 여부 — 필드 2톤 표시용.
-const REVERSE_COST = 1.0; // 후진도 전진과 동일 비용 (차체 축 대칭 이동)
+const REVERSE_COST = 2.0; // 후진은 전진의 2배 비용
 function reachableCells(unit) {
   const startDir = facingDir(unit);
   const best = new Map(); // "x,z,hull" -> cost
@@ -5179,7 +5181,7 @@ let busy = false;
 //  경계: 👁 버튼(턴 종료) — 정지한 채 사격 필드를 지나는 적에게 스냅 사격,
 //        아무도 안 걸리면 조준 스택 +15% (다음 사격에 가산)
 // 상성: 기동 > 사격(예측탄 회피) · 경계 > 기동(스냅) · 사격 > 경계(정지 표적)
-const SNAP_PENALTY = 15;
+const SNAP_PENALTY = 8; // 경계 스냅 명중 페널티 완화
 const dirAngle = (d) => Math.atan2(DIRS[d].dx, DIRS[d].dz);
 let currentMoveCells = new Map();
 let currentFireCells = new Map();
@@ -5488,31 +5490,15 @@ async function resolveOneTurn() {
   hideBowUI();
   turnLabel.textContent = `턴 ${turnNo} ▶`;
   const playerStart = { gx: player.gx, gz: player.gz };
-  // 포탑 사전 조준: 사격 예정 유닛은 조준 셀을, 그 외 적 포탑은 플레이어를
-  // 미리 추적한다 (차체 선회는 느려도 포탑은 목표를 맞춰 간다)
-  for (const u of units) {
-    u._track = null;
-    if (!u.alive || (!u.hasTurret && !u.sponsonTwin)) continue;
-    if (u.plan?.type === 'fire') {
-      u._track = { point: aimPointOf({ gx: u.plan.cell.gx, gz: u.plan.cell.gz }) };
-      continue;
-    }
-    // 경계 중엔 포탑 선회 금지 — 지금 바라보는 방향(±5°)만 지킨다
-    if (u.plan?.type === 'overwatch') continue;
-    // 도착 후 포탑 방향을 지정한 이동자는 추적하지 않는다 (지정 방향 우선)
-    if (u.plan?.type === 'move' && u.plan.turretYaw != null) continue;
-    const foes = (u.isPlayer ? enemies : [player]).filter((e) => e.alive);
-    const near = foes.sort((a, b) =>
-      a.group.position.distanceToSquared(u.group.position) -
-      b.group.position.distanceToSquared(u.group.position))[0];
-    if (near) u._track = { unit: near };
-  }
+  // 포탑 사전 추적 없음 — 포탑은 사격 시작 시(aimAt의 선회 애니메이션)와
+  // 이동 도착 시(드래그로 지정한 turretYaw 정렬)에만 돈다.
+  for (const u of units) u._track = null;
   // A) 경계망 구성: 이동 스텝마다 상대편 경계자의 사선을 체크,
   //    걸리면 이동 중 "실시간" 스냅 사격 (경계자당 1회, 스냅 페널티)
   const overwatchers = units.filter((u) => u.alive && u.plan?.type === 'overwatch' && u.reloadLeft <= 0);
   for (const ow of overwatchers) ow._snapped = false;
   const snapShots = [];
-  const SNAP_ARC = THREE.MathUtils.degToRad(5); // 현재 포 방향 ±5° 안에 들어와야 발사
+  const SNAP_ARC = THREE.MathUtils.degToRad(12); // 현재 포 방향 ±12° — 경계 사선 폭 확대
   const onStep = (mover) => {
     for (const ow of overwatchers) {
       if (ow._snapped || !ow.alive || !mover.alive) continue;
