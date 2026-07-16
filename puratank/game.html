@@ -27,28 +27,67 @@
     padding: 12px 16px;
     color: #2b3445;
   }
+  /* 상단 중앙: 턴/힌트만 — 최소 스트립 */
   #hud {
-    top: 14px; left: 14px;
-    min-width: 210px;
+    top: 10px; left: 50%;
+    transform: translateX(-50%);
+    padding: 5px 14px;
     pointer-events: none;
+    text-align: center;
   }
-  #hud h1 { font-size: 16px; letter-spacing: 1px; }
-  #turn-label { margin-top: 4px; font-size: 14px; font-weight: 700; color: #1d4ed8; }
-  #hint { margin-top: 3px; font-size: 12px; font-weight: 600; color: #b0452c; min-height: 15px; }
-  #player-hp { margin-top: 6px; font-size: 12px; font-weight: 700; }
-  #player-hp .bar {
-    margin-top: 3px;
-    width: 100%; height: 10px;
-    background: #d5dae3;
-    border: 2px solid #2b3445;
-    border-radius: 6px;
+  #turn-label { font-size: 13px; font-weight: 800; color: #1d4ed8; }
+  #hint { font-size: 11px; font-weight: 600; color: #b0452c; min-height: 13px; max-width: 46vw; }
+
+  /* 탱크 섬네일 (좌: 플레이어 / 우: 적 세로 스택) */
+  .thumb {
+    position: relative;
+    width: 84px; height: 84px;
+    background: rgba(255,255,255,0.9);
+    border: 3px solid #2b3445;
+    border-radius: 12px;
+    box-shadow: 0 4px 0 rgba(43,52,69,0.35);
     overflow: hidden;
+    cursor: pointer;
+    flex-shrink: 0;
   }
-  #player-hp .fill {
-    height: 100%; width: 100%;
-    background: linear-gradient(#7cc4ff, #2f7ee0);
+  .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .thumb .tag {
+    position: absolute; top: 2px; left: 4px;
+    font-size: 10px; font-weight: 800; color: #2b3445;
+    text-shadow: 0 1px 0 #fff;
+  }
+  .thumb .lv {
+    position: absolute; top: 2px; right: 4px;
+    font-size: 10px; font-weight: 800; color: #6b3fa0;
+    text-shadow: 0 1px 0 #fff;
+  }
+  .thumb .hpbar {
+    position: absolute; left: 4px; right: 4px; bottom: 4px;
+    height: 7px; border: 1.5px solid #2b3445; border-radius: 4px;
+    background: #d5dae3; overflow: hidden;
+  }
+  .thumb .hpbar i {
+    display: block; height: 100%;
+    background: linear-gradient(#8de08a, #4caf50);
     transition: width 0.25s ease;
   }
+  .thumb.player .hpbar i { background: linear-gradient(#7cc4ff, #2f7ee0); }
+  .thumb.dead { filter: grayscale(1) brightness(0.6); }
+  #thumb-player { position: fixed; top: 10px; left: 10px; z-index: 10; }
+  #thumb-enemies {
+    position: fixed; top: 10px; right: 10px; z-index: 10;
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  /* 섬네일 확대 상세 */
+  #thumb-detail {
+    position: fixed; top: 104px; left: 10px; z-index: 12;
+    display: none;
+    max-width: 280px;
+    font-size: 12px; font-weight: 600; line-height: 1.55;
+  }
+  #thumb-detail.right { left: auto; right: 102px; top: 10px; }
+  #thumb-detail.show { display: block; }
+  #thumb-detail b { color: #1d4ed8; }
 
   #controls {
     bottom: 16px; left: 50%;
@@ -120,15 +159,13 @@
   <div id="app"></div>
 
   <div id="hud" class="panel">
-    <h1>🛠 PURATANK</h1>
     <div id="turn-label">턴 1</div>
     <div id="hint"></div>
-    <div id="player-hp">
-      HP <span id="player-hp-num">140 / 140</span>
-      <div class="bar"><div class="fill" id="player-hp-fill"></div></div>
-      <div id="level-label" style="margin-top:5px; font-weight:600; color:#55607a;"></div>
-    </div>
   </div>
+
+  <div id="thumb-player" class="thumb player"></div>
+  <div id="thumb-enemies"></div>
+  <div id="thumb-detail" class="panel"></div>
 
   <div id="perf" class="panel">
     <div id="perf-fps">-- FPS</div>
@@ -139,6 +176,7 @@
 
   <div id="controls" class="panel">
     <button id="btn-go">👁 경계</button>
+    <button id="btn-cancel" class="secondary">✕ 취소</button>
     <button id="btn-restart" class="secondary">↻</button>
     <button id="btn-garage" class="secondary">🛠</button>
   </div>

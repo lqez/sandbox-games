@@ -2687,11 +2687,19 @@ function updateHpBar(unit) {
   ctx.beginPath();
   ctx.roundRect(3, 3, 154 * ratio, 16, 6);
   ctx.fill();
+  // 남은 HP 숫자를 바 안에 표기
+  ctx.font = 'bold 15px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = 'rgba(35,42,56,0.85)';
+  ctx.strokeText(`${Math.max(0, unit.hp)}`, 80, 17);
+  ctx.fillStyle = '#fff';
+  ctx.fillText(`${Math.max(0, unit.hp)}`, 80, 17);
   ctx.font = 'bold 17px sans-serif';
   ctx.fillStyle = '#232a38';
-  ctx.textAlign = 'center';
   ctx.fillText(unit.isPlayer ? `차체${unit.hullLv} 조종${unit.driverLv}` : `차체${unit.hullLv} AI${unit.driverLv}`, 80, 40);
   tex.needsUpdate = true;
+  if (typeof updateThumbs === 'function') updateThumbs();
 }
 
 // ---------------------------------------------------------------------------
@@ -3857,8 +3865,7 @@ function popText(pos, text, color = '#ffffff') {
 // 전투 처리
 // ---------------------------------------------------------------------------
 function updatePlayerHpUI() {
-  playerHpNum.textContent = `${Math.max(0, player.hp)} / ${player.maxHp}`;
-  playerHpFill.style.width = `${Math.max(0, (player.hp / player.maxHp) * 100)}%`;
+  updateThumbs(); // HP는 탱크 위 바(숫자 포함)와 섬네일 그래프로 표시
 }
 
 // 피격 방향 표시: 사수 쪽에서 목표를 가리키는 화살촉 플래시
@@ -4590,13 +4597,85 @@ const overlay = document.getElementById('overlay');
 const overlayTitle = document.getElementById('overlay-title');
 const overlaySub = document.getElementById('overlay-sub');
 const btnAgain = document.getElementById('btn-again');
-const playerHpNum = document.getElementById('player-hp-num');
-const playerHpFill = document.getElementById('player-hp-fill');
-const levelLabel = document.getElementById('level-label');
-if (levelLabel) {
-  const g = player.gun;
-  const gunTxt = g.sponson ? `측면 부포 90°±${g.arc}°` : g.fixed ? `고정포 ±${g.arc}°` : '포탑';
-  levelLabel.textContent = `${KIT_INFO[playerKit].label} · ${gunTxt} · 부앙 ${g.pitchMin}°~+${g.pitchMax}° · 재장전 ${g.reload}턴 · 기동 ${player.mp} · 사거리 ${player.fireRange}`;
+// ── 탱크 섬네일 HUD: 좌상단 플레이어 / 우상단 적 세로 스택.
+// 오프스크린으로 킷을 히어로 앵글 렌더해 초상화로 쓰고,
+// 레벨·차종·HP 그래프 오버레이. 터치하면 상세 패널 토글.
+function renderKitPortraits(keys) {
+  const r = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
+  r.setSize(112, 112);
+  r.toneMapping = THREE.ACESFilmicToneMapping;
+  const sc = new THREE.Scene();
+  sc.add(new THREE.HemisphereLight(0xffffff, 0x667755, 1.15));
+  const dl = new THREE.DirectionalLight(0xfff2d8, 1.7);
+  dl.position.set(3, 5, 4);
+  sc.add(dl);
+  const cam = new THREE.PerspectiveCamera(34, 1, 0.1, 30);
+  cam.position.set(2.6, 2.1, 3.2);
+  cam.lookAt(0, 0.85, 0);
+  const out = {};
+  for (const k of keys) {
+    const kit = buildKitTank(k);
+    kit.group.rotation.y = 0.6;
+    sc.add(kit.group);
+    r.render(sc, cam);
+    out[k] = r.domElement.toDataURL();
+    sc.remove(kit.group);
+  }
+  r.dispose();
+  return out;
+}
+const thumbDetail = document.getElementById('thumb-detail');
+const thumbPlayerEl = document.getElementById('thumb-player');
+const thumbEnemiesEl = document.getElementById('thumb-enemies');
+var thumbsReady = false; // var: 초기 spawnUnit의 updateHpBar 호출 시 TDZ 방지
+let detailFor = null; // 'player' | enemy index
+function unitDetailHTML(u) {
+  const g = u.gun;
+  const gunTxt = g.sponson ? `측면 부포 90°±${g.arc}°` : g.fixed ? `고정포 ±${g.arc}°` : '포탑 선회';
+  return `<b>${KIT_INFO[u.kitKey].label}</b><br>
+HP ${Math.max(0, u.hp)} / ${u.maxHp}<br>
+차체 Lv${u.hullLv} · ${u.isPlayer ? '조종' : 'AI'} Lv${u.driverLv}<br>
+${gunTxt} · 부앙 ${g.pitchMin}°~+${g.pitchMax}°<br>
+재장전 ${g.reload}턴${u.reloadLeft > 0 ? ` (남은 ${u.reloadLeft})` : ''} · 기동 ${u.mp}${u.boostTurns > 0 ? ` ⚡+4(${u.boostTurns}턴)` : ''} · 사거리 ${u.fireRange}`;
+}
+function makeThumb(el, u, portrait, label) {
+  el.innerHTML = `<img src="${portrait}" alt=""><span class="tag">${label}</span><span class="lv">Lv${u.driverLv}</span><span class="hpbar"><i style="width:100%"></i></span>`;
+}
+{
+  const portraits = renderKitPortraits([playerKit, enemyKit]);
+  makeThumb(thumbPlayerEl, player, portraits[playerKit], KIT_INFO[playerKit].label);
+  enemies.forEach((e, i) => {
+    const div = document.createElement('div');
+    div.className = 'thumb';
+    makeThumb(div, e, portraits[enemyKit], KIT_INFO[enemyKit].label);
+    div.addEventListener('click', () => {
+      if (detailFor === i) { detailFor = null; thumbDetail.classList.remove('show'); return; }
+      detailFor = i;
+      thumbDetail.className = 'panel right show';
+      thumbDetail.innerHTML = unitDetailHTML(e);
+    });
+    thumbEnemiesEl.appendChild(div);
+    e._thumbEl = div;
+  });
+  thumbPlayerEl.addEventListener('click', () => {
+    if (detailFor === 'player') { detailFor = null; thumbDetail.classList.remove('show'); return; }
+    detailFor = 'player';
+    thumbDetail.className = 'panel show';
+    thumbDetail.innerHTML = unitDetailHTML(player);
+  });
+  thumbsReady = true;
+}
+function updateThumbs() {
+  if (!thumbsReady) return;
+  const setHp = (el, u) => {
+    const bar = el.querySelector('.hpbar i');
+    if (bar) bar.style.width = `${Math.max(0, (u.hp / u.maxHp) * 100)}%`;
+    el.classList.toggle('dead', !u.alive);
+  };
+  setHp(thumbPlayerEl, player);
+  for (const e of enemies) if (e._thumbEl) setHp(e._thumbEl, e);
+  if (detailFor === 'player') thumbDetail.innerHTML = unitDetailHTML(player);
+  else if (typeof detailFor === 'number' && enemies[detailFor]) thumbDetail.innerHTML = unitDetailHTML(enemies[detailFor]);
 }
 
 // 상태 메시지: 짧게 표시 후 자동 소거 (포격 불가 사유 등 값만)
@@ -5484,17 +5563,20 @@ renderer.domElement.addEventListener('pointerup', async (e) => {
   if (enemyHit) setHint('사격: 내 전차를 잡고 반대쪽으로 시위를 당기세요');
 });
 
-window.addEventListener('keydown', (e) => {
-  if (e.key !== 'Escape') return;
+// 취소 동작 (ESC / 모바일 ✕ 버튼 공용): 진행 중 제스처 → 마지막 예약 순
+function cancelAction() {
   if (fireGesture) { fireGesture = null; hideBowUI(); hoverAim = null; controls.enabled = true; downPos = null; refreshPlanUI(false); setHint('취소'); return; }
   if (ghostGesture) { ghostGesture = null; ghost.visible = false; controls.enabled = true; downPos = null; refreshPlanUI(false); setHint('취소'); return; }
-  // 제스처가 없으면 마지막 예약 플랜 취소(되돌리기)
   if (phase === 'plan' && !busy && planQueue.length) {
     planQueue.pop();
     setHint(`예약 취소 (${planQueue.length}턴 남음)`);
     refreshPlanUI(false);
   }
+}
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') cancelAction();
 });
+document.getElementById('btn-cancel')?.addEventListener('click', cancelAction);
 
 renderer.domElement.addEventListener('pointercancel', () => {
   if (fireGesture) { fireGesture = null; hideBowUI(); refreshPlanUI(false); }
