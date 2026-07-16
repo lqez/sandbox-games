@@ -3178,7 +3178,7 @@ function showGhost(cell, facing, turretYaw = null) {
 }
 
 // 다중 턴 계획: 한 번에 최대 3턴 예약 (아래 예약 고스트 풀이 참조)
-const PLAN_AHEAD = 3;
+const PLAN_AHEAD = 2;
 // 예약 고스트 풀: 예약된 각 이동의 도착 자세를 옅은 홀로그램으로 미리 보여준다
 const queueGhostMat = new THREE.MeshBasicMaterial({
   color: 0x7fd4c8, transparent: true, opacity: 0.26, depthWrite: false,
@@ -3215,9 +3215,11 @@ function makeQueueBadge(n) {
 // 예약 경로 연결선
 const queueLineMat = new THREE.LineBasicMaterial({ color: 0x4fd0c0, transparent: true, opacity: 0.8, depthTest: false });
 let queueLine = null;
+let lastMoveGhost = null; // 예약된 마지막 이동의 고스트(=사격 출발점), 없으면 null
 function drawQueueGhosts() {
   for (const gk of queueGhosts) gk.group.visible = false;
   if (queueLine) { scene.remove(queueLine); queueLine.geometry.dispose(); queueLine = null; }
+  lastMoveGhost = null;
   let cx = player.gx, cz = player.gz;
   const pts = [new THREE.Vector3(player.group.position.x, standHeight(player.gx, player.gz) + 0.3, player.group.position.z)];
   let gi = 0;
@@ -3233,6 +3235,8 @@ function drawQueueGhosts() {
         gk.group.rotation.y = facing;
         if (gk.turret) gk.turret.rotation.y = p.turretYaw != null ? normAngle(p.turretYaw - facing) : 0;
         gk.group.visible = true;
+        gk._gx = cx; gk._gz = cz;
+        lastMoveGhost = gk; // 사격은 마지막 고스트 지점에서
       }
       pts.push(new THREE.Vector3(cellToWorld(cx, cz).x, standHeight(cx, cz) + 0.3, cellToWorld(cx, cz).z));
     }
@@ -3243,6 +3247,20 @@ function drawQueueGhosts() {
     queueLine.renderOrder = 11;
     scene.add(queueLine);
   }
+}
+// 사격 출발점: 예약된 이동이 있으면 그 고스트, 없으면 현재 전차
+function fireOrigin() {
+  if (lastMoveGhost) {
+    return {
+      gx: lastMoveGhost._gx, gz: lastMoveGhost._gz,
+      pos: lastMoveGhost.group.position, group: lastMoveGhost.group,
+      turret: lastMoveGhost.turret, hitbox: lastMoveGhost.hitbox, ghost: true,
+    };
+  }
+  return {
+    gx: player.gx, gz: player.gz, pos: player.group.position, group: player.group,
+    turret: player.turret, hitbox: player.hitbox, ghost: false,
+  };
 }
 
 // 정지 사격 보너스 표시: 직전 턴 정지 + 장전 완료면 발밑에 금색 조준 안정 링
@@ -3320,7 +3338,8 @@ bowReticle.rotation.x = -Math.PI / 2;
 bowReticle.visible = false;
 scene.add(bowReticle);
 function updateBowUI(aimPoint, shot) {
-  const p = player.group.position;
+  const fo = fireOrigin();
+  const p = fo.pos;
   const valid = !!shot;
   const lob = valid && !!shot.lob;
   const from = new THREE.Vector3(p.x, p.y + 1.4, p.z);
@@ -3825,8 +3844,10 @@ renderer.domElement.addEventListener('pointerdown', (e) => {
   downPos = { x: e.clientX, y: e.clientY };
   if (phase !== 'plan' || busy) return;
   setPointer(e);
-  // 1) 내 차량에서 드래그 시작 = 사격 조준 (이동/사격 필드가 겹쳐도 명확)
-  if (raycaster.intersectObject(player.hitbox).length) {
+  // 1) 사격 출발점(예약 이동이 있으면 마지막 고스트, 없으면 현재 전차)에서
+  //    드래그 시작 = 사격 조준. 사격은 그 지점에서 나간다.
+  const fo = fireOrigin();
+  if (raycaster.intersectObject(fo.hitbox).length) {
     if (projReload > 0) { setHint(`재장전 중 — ${projReload}턴 남음`); return; }
     fireGesture = { cell: null, shot: null };
     controls.enabled = false;
@@ -3847,8 +3868,8 @@ renderer.domElement.addEventListener('pointerdown', (e) => {
 renderer.domElement.addEventListener('pointermove', (e) => {
   if (fireGesture) {
     setPointer(e);
-    // 내 전차 위로 되돌리면 취소 대기 상태
-    if (raycaster.intersectObject(player.hitbox).length) {
+    // 사격 출발점 위로 되돌리면 취소 대기 상태
+    if (raycaster.intersectObject(fireOrigin().hitbox).length) {
       fireGesture.cell = null;
       fireGesture.shot = null;
       hideBowUI();
@@ -3880,7 +3901,8 @@ renderer.domElement.addEventListener('pointermove', (e) => {
     updateBowUI(aimP, f ? f.shot : null);
     hoverAim = aimP;
     if (f) {
-      const d = Math.hypot(cell.gx - player.gx, cell.gz - player.gz).toFixed(0);
+      const fo = fireOrigin();
+      const d = Math.hypot(cell.gx - fo.gx, cell.gz - fo.gz).toFixed(0);
       setHint(`${f.shot.lob ? '🌕 곡사' : '➡ 직사'} ${d}칸 · ${f.shot.chance}%`);
     } else {
       setHint('놓으면 취소');
@@ -3971,25 +3993,30 @@ function updateAimPreview(dt) {
   if (!player.alive || phase !== 'plan' || busy || !fireGesture || !hoverAim) return;
   const k = 1 - Math.exp(-dt * 9);
   const aim = hoverAim;
-  const targetYaw = Math.atan2(aim.x - player.group.position.x, aim.z - player.group.position.z);
-  let pitchGun = player.cannon;
-  if (player.gun?.fixed) {
-    const rel = clampToGunArc(player, normAngle(targetYaw - player.group.rotation.y));
-    if (player.sponsonTwin) {
-      // 목표 쪽 부포만 조준 프리뷰, 반대쪽은 자기 측면으로 슬며시 복귀
-      const { gun, other } = pickSponson(player, targetYaw);
+  // 사격 출발점이 고스트면 그 고스트의 포탑/포를 조준(현재 전차는 그대로).
+  const fo = fireOrigin();
+  const S = fo.ghost
+    ? { group: fo.group, hasTurret: lastMoveGhost.hasTurret, sponsonTwin: lastMoveGhost.sponsonTwin,
+        cannon: lastMoveGhost.cannon, turret: lastMoveGhost.turret, sponsons: lastMoveGhost.sponsons, gun: player.gun }
+    : player;
+  const targetYaw = Math.atan2(aim.x - S.group.position.x, aim.z - S.group.position.z);
+  let pitchGun = S.cannon;
+  if (S.gun?.fixed) {
+    const rel = clampToGunArc(S, normAngle(targetYaw - S.group.rotation.y));
+    if (S.sponsonTwin) {
+      const { gun, other } = pickSponson(S, targetYaw);
       pitchGun = gun.group;
       gun.group.rotation.y += normAngle(rel - gun.group.rotation.y) * k;
       other.group.rotation.y += normAngle(other.group.userData.rest - other.group.rotation.y) * k;
     } else {
-      player.cannon.rotation.y += normAngle(rel - player.cannon.rotation.y) * k;
+      S.cannon.rotation.y += normAngle(rel - S.cannon.rotation.y) * k;
     }
-  } else if (player.hasTurret) {
-    const rel = normAngle(targetYaw - player.group.rotation.y);
-    player.turret.rotation.y += normAngle(rel - player.turret.rotation.y) * k;
+  } else if (S.hasTurret) {
+    const rel = normAngle(targetYaw - S.group.rotation.y);
+    S.turret.rotation.y += normAngle(rel - S.turret.rotation.y) * k;
   }
-  // 포신 부앙각 미리보기: 목표 고도차 기준, 차종 한계각으로 클램프
-  const from = muzzleApprox(player);
+  // 포신 부앙각 미리보기: 사격 출발점 셀 기준
+  const from = muzzleApprox(player, { gx: fo.gx, gz: fo.gz });
   const horiz = Math.hypot(aim.x - from.x, aim.z - from.z);
   const pitchDeg = THREE.MathUtils.clamp(
     (Math.atan2(aim.y - from.y, Math.max(horiz, 0.001)) * 180) / Math.PI,
@@ -4109,6 +4136,14 @@ window.__puratank = {
   queueLen: () => planQueue.length,
   projOrigin: () => projectedOrigin(),
   curMoveKeys: () => [...currentMoveCells.keys()],
+  curFireKeys: () => [...currentFireCells.keys()],
+  fireOriginCell: () => { const o = fireOrigin(); return { gx: o.gx, gz: o.gz, ghost: o.ghost }; },
+  queueFireAt(gx, gz) {
+    const f = currentFireCells.get(cellKey(gx, gz));
+    if (!f || phase !== 'plan' || busy) return false;
+    enqueuePlan({ type: 'fire', cell: { gx, gz }, shot: f.shot });
+    return true;
+  },
   runQueue: () => resolveQueue(),
   shotAt: (gx, gz) => {
     const enemy = enemies.find((e) => e.alive && e.gx === gx && e.gz === gz);
