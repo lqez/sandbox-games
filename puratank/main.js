@@ -1076,17 +1076,19 @@ const decorMeshes = []; // 풀/꽃/낙엽/잔가지 — 디버그 토글용
   {
     const ctx = grassTexCanvas.getContext('2d');
     ctx.clearRect(0, 0, 64, 64);
+    // 잎 가장자리를 살짝 흐리게 — alphaTest 실루엣이 덜 날카롭게(소프트) 잘린다
+    ctx.filter = 'blur(0.7px)';
     for (let i = 0; i < 15; i++) {
       const bx = 4 + rng() * 56;
       const lean = (rng() - 0.5) * 20;
       const hgt = 34 + rng() * 28;
       const wdt = 1.2 + rng() * 1.8;
       const tipY = 64 - hgt;
-      // 밑동(그늘) → 끝(밝음) 세로 그라데이션
+      // 밑동(그늘) → 끝 그라데이션 — 끝을 흰색까지 올리지 않아 하이라이트가 덜 뜬다
       const grad = ctx.createLinearGradient(0, 64, 0, tipY);
-      grad.addColorStop(0, 'rgba(150,150,150,1)');
-      grad.addColorStop(0.5, 'rgba(220,220,220,1)');
-      grad.addColorStop(1, 'rgba(255,255,255,1)');
+      grad.addColorStop(0, 'rgba(110,110,110,1)');
+      grad.addColorStop(0.5, 'rgba(160,160,160,1)');
+      grad.addColorStop(1, 'rgba(196,196,196,1)');
       ctx.fillStyle = grad;
       ctx.beginPath();
       ctx.moveTo(bx - wdt, 64);
@@ -1116,20 +1118,21 @@ const decorMeshes = []; // 풀/꽃/낙엽/잔가지 — 디버그 토글용
   // 디오라마 스태틱 그래스 팔레트: 저주파 노이즈로 마른/젖은 무리가 뭉쳐 분포.
   // 톤 6종을 dryness(0=싱싱 초록 … 1=마른 밀짚/고사)로 가중 선택.
   const patchNoise = makeNoise(10.5); // 저주파: 마른/젖은 무리 크기
+  // 전반적으로 낮은 채도·명도로 — 배경으로 가라앉아 눈에 덜 띄게
   const grassTone = (dry, out) => {
     const r = rng();
     if (dry < 0.34) {
       // 싱싱한 초록 ~ 짙은 올리브
-      out.setHSL(0.24 + rng() * 0.06, 0.34 + rng() * 0.22, 0.26 + rng() * 0.14);
+      out.setHSL(0.25 + rng() * 0.05, 0.28 + rng() * 0.16, 0.2 + rng() * 0.1);
     } else if (dry < 0.62) {
       // 황록 전이대
-      out.setHSL(0.17 + rng() * 0.06, 0.4 + rng() * 0.18, 0.36 + rng() * 0.13);
+      out.setHSL(0.18 + rng() * 0.05, 0.3 + rng() * 0.14, 0.28 + rng() * 0.1);
     } else if (r < 0.78) {
-      // 마른 밀짚/누런 풀
-      out.setHSL(0.12 + rng() * 0.04, 0.38 + rng() * 0.2, 0.44 + rng() * 0.14);
+      // 마른 밀짚/누런 풀 (가장 밝던 톤 — 크게 낮춤)
+      out.setHSL(0.12 + rng() * 0.04, 0.3 + rng() * 0.14, 0.34 + rng() * 0.1);
     } else {
       // 고사한 갈색 풀
-      out.setHSL(0.07 + rng() * 0.03, 0.32 + rng() * 0.14, 0.3 + rng() * 0.1);
+      out.setHSL(0.07 + rng() * 0.03, 0.28 + rng() * 0.12, 0.24 + rng() * 0.08);
     }
     return out;
   };
@@ -1137,7 +1140,7 @@ const decorMeshes = []; // 풀/꽃/낙엽/잔가지 — 디버그 토글용
   const GRASS_N = 11000;
   const grassMesh = new THREE.InstancedMesh(
     grassGeo,
-    new THREE.MeshStandardMaterial({ map: grassTex, alphaTest: 0.42, side: THREE.DoubleSide, roughness: 0.96 }),
+    new THREE.MeshStandardMaterial({ map: grassTex, alphaTest: 0.42, side: THREE.DoubleSide, roughness: 1.0, metalness: 0, envMapIntensity: 0 }),
     GRASS_N
   );
   grassMesh.receiveShadow = true;
@@ -1419,11 +1422,12 @@ const decorMeshes = []; // 풀/꽃/낙엽/잔가지 — 디버그 토글용
   {
     const ctx = reedTexCanvas.getContext('2d');
     ctx.clearRect(0, 0, 64, 64);
+    ctx.filter = 'blur(0.6px)';
     for (let i = 0; i < 7; i++) {
       const bx = 10 + rng() * 44, lean = (rng() - 0.5) * 10, w = 1.6 + rng() * 1.4;
       const grad = ctx.createLinearGradient(0, 64, 0, 2);
-      grad.addColorStop(0, 'rgba(150,150,150,1)');
-      grad.addColorStop(1, 'rgba(255,255,255,1)');
+      grad.addColorStop(0, 'rgba(110,110,110,1)');
+      grad.addColorStop(1, 'rgba(190,190,190,1)');
       ctx.strokeStyle = grad; ctx.lineWidth = w; ctx.lineCap = 'round';
       ctx.beginPath(); ctx.moveTo(bx, 64); ctx.lineTo(bx + lean, 3); ctx.stroke();
       // 이삭(cattail)
@@ -1450,7 +1454,7 @@ const decorMeshes = []; // 풀/꽃/낙엽/잔가지 — 디버그 토글용
   const REED_N = 700;
   const reedMesh = new THREE.InstancedMesh(
     reedGeo,
-    new THREE.MeshStandardMaterial({ map: reedTex, alphaTest: 0.4, side: THREE.DoubleSide, roughness: 0.94 }),
+    new THREE.MeshStandardMaterial({ map: reedTex, alphaTest: 0.4, side: THREE.DoubleSide, roughness: 1.0, envMapIntensity: 0 }),
     REED_N
   );
   reedMesh.receiveShadow = true;
