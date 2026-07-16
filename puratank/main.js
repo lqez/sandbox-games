@@ -57,12 +57,18 @@ const AREA_F = (GW * GH) / 3600;  // 60×60 기준 면적 배율 (식생/프랍 
 const MSCALE = GRID / 60;         // 카메라/포그/섀도 스케일
 // 하이트필드 밀도: 큰 맵일수록 낮춰 정점 예산(~480² 수준) 유지
 const VRES = Math.max(3, Math.min(8, Math.round(480 / GRID)));
-// 스폰: 플레이어는 남쪽 중앙부, 적은 북쪽 좌/우
+// 스폰: 플레이어는 남쪽 중앙부, 적은 북쪽 띠에 고르게 —
+// 맵이 클수록 적이 많아진다 (면적 비례, 2~6)
 const PLAYER_SPAWN = { gx: Math.round(GW * 0.5), gz: GH - 9 };
-const ENEMY_SPAWNS = [
-  { gx: Math.round(GW * 0.35), gz: 9 },
-  { gx: Math.round(GW * 0.67), gz: 12 },
-];
+const N_ENEMY = Math.max(2, Math.min(6, Math.round(2 * AREA_F)));
+const ENEMY_SPAWNS = [];
+for (let ei = 0; ei < N_ENEMY; ei++) {
+  const fr = N_ENEMY === 1 ? 0.5 : ei / (N_ENEMY - 1);
+  ENEMY_SPAWNS.push({
+    gx: Math.round(THREE.MathUtils.clamp(GW * (0.18 + 0.64 * fr) + (rng() - 0.5) * 5, 3, GW - 4)),
+    gz: 8 + Math.floor(rng() * 7),
+  });
+}
 // 강: 82% 확률로 존재, 폭도 구간별로 변한다 (아예 없을 수도)
 const hasRiver = rng() < 0.82;
 
@@ -1376,8 +1382,11 @@ function buildBuildingMesh() {
     const gsteps = 4;
     for (const sx of [-1, 1]) {
       for (let s2 = 0; s2 < gsteps; s2++) {
-        const t = s2 / gsteps;
-        addChunk(WT, RHT / gsteps, D * (1 - t * 0.92), sx * (W / 2 - WT / 2), H + (s2 + 0.5) * (RHT / gsteps), 0, wallMat, 0);
+        // 박공 계단이 지붕 경사면 아래에 딱 맞게 — 지붕을 뚫고 나오지 않는다.
+        // 해당 단의 상단 높이에서 지붕 반깊이보다 살짝 안쪽으로.
+        const topT = (s2 + 1) / gsteps;
+        const halfD = (D / 2 + 0.15) * (1 - topT) - 0.04;
+        addChunk(WT, RHT / gsteps, Math.max(0.16, halfD * 2), sx * (W / 2 - WT / 2), H + (s2 + 0.5) * (RHT / gsteps), 0, wallMat, 0);
       }
     }
     const slopeLen = Math.hypot(D / 2 + 0.15, RHT);
@@ -3643,7 +3652,7 @@ function makePuff(color, blending = THREE.NormalBlending) {
 // 흙/풀 분수가 위로 솟구쳐 흩어진다.
 async function explosionFx(pos, big = false, debrisCols = null) {
   sfx(big ? 'explode' : 'hit');
-  const N_FIRE = big ? 9 : 6, N_SMOKE = big ? 8 : 5;
+  const N_FIRE = big ? 9 : 6, N_SMOKE = big ? 13 : 7;
   const parts = [];
   // 화염 퍼프: 중심에서 밖으로 팽창하며 노랑→주황→검붉게 어두워진다
   for (let i = 0; i < N_FIRE; i++) {
@@ -3705,8 +3714,8 @@ async function explosionFx(pos, big = false, debrisCols = null) {
         p.sp.material.opacity = Math.max(0, 0.95 * (1 - life * 1.35));
       } else {
         p.vy *= 0.988;
-        p.sp.scale.setScalar(p.s0 * (1 + life * 3.4));
-        p.sp.material.opacity = Math.max(0, 0.8 * (1 - life) * (life < 0.12 ? life / 0.12 : 1));
+        p.sp.scale.setScalar(p.s0 * (1 + life * 4.4));
+        p.sp.material.opacity = Math.max(0, 0.88 * (1 - life) * (life < 0.1 ? life / 0.1 : 1));
       }
     }
   }, linear).then(() => {
@@ -3716,6 +3725,108 @@ async function explosionFx(pos, big = false, debrisCols = null) {
   // 게임 흐름은 초반 임팩트만 기다린다 (연기 여운은 백그라운드로)
   await tween(big ? 430 : 300, () => {}, linear);
   void fxDone;
+}
+
+// ── 격파 잔해: 포탑 등 일부 부품이 포물선으로 날아가 떨어지고,
+// 차체는 그을린 채 남아 불타다(화염) 검은 매연 기둥을 뿜는다 ──
+const wreckFires = [];
+function destroyToWreck(unit) {
+  unit.hpBar.sprite.visible = false;
+  // 날아갈 부품: 포탑(있으면), 무포탑은 스폰슨/포 — 폭압으로 뜯겨 나간다
+  const part = unit.hasTurret ? unit.turret : (unit.sponsons?.[0]?.group ?? unit.cannon);
+  if (part && part.parent) {
+    const pieces = [];
+    const wp = new THREE.Vector3(), wq = new THREE.Quaternion(), ws = new THREE.Vector3();
+    part.updateWorldMatrix(true, true);
+    part.traverse((o) => {
+      if (!o.isMesh || o.material?.visible === false) return;
+      o.getWorldPosition(wp); o.getWorldQuaternion(wq); o.getWorldScale(ws);
+      const clone = new THREE.Mesh(o.geometry, o.material);
+      clone.castShadow = true;
+      clone.position.copy(wp); clone.quaternion.copy(wq); clone.scale.copy(ws);
+      scene.add(clone);
+      pieces.push({
+        mesh: clone,
+        vel: new THREE.Vector3((rng() - 0.5) * 3.6, 5.2 + rng() * 3.2, (rng() - 0.5) * 3.6),
+        spin: new THREE.Vector3(rng() * 9 - 4.5, rng() * 9 - 4.5, rng() * 9 - 4.5),
+      });
+    });
+    part.parent.remove(part);
+    tween(2200, (e, k) => {
+      const dt = 0.016;
+      for (const p of pieces) {
+        p.vel.y -= 13 * dt;
+        p.mesh.position.addScaledVector(p.vel, dt);
+        const fy = sampleHeight(p.mesh.position.x, p.mesh.position.z) + 0.12;
+        if (p.mesh.position.y < fy) {
+          p.mesh.position.y = fy;
+          p.vel.y *= -0.32; p.vel.x *= 0.6; p.vel.z *= 0.6;
+          p.spin.multiplyScalar(0.6);
+        }
+        p.mesh.rotation.x += p.spin.x * dt;
+        p.mesh.rotation.z += p.spin.z * dt;
+      }
+    }, linear); // 착지한 부품은 잔해로 그 자리에 남는다
+  }
+  // 차체를 그을린 잔해로: 재질을 어둡게 복제 (공유 재질 훼손 방지)
+  const darkCache = new Map();
+  unit.group.traverse((o) => {
+    if (!o.isMesh || o === unit.hitbox || o.isSprite) return;
+    if (o.material?.visible === false) return;
+    if (!darkCache.has(o.material)) {
+      const dm = o.material.clone();
+      if (dm.color) dm.color.multiplyScalar(0.3);
+      dm.roughness = 1;
+      if ('envMapIntensity' in dm) dm.envMapIntensity = 0;
+      darkCache.set(o.material, dm);
+    }
+    o.material = darkCache.get(o.material);
+  });
+  // 안테나도 힘없이 꺾임
+  if (unit.antenna) { unit.antenna.rotation.z = 0.9 + rng() * 0.4; }
+  const p = unit.group.position;
+  wreckFires.push({ x: p.x, y: p.y + 0.9, z: p.z, t0: performance.now(), last: 0 });
+}
+// 화재(0~7s: 화염+검은 연기) → 매연(7~34s: 짙은 연기 기둥)
+function updateWreckFires(now) {
+  for (let i = wreckFires.length - 1; i >= 0; i--) {
+    const f = wreckFires[i];
+    const age = (now - f.t0) / 1000;
+    if (age > 34) { wreckFires.splice(i, 1); continue; }
+    const firePhase = age < 7;
+    const interval = firePhase ? 120 : 300;
+    if (now - f.last < interval) continue;
+    f.last = now;
+    const asSmoke = !firePhase || rng() < 0.35;
+    if (asSmoke) {
+      const grey = firePhase ? 0.13 : 0.08 + rng() * 0.05;
+      const sp = makePuff(new THREE.Color(grey, grey, grey));
+      sp.position.set(f.x + (rng() - 0.5) * 0.5, f.y + 0.3, f.z + (rng() - 0.5) * 0.5);
+      const s0 = 0.45 + rng() * 0.35;
+      sp.scale.setScalar(s0);
+      sp.material.opacity = 0.0;
+      scene.add(sp);
+      const drift = (rng() - 0.5) * 0.3;
+      tween(2600 + rng() * 1000, (e, k) => {
+        sp.position.y += 0.016 * (0.9 + k * 0.5);
+        sp.position.x += 0.016 * (0.35 + drift);
+        sp.scale.setScalar(s0 * (1 + k * 3.2));
+        sp.material.opacity = Math.min(k * 6, 1) * 0.5 * (1 - k);
+      }, linear).then(() => { scene.remove(sp); sp.material.dispose(); });
+    } else {
+      const sp = makePuff(0xffb44a, THREE.AdditiveBlending);
+      sp.position.set(f.x + (rng() - 0.5) * 0.55, f.y + rng() * 0.2, f.z + (rng() - 0.5) * 0.55);
+      const s0 = 0.3 + rng() * 0.3;
+      sp.scale.setScalar(s0);
+      scene.add(sp);
+      tween(650 + rng() * 350, (e, k) => {
+        sp.position.y += 0.016 * 1.3;
+        sp.scale.setScalar(s0 * (1 + k * 0.9));
+        sp.material.color.setHSL(0.085 - k * 0.05, 1, Math.max(0.15, 0.55 - k * 0.4));
+        sp.material.opacity = 0.9 * (1 - k * k);
+      }, linear).then(() => { scene.remove(sp); sp.material.dispose(); });
+    }
+  }
 }
 
 // 떠오르는 텍스트 (명중/빗나감/데미지)
@@ -3796,9 +3907,9 @@ async function applyUnitDamage(target, rawDmg, fromPos = null) {
   popText(target.group.position, `-${dmg}`, target.isPlayer ? '#ff8a8a' : '#ffe28a');
   if (target.hp <= 0) {
     target.alive = false;
-    await explosionFx(target.group.position.clone().add(new THREE.Vector3(0, 1, 0)), true);
-    breakApartGroup(target.group, 8);
     sfx('explode');
+    await explosionFx(target.group.position.clone().add(new THREE.Vector3(0, 1, 0)), true);
+    destroyToWreck(target); // 포탑이 날아가고 차체는 그을린 잔해 — 화재→매연
   } else {
     const base = target.group.position.clone();
     await tween(240, (e, rawK) => {
@@ -4347,9 +4458,10 @@ function updateAntennas(dt) {
     // 로컬 성분: 전진 속도(fwd) → 뒤로 젖혀짐, 횡/선회 → 옆으로 낭창
     const fwd = vx * Math.sin(ry) + vz * Math.cos(ry);
     const side = vx * Math.cos(ry) - vz * Math.sin(ry);
-    const tx = THREE.MathUtils.clamp(fwd * 0.13, -0.55, 0.55);
-    const tz = THREE.MathUtils.clamp(side * 0.1 + wy * 0.28, -0.55, 0.55);
-    const K = 34, DAMP = 4.2;
+    const tx = THREE.MathUtils.clamp(fwd * 0.22, -0.85, 0.85);
+    const tz = THREE.MathUtils.clamp(side * 0.16 + wy * 0.5, -0.85, 0.85);
+    // 무른 스프링 + 약한 감쇠 — 멈춘 뒤에도 몇 번 크게 낭창거린다
+    const K = 20, DAMP = 2.1;
     u._antVel.x += (tx - u.antenna.rotation.x) * K * dt;
     u._antVel.z += (tz - u.antenna.rotation.z) * K * dt;
     const dmp = Math.exp(-DAMP * dt);
@@ -5468,6 +5580,7 @@ function animate(now) {
   windUniform.value = now * 0.001; // 식생 바람
   sparkleTex.offset.set((now * 0.000021) % 1, (now * -0.000013) % 1); // 윤슬 흐름
   updateAntennas(dt); // RC 안테나 대롱대롱
+  updateWreckFires(now); // 격파 잔해 화재/매연
   for (const it of items.values()) { // 아이템 부유/회전
     it.group.rotation.y = now * 0.0012;
     it.group.position.y += Math.sin(now * 0.0028 + it.group.position.x) * 0.0007;
