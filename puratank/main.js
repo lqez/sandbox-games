@@ -595,7 +595,8 @@ function makeWaterMaps() {
       b += (230 - b) * foam;
       cImg.data[i] = r; cImg.data[i + 1] = g; cImg.data[i + 2] = b; cImg.data[i + 3] = 255;
       // 알파(green 채널): 물가에서 0으로 부드럽게 — 지형과 만나는 면이 자연스럽다
-      const a = Math.min(0.93, smooth01(depth / 0.12) * 0.34 + smooth01(depth / 0.4) * 0.56 + foam * 0.3) * 255;
+      // 더 투명하게 — 얕은 곳은 바닥이 훤히 비치고 깊어도 은은히 비친다
+      const a = Math.min(0.85, smooth01(depth / 0.12) * 0.26 + smooth01(depth / 0.4) * 0.5 + foam * 0.3) * 255;
       aImg.data[i] = a; aImg.data[i + 1] = a; aImg.data[i + 2] = a; aImg.data[i + 3] = 255;
     }
   }
@@ -646,6 +647,28 @@ function makeRippleNormal() {
 }
 const waterMaps = makeWaterMaps();
 const rippleTex = makeRippleNormal();
+// 윤슬 텍스처: 드문드문 반짝이는 점 — 이미시브로 수면 위를 흐른다
+function makeSparkleTexture() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 256;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, 256, 256);
+  for (let i = 0; i < 130; i++) {
+    const x = Math.random() * 256, y = Math.random() * 256;
+    const r = 0.4 + Math.random() * 0.7;
+    const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+    g.addColorStop(0, `rgba(255,255,255,${0.35 + Math.random() * 0.45})`);
+    g.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(13, 13);
+  return tex;
+}
+const sparkleTex = makeSparkleTexture();
 const waterMesh = new THREE.Mesh(
   new THREE.PlaneGeometry(GRID * TILE, GRID * TILE),
   new THREE.MeshStandardMaterial({
@@ -653,11 +676,15 @@ const waterMesh = new THREE.Mesh(
     alphaMap: waterMaps.alphaTex,
     normalMap: rippleTex,
     normalScale: new THREE.Vector2(0.38, 0.38),
+    // 윤슬: 스크롤되는 반짝임 점 (리플 노멀과 다른 속도로 흘러 살아있는 수면)
+    emissive: 0xfff6dd,
+    emissiveMap: sparkleTex,
+    emissiveIntensity: 0.34,
     transparent: true,
     depthWrite: false,
-    roughness: 0.16,
+    roughness: 0.12,
     metalness: 0,
-    envMapIntensity: 0.5,
+    envMapIntensity: 0.55,
   })
 );
 waterMesh.rotation.x = -Math.PI / 2;
@@ -1282,6 +1309,30 @@ function placeProp(type, gx, gz) {
 // 드로콜 각 1회. 배치는 연속 지형 가중치를 따라 풀밭/흙 위에만.
 // ---------------------------------------------------------------------------
 const decorMeshes = []; // 풀/꽃/낙엽/잔가지 — 디버그 토글용
+
+// ── 바람: 식생 버텍스 셰이더에 살랑임 주입 (공유 시간 유니폼) ──
+const windUniform = { value: 0 };
+function addWind(mat, strength = 0.06, freq = 1.4) {
+  mat.onBeforeCompile = (shader) => {
+    shader.uniforms.uWindT = windUniform;
+    shader.vertexShader = ('uniform float uWindT;\n' + shader.vertexShader).replace(
+      '#include <begin_vertex>',
+      `#include <begin_vertex>
+      {
+        float wPhase = position.x * 0.9 + position.z * 0.7;
+        #ifdef USE_INSTANCING
+          wPhase += instanceMatrix[3][0] * 0.45 + instanceMatrix[3][2] * 0.45;
+        #endif
+        // 높이(uv.y)에 비례해 끝만 크게 흔들린다 + 느린 큰 물결 + 빠른 잔떨림
+        float wAmp = uv.y * uv.y;
+        float sway = sin(uWindT * ${freq.toFixed(2)} + wPhase) * ${strength.toFixed(3)}
+                   + sin(uWindT * ${(freq * 2.7).toFixed(2)} + wPhase * 1.7) * ${(strength * 0.35).toFixed(3)};
+        transformed.x += sway * wAmp;
+        transformed.z += sway * 0.6 * wAmp;
+      }`
+    );
+  };
+}
 {
   // 스태틱 그래스 텍스처: 가는 잎 다발 + 밑동 어둡고 끝 밝은 세로 그라데이션.
   // 흰색으로 그려 instanceColor로 톤을 입히면 밑동 그늘/끝 하이라이트가 자연스럽다.
@@ -1296,7 +1347,7 @@ const decorMeshes = []; // 풀/꽃/낙엽/잔가지 — 디버그 토글용
       const bx = 4 + rng() * 56;
       const lean = (rng() - 0.5) * 20;
       const hgt = 34 + rng() * 28;
-      const wdt = 1.2 + rng() * 1.8;
+      const wdt = 0.8 + rng() * 1.1; // 가는 줄기 — 하단이 벽처럼 두껍지 않게
       const tipY = 64 - hgt;
       // 밑동(그늘) → 끝 그라데이션 — 끝을 흰색까지 올리지 않아 하이라이트가 덜 뜬다
       const grad = ctx.createLinearGradient(0, 64, 0, tipY);
@@ -1310,6 +1361,16 @@ const decorMeshes = []; // 풀/꽃/낙엽/잔가지 — 디버그 토글용
       ctx.quadraticCurveTo(bx + wdt * 0.45 + lean * 0.4, 64 - hgt * 0.55, bx + wdt, 64);
       ctx.fill();
     }
+    // 하단 알파 페이드: 지면과 만나는 밑동을 부드럽게 지워
+    // "땅에서 뚝 잘린" 느낌 제거 (alphaTest에 걸려 밑이 가늘어진다)
+    ctx.filter = 'none';
+    ctx.globalCompositeOperation = 'destination-out';
+    const fade = ctx.createLinearGradient(0, 64, 0, 46);
+    fade.addColorStop(0, 'rgba(0,0,0,0.9)');
+    fade.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = fade;
+    ctx.fillRect(0, 46, 64, 18);
+    ctx.globalCompositeOperation = 'source-over';
   }
   const grassTex = new THREE.CanvasTexture(grassTexCanvas);
 
@@ -1351,12 +1412,10 @@ const decorMeshes = []; // 풀/꽃/낙엽/잔가지 — 디버그 토글용
     return out;
   };
 
-  const GRASS_N = 11000;
-  const grassMesh = new THREE.InstancedMesh(
-    grassGeo,
-    new THREE.MeshStandardMaterial({ map: grassTex, alphaTest: 0.42, side: THREE.DoubleSide, roughness: 1.0, metalness: 0, envMapIntensity: 0 }),
-    GRASS_N
-  );
+  const GRASS_N = 16000;
+  const grassWindMat = new THREE.MeshStandardMaterial({ map: grassTex, alphaTest: 0.42, side: THREE.DoubleSide, roughness: 1.0, metalness: 0, envMapIntensity: 0 });
+  addWind(grassWindMat, 0.055, 1.3);
+  const grassMesh = new THREE.InstancedMesh(grassGeo, grassWindMat, GRASS_N);
   grassMesh.receiveShadow = true;
   // 풀도 그림자를 드리운다 — 컷아웃 실루엣 그대로 깊이 패스에 반영
   grassMesh.castShadow = true;
@@ -1385,7 +1444,7 @@ const decorMeshes = []; // 풀/꽃/낙엽/잔가지 — 디버그 토글용
     // 키 변주: 대부분 짧고, 12%는 크게 웃자란 다발
     const tall = rng() < 0.12;
     const sy = tall ? 1.5 + rng() * 0.8 : 0.55 + rng() * 0.8;
-    const sxz = 0.7 + rng() * 0.7;
+    const sxz = 0.5 + rng() * 0.5; // 밑동 좁게 — 대신 더 빽빽하게 심는다
     gs.set(sxz, sy, sxz);
     gv.set(wx, h - 0.03, wz);
     gm.compose(gv, gq, gs);
@@ -1440,7 +1499,7 @@ const decorMeshes = []; // 풀/꽃/낙엽/잔가지 — 디버그 토글용
   const FLOWER_N = 880;
   const flowerMesh = new THREE.InstancedMesh(
     flowerGeo,
-    new THREE.MeshStandardMaterial({ map: flowerTex, alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.9 }),
+    (() => { const m = new THREE.MeshStandardMaterial({ map: flowerTex, alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.9 }); addWind(m, 0.05, 1.6); return m; })(),
     FLOWER_N
   );
   flowerMesh.castShadow = true;
@@ -1677,7 +1736,7 @@ const decorMeshes = []; // 풀/꽃/낙엽/잔가지 — 디버그 토글용
   const REED_N = 700;
   const reedMesh = new THREE.InstancedMesh(
     reedGeo,
-    new THREE.MeshStandardMaterial({ map: reedTex, alphaTest: 0.4, side: THREE.DoubleSide, roughness: 1.0, envMapIntensity: 0 }),
+    (() => { const m = new THREE.MeshStandardMaterial({ map: reedTex, alphaTest: 0.4, side: THREE.DoubleSide, roughness: 1.0, envMapIntensity: 0 }); addWind(m, 0.07, 1.1); return m; })(),
     REED_N
   );
   reedMesh.receiveShadow = true;
@@ -2750,7 +2809,7 @@ function damageProp(prop, dmg, impactPos = null) {
   }
 }
 
-async function explosionFx(pos, big = false) {
+async function explosionFx(pos, big = false, debrisCols = null) {
   sfx(big ? 'explode' : 'hit');
   const flash = new THREE.Mesh(new THREE.SphereGeometry(big ? 0.9 : 0.55, 12, 12), flashMat.clone());
   flash.position.copy(pos);
@@ -2762,7 +2821,7 @@ async function explosionFx(pos, big = false) {
   ring.rotation.x = -Math.PI / 2;
   ring.position.set(pos.x, pos.y + 0.1, pos.z);
   scene.add(ring);
-  spawnDebris(pos, [0xffb347, 0x8b95a8, 0x6f5a3e], big ? 16 : 9, big ? 7 : 4.5);
+  spawnDebris(pos, debrisCols ?? [0xffb347, 0x8b95a8, 0x6f5a3e], big ? 16 : 9, big ? 7 : 4.5);
   await tween(big ? 420 : 300, (e) => {
     flash.scale.setScalar(1 + e * (big ? 2.6 : 1.6));
     flash.material.opacity = 1 - e;
@@ -2866,10 +2925,78 @@ async function applyUnitDamage(target, rawDmg, fromPos = null) {
 }
 
 // 착탄 처리: 크레이터 + 프랍 피해 + 스플래시
+// 물기둥 스플래시: 강물 착탄 — 솟는 물기둥 + 물방울 + 퍼지는 파문 링
+async function waterSplashFx(pos) {
+  sfx('splash');
+  const surf = new THREE.Vector3(pos.x, WATER_Y + 0.02, pos.z);
+  // 물기둥 (세로로 늘어난 반투명 구)
+  const column = new THREE.Mesh(
+    new THREE.SphereGeometry(0.32, 10, 12),
+    new THREE.MeshBasicMaterial({ color: 0xdcf2f2, transparent: true, opacity: 0.85, depthWrite: false })
+  );
+  column.position.copy(surf);
+  column.scale.set(0.7, 0.2, 0.7);
+  noAO(column);
+  scene.add(column);
+  // 물방울 비산
+  const drops = [];
+  for (let i = 0; i < 16; i++) {
+    const d = new THREE.Mesh(new THREE.SphereGeometry(0.05 + Math.random() * 0.05, 6, 6),
+      new THREE.MeshBasicMaterial({ color: 0xcfeaea, transparent: true, opacity: 0.9, depthWrite: false }));
+    d.position.copy(surf);
+    scene.add(d);
+    const a = Math.random() * Math.PI * 2;
+    drops.push({ mesh: d, vel: new THREE.Vector3(Math.cos(a) * (1 + Math.random() * 2.4), 3.4 + Math.random() * 3, Math.sin(a) * (1 + Math.random() * 2.4)) });
+  }
+  // 파문 링 2겹
+  const rings = [];
+  for (let i = 0; i < 2; i++) {
+    const r = new THREE.Mesh(new THREE.RingGeometry(0.24, 0.4, 28),
+      new THREE.MeshBasicMaterial({ color: 0xe8f6f4, transparent: true, opacity: 0.75, side: THREE.DoubleSide, depthWrite: false }));
+    r.rotation.x = -Math.PI / 2;
+    r.position.set(surf.x, WATER_Y + 0.03, surf.z);
+    noAO(r);
+    scene.add(r);
+    rings.push(r);
+  }
+  await tween(620, (e, k) => {
+    column.scale.set(0.7 * (1 - k * 0.4), 0.2 + Math.sin(k * Math.PI) * 2.6, 0.7 * (1 - k * 0.4));
+    column.material.opacity = 0.85 * (1 - k * k);
+    for (const d of drops) {
+      d.vel.y -= 13 * 0.016;
+      d.mesh.position.addScaledVector(d.vel, 0.016);
+      d.mesh.material.opacity = 0.9 * (1 - k);
+      if (d.mesh.position.y < WATER_Y) d.mesh.position.y = WATER_Y;
+    }
+    rings.forEach((r, i) => {
+      r.scale.setScalar(1 + k * (5 + i * 3.5));
+      r.material.opacity = 0.75 * (1 - k) * (i ? 0.6 : 1);
+    });
+  }, linear);
+  scene.remove(column);
+  drops.forEach((d) => scene.remove(d.mesh));
+  rings.forEach((r) => scene.remove(r));
+}
+
 async function resolveImpact(impact, attacker, directUnit = null) {
-  await explosionFx(impact.clone().add(new THREE.Vector3(0, 0.4, 0)), !!directUnit);
   const c = worldToCell(impact);
-  crater(c.gx, c.gz);
+  // 착탄 지면 종류에 따라 이펙트/파편이 달라진다
+  const groundH = sampleHeight(impact.x, impact.z);
+  const inWater = terrainAt(c.gx, c.gz) === T.WATER && groundH < WATER_Y - 0.02;
+  if (inWater) {
+    // 강물: 크레이터 없이 물기둥 + 물방울
+    await waterSplashFx(impact);
+  } else {
+    const w = surfaceWeights(impact.x, impact.z, groundH);
+    const grassy = (1 - w.dirt) * (1 - w.rock) * (1 - w.sand) > 0.45;
+    const rocky = w.rock > 0.4;
+    // 지면별 파편 색: 풀밭=풀잎+흙, 바위=돌조각, 흙/모래=흙덩이
+    const cols = grassy ? [0x5c8a40, 0x6f5a3e, 0x86823c]
+      : rocky ? [0x9a9285, 0x736c62, 0xb3a385]
+      : [0x8a6f4a, 0x6f5a3e, 0xa8875a];
+    await explosionFx(impact.clone().add(new THREE.Vector3(0, 0.4, 0)), !!directUnit, cols);
+    crater(c.gx, c.gz);
+  }
   // 다리 피해: 착탄 셀이 다리면 직격, 옆 칸이면 여파
   if (bridge.alive) {
     if (bridge.cells.has(cellKey(c.gx, c.gz))) damageBridge(60, impact);
@@ -4334,6 +4461,8 @@ function animate(now) {
     haltRing.material.opacity = 0.5 + Math.sin(now * 0.004) * 0.2;
   }
   rippleTex.offset.set((now * 0.0000121) % 1, (now * -0.0000324) % 1);
+  windUniform.value = now * 0.001; // 식생 바람
+  sparkleTex.offset.set((now * 0.000021) % 1, (now * -0.000013) % 1); // 윤슬 흐름
   controls.update();
   renderer.info.reset();
   composer.render();
