@@ -323,8 +323,8 @@ const tNoise = makeNoise(8);
 const dNoise = makeNoise(2.4);
 const dNoise2 = makeNoise(1.15);
 const dNoise3 = makeNoise(0.6);
-const bankNoise = makeNoise(1.8);
-const bankNoise2 = makeNoise(0.7);
+const bankNoise = makeNoise(5.0);   // 완만한 물가 사행 (저주파, 급경사 방지)
+const bankNoise2 = makeNoise(1.6);  // 약간의 잔결
 
 // 하천 경로: 스폰 지점과 겹치지 않을 때까지 리샘플링
 let riverCx, riverAmp, riverPhase;
@@ -382,19 +382,24 @@ function fieldHeight(wx, wz) {
     const d = Math.hypot(wx - s.x, wz - s.z);
     if (d < 5) h = THREE.MathUtils.lerp(s.h, h, smooth01((d - 1.5) / 3.5));
   }
-  // 하천 카빙 — 강 테두리(뭍과 만나는 면)를 노이즈로 크게 흔들어 불규칙하게.
-  // 강둑 거리에 저주파+고주파 노이즈를 더해 매끈한 곡선 대신 들쭉날쭉한 물가.
+  // 하천 카빙 — 물가를 완만한 저주파 노이즈로만 사행시키고(급경사 방지),
+  // 강둑은 넓은 전이로 완만하게 올라간다. 얕은 선반(beach)을 거쳐 뭍으로.
   const fx = (wx + HALF) / TILE, fz = (wz + HALF) / TILE;
   const drRaw = distToRiver(wx, wz);
-  const bankWobble = (bankNoise(fx, fz) - 0.5) * 2.6 + (bankNoise2(fx, fz) - 0.5) * 1.5;
+  const bankWobble = (bankNoise(fx, fz) - 0.5) * 2.0 + (bankNoise2(fx, fz) - 0.5) * 0.5;
   const dr = drRaw + bankWobble;
-  if (dr < 5.5) {
+  if (dr < 9) {
     const gzf = wz / TILE + (GRID - 1) / 2;
     const ford = smooth01((Math.sin(gzf * 0.275 + riverPhase * 2.3) - 0.38) / 0.3);
-    // 강바닥도 자잘하게 울퉁불퉁 (매끈한 트로프 방지)
-    const bedNoise = (dNoise2(fx, fz) - 0.5) * 0.18;
-    const bed = -0.52 + ford * 0.27 + bedNoise;
-    h = THREE.MathUtils.lerp(bed, h, smooth01((dr - 1.1) / 3.6));
+    const bedNoise = (dNoise2(fx, fz) - 0.5) * 0.15;
+    const bed = -0.5 + ford * 0.26 + bedNoise;
+    // 얕은 물가 선반: 수면 살짝 아래에서 완만하게 시작 (급격히 깎이지 않게)
+    const shelf = -0.16 + bedNoise * 0.4;
+    // 2단 전이: 강바닥 → 얕은 선반(짧고 완만) → 뭍(넓고 완만한 강둑)
+    const tShelf = smooth01((dr - 0.3) / 2.4);       // 바닥→선반
+    const tLand = smooth01((dr - 2.0) / 6.4);         // 선반→뭍 (넓게)
+    const nearShore = THREE.MathUtils.lerp(bed, shelf, tShelf);
+    h = THREE.MathUtils.lerp(nearShore, h, tLand);
   }
   return h;
 }
@@ -3050,6 +3055,23 @@ function breakApartGroup(group, power = 8) {
 }
 
 // 크레이터: 하이트필드를 부드럽게 함몰시켜 지형 파괴
+// 하이트필드 정점 노멀을 경사(중앙차분)로 국소 재계산 — 크레이터 후 빠르게.
+function recomputeTerrainNormals(ix0, ix1, iz0, iz1) {
+  const pos = terrainGeo.attributes.position;
+  const nor = terrainGeo.attributes.normal;
+  const cx0 = Math.max(0, ix0), cx1 = Math.min(VN, ix1);
+  const cz0 = Math.max(0, iz0), cz1 = Math.min(VN, iz1);
+  const gY = (ix, iz) => pos.getY(vIndex(THREE.MathUtils.clamp(ix, 0, VN), THREE.MathUtils.clamp(iz, 0, VN)));
+  const s2 = 2 * VSTEP;
+  const n = new THREE.Vector3();
+  for (let iz = cz0; iz <= cz1; iz++) {
+    for (let ix = cx0; ix <= cx1; ix++) {
+      n.set(gY(ix - 1, iz) - gY(ix + 1, iz), s2, gY(ix, iz - 1) - gY(ix, iz + 1)).normalize();
+      nor.setXYZ(vIndex(ix, iz), n.x, n.y, n.z);
+    }
+  }
+  nor.needsUpdate = true;
+}
 function crater(gx, gz) {
   if (!inBounds(gx, gz)) return;
   if (terrainAt(gx, gz) === T.WATER) return;
@@ -3081,7 +3103,8 @@ function crater(gx, gz) {
   }
   pos.needsUpdate = true;
   colAttr.needsUpdate = true;
-  terrainGeo.computeVertexNormals();
+  // 크레이터 영역 정점 노멀만 하이트필드 경사로 재계산 (전체 computeVertexNormals 회피)
+  recomputeTerrainNormals(ix0 - 1, ix1 + 1, iz0 - 1, iz1 + 1);
   terrain[gx][gz] = T.DIRT;
   // 주변 셀 높이 캐시 갱신 + 프랍 높이 보정 (크레이터 R 2.1 = 약 2칸)
   for (let dx = -2; dx <= 2; dx++) {
