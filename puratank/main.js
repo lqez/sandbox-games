@@ -2354,7 +2354,28 @@ function spawnUnit(isPlayer, gx, gz, facing) {
   unit.group.position.set(p.x, standHeight(gx, gz), p.z);
   unit.group.rotation.order = 'YXZ';
   unit.group.rotation.y = facing;
-  unit.group.rotation.x = groundPitch(unit);
+  alignToGround(unit);
+  // RC 안테나: 아래는 살짝 굵고 위로 가늘어지는 채찍 안테나 —
+  // 주행/선회 시 감쇠 스프링으로 대롱대롱 흔들린다
+  {
+    const ant = new THREE.Group();
+    const rod = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.008, 0.03, 1.35, 5),
+      new THREE.MeshStandardMaterial({ color: 0x22262e, roughness: 0.7 })
+    );
+    rod.geometry.translate(0, 0.675, 0); // 피벗을 밑동으로
+    const tip = new THREE.Mesh(
+      new THREE.SphereGeometry(0.028, 6, 6),
+      new THREE.MeshStandardMaterial({ color: 0xd04434, roughness: 0.6 })
+    );
+    tip.position.y = 1.35;
+    ant.add(rod, tip);
+    ant.position.set(-0.5, 1.05, -0.62); // 차체 뒤 좌측
+    unit.group.add(ant);
+    unit.antenna = ant;
+    unit._antVel = { x: 0, z: 0 };
+    unit._antPrev = { x: p.x, z: p.z, ry: facing };
+  }
   unit.hpBar = makeHpBar();
   unit.group.add(unit.hpBar.sprite);
   unit.hitbox.userData.unit = unit;
@@ -2570,9 +2591,14 @@ function computeShot(attacker, target, fromCell = null, facingOverride = null, l
   if (distCells < 1.2) return { ok: false, reason: '너무 가까움' };
   if (lob && distCells < 4) return { ok: false, reason: '곡사 최소 사거리(4칸) 미만' };
 
-  // 포신 부앙각 — 한계로 클램프해서 실제 탄도로 추적 (곡사는 포물선이라 무관)
-  const pMin = attacker.gun?.pitchMin ?? PITCH_MIN;
-  const pMax = attacker.gun?.pitchMax ?? PITCH_MAX;
+  // 포신 부앙각 — 한계로 클램프해서 실제 탄도로 추적 (곡사는 포물선이라 무관).
+  // 차체 기울기(조준 방향 성분)가 부앙각 창을 통째로 옮긴다:
+  // 오르막을 향하면 창이 위로, 내리막을 향하면 아래로 — 지형 자세가 사격에 영향.
+  const tilt = fromCell
+    ? hullTiltAtCellDeg(fromCell, aim.x, aim.z)
+    : hullTiltTowardDeg(attacker, aim.x, aim.z);
+  const pMin = (attacker.gun?.pitchMin ?? PITCH_MIN) + tilt;
+  const pMax = (attacker.gun?.pitchMax ?? PITCH_MAX) + tilt;
   const pitch = THREE.MathUtils.clamp((Math.atan2(aim.y - from.y, horiz) * 180) / Math.PI, pMin, pMax);
 
   // 고정 포신: 사각(arc) 검사. 스폰슨 부포(Mark IV)는 좌/우 측면(±90°) 중심,
@@ -2694,6 +2720,44 @@ function groundPitch(unit) {
   const hB = driveHeight(p.x - fx * 0.8, p.z - fz * 0.8);
   return THREE.MathUtils.clamp(Math.atan2(hB - hF, 1.6), -0.45, 0.45);
 }
+// 차체를 양쪽 궤도 접지에 맞춰 지형에 정렬 — 전후 피치 + 좌우 롤.
+// 4점(전좌/전우/후좌/후우) 궤도 접지 높이로 계산한다.
+function alignToGround(unit) {
+  const ry = unit.group.rotation.y;
+  const fx = Math.sin(ry), fz = Math.cos(ry);   // 전방
+  const rx = Math.cos(ry), rz = -Math.sin(ry);  // 우측
+  const p = unit.group.position;
+  const F = 0.8, S = 0.55; // 전후 반길이 / 궤도 좌우 오프셋
+  const hFL = driveHeight(p.x + fx * F - rx * S, p.z + fz * F - rz * S);
+  const hFR = driveHeight(p.x + fx * F + rx * S, p.z + fz * F + rz * S);
+  const hBL = driveHeight(p.x - fx * F - rx * S, p.z - fz * F - rz * S);
+  const hBR = driveHeight(p.x - fx * F + rx * S, p.z - fz * F + rz * S);
+  const pitch = THREE.MathUtils.clamp(Math.atan2((hBL + hBR) / 2 - (hFL + hFR) / 2, 2 * F), -0.45, 0.45);
+  const roll = THREE.MathUtils.clamp(Math.atan2((hFL + hBL) / 2 - (hFR + hBR) / 2, 2 * S), -0.4, 0.4);
+  unit.group.rotation.x = pitch;
+  unit.group.rotation.z = roll;
+}
+// 조준 방향의 차체 기울기(도) — 포신 부앙각 한계가 차체 자세에 실려 움직인다.
+// 오르막을 등지면 포를 더 들 수 있고, 내리막을 향하면 더 숙일 수 있다.
+function hullTiltTowardDeg(unit, aimX, aimZ) {
+  const p = unit.group.position;
+  return hullTiltXZ(p.x, p.z, aimX, aimZ);
+}
+// 가상 셀 기준 (이동 후 사격 판정용)
+function hullTiltAtCellDeg(cell, aimX, aimZ) {
+  const p = cellToWorld(cell.gx, cell.gz);
+  return hullTiltXZ(p.x, p.z, aimX, aimZ);
+}
+function hullTiltXZ(px, pz, aimX, aimZ) {
+  const dx = aimX - px, dz = aimZ - pz;
+  const d = Math.hypot(dx, dz);
+  if (d < 0.001) return 0;
+  const nx = dx / d, nz = dz / d;
+  const hF = driveHeight(px + nx * 0.8, pz + nz * 0.8);
+  const hB = driveHeight(px - nx * 0.8, pz - nz * 0.8);
+  return THREE.MathUtils.radToDeg(
+    THREE.MathUtils.clamp(Math.atan2(hF - hB, 1.6), -0.45, 0.45));
+}
 
 async function moveUnit(unit, path, finalFacing = null, onStep = null) {
   // 구간별 전/후진: 경로 셀에 기어(rev)가 담겨 있으면 그대로 따른다 —
@@ -2707,6 +2771,8 @@ async function moveUnit(unit, path, finalFacing = null, onStep = null) {
     const turnNeed = Math.abs(normAngle(headTo - unit.group.rotation.y));
     fallbackRev = path.length <= 5 && turnNeed > Math.PI * 0.6;
   }
+  if (path.length) engineOn(); // 주행 중 디젤 럼블
+  try {
   for (const cell of path) {
     if (!unit.alive) return; // 이동 중 경계 사격에 격파되면 그 자리에서 정지
     const reverse = hasGear ? cell.rev : fallbackRev;
@@ -2721,7 +2787,7 @@ async function moveUnit(unit, path, finalFacing = null, onStep = null) {
       const x = THREE.MathUtils.lerp(from.x, to.x, e);
       const z = THREE.MathUtils.lerp(from.z, to.z, e);
       unit.group.position.set(x, driveHeight(x, z) + Math.sin(e * Math.PI) * 0.08, z);
-      unit.group.rotation.x = groundPitch(unit);
+      alignToGround(unit);
       // 궤도 자국 샘플링 (0.5유닛 간격)
       const tl = unit._trailLast;
       if (Math.hypot(x - tl.x, z - tl.z) > 0.5) {
@@ -2737,8 +2803,9 @@ async function moveUnit(unit, path, finalFacing = null, onStep = null) {
     unit.group.position.y = driveHeight(to.x, to.z);
     if (onStep) onStep(unit);
   }
+  } finally { if (path.length) engineOff(); }
   // 이동이 끝나면 차체는 마지막 진행 방향 그대로 — 추가 제자리 선회 없음
-  unit.group.rotation.x = groundPitch(unit);
+  alignToGround(unit);
   if (hullDownCells.has(cellKey(unit.gx, unit.gz))) {
     popText(unit.group.position, '🛡 헐다운', '#ffd76e');
   }
@@ -3126,7 +3193,7 @@ function crater(gx, gz) {
       const y = sampleHeight(u.group.position.x, u.group.position.z);
       tween(220, (e) => {
         u.group.position.y = THREE.MathUtils.lerp(u.group.position.y, y, e);
-        u.group.rotation.x = groundPitch(u);
+        alignToGround(u);
       });
     }
   }
@@ -3190,27 +3257,103 @@ function damageProp(prop, dmg, impactPos = null) {
   }
 }
 
+// 연기/화염 퍼프용 소프트 원형 스프라이트 텍스처
+function makePuffTexture() {
+  const c = document.createElement('canvas'); c.width = c.height = 64;
+  const ctx = c.getContext('2d');
+  const g = ctx.createRadialGradient(32, 32, 4, 32, 32, 30);
+  g.addColorStop(0, 'rgba(255,255,255,0.9)');
+  g.addColorStop(0.55, 'rgba(255,255,255,0.45)');
+  g.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.arc(32, 32, 30, 0, Math.PI * 2); ctx.fill();
+  return new THREE.CanvasTexture(c);
+}
+const puffTex = makePuffTexture();
+function makePuff(color, blending = THREE.NormalBlending) {
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: puffTex, color, transparent: true, depthWrite: false, blending,
+  }));
+  noAO(sp);
+  return sp;
+}
+// 볼류메트릭 폭발: 겹친 화염 퍼프(가산) → 불투명 연기 기둥이 피어오르고,
+// 흙/풀 분수가 위로 솟구쳐 흩어진다.
 async function explosionFx(pos, big = false, debrisCols = null) {
   sfx(big ? 'explode' : 'hit');
-  const flash = new THREE.Mesh(new THREE.SphereGeometry(big ? 0.9 : 0.55, 12, 12), flashMat.clone());
+  const N_FIRE = big ? 9 : 6, N_SMOKE = big ? 8 : 5;
+  const parts = [];
+  // 화염 퍼프: 중심에서 밖으로 팽창하며 노랑→주황→검붉게 어두워진다
+  for (let i = 0; i < N_FIRE; i++) {
+    const sp = makePuff(0xffdd8a, THREE.AdditiveBlending);
+    const a = Math.random() * Math.PI * 2, r = Math.random() * 0.3;
+    sp.position.set(pos.x + Math.cos(a) * r, pos.y + Math.random() * 0.3, pos.z + Math.sin(a) * r);
+    const s0 = (big ? 0.9 : 0.6) * (0.7 + Math.random() * 0.6);
+    sp.scale.setScalar(s0);
+    scene.add(sp);
+    parts.push({ sp, kind: 'fire', s0, vy: 0.9 + Math.random() * 1.4, vx: Math.cos(a) * (0.5 + Math.random()), vz: Math.sin(a) * (0.5 + Math.random()), delay: Math.random() * 0.08 });
+  }
+  // 연기 퍼프: 위로 느리게 피어오르며 커지고 흩어진다
+  for (let i = 0; i < N_SMOKE; i++) {
+    const grey = 0.16 + Math.random() * 0.14;
+    const sp = makePuff(new THREE.Color(grey, grey * 0.96, grey * 0.9));
+    const a = Math.random() * Math.PI * 2, r = Math.random() * 0.35;
+    sp.position.set(pos.x + Math.cos(a) * r, pos.y + 0.2, pos.z + Math.sin(a) * r);
+    const s0 = (big ? 0.8 : 0.55) * (0.6 + Math.random() * 0.5);
+    sp.scale.setScalar(s0);
+    sp.material.opacity = 0.85;
+    scene.add(sp);
+    parts.push({ sp, kind: 'smoke', s0, vy: 1.1 + Math.random() * 1.1, vx: (Math.random() - 0.5) * 0.7, vz: (Math.random() - 0.5) * 0.7, delay: 0.12 + Math.random() * 0.25 });
+  }
+  // 섬광 + 지면 링
+  const flash = new THREE.Mesh(new THREE.SphereGeometry(big ? 0.8 : 0.5, 10, 10), flashMat.clone());
   flash.position.copy(pos);
   scene.add(flash);
   const ring = new THREE.Mesh(
     new THREE.RingGeometry(0.3, 0.55, 24),
-    new THREE.MeshBasicMaterial({ color: 0xfff0b0, transparent: true, side: THREE.DoubleSide })
+    new THREE.MeshBasicMaterial({ color: 0xfff0b0, transparent: true, side: THREE.DoubleSide, depthWrite: false })
   );
   ring.rotation.x = -Math.PI / 2;
   ring.position.set(pos.x, pos.y + 0.1, pos.z);
   scene.add(ring);
-  spawnDebris(pos, debrisCols ?? [0xffb347, 0x8b95a8, 0x6f5a3e], big ? 16 : 9, big ? 7 : 4.5);
-  await tween(big ? 420 : 300, (e) => {
-    flash.scale.setScalar(1 + e * (big ? 2.6 : 1.6));
-    flash.material.opacity = 1 - e;
-    ring.scale.setScalar(1 + e * 4);
-    ring.material.opacity = 1 - e;
-  }, easeOut);
-  scene.remove(flash);
-  scene.remove(ring);
+  // 흙/풀 분수: 위로 솟구쳐 포물선으로 쏟아진다 (표면색)
+  spawnDebris(pos, debrisCols ?? [0xffb347, 0x8b95a8, 0x6f5a3e], big ? 26 : 15, big ? 8 : 5.5);
+  const fireCol = new THREE.Color();
+  const dur = big ? 1500 : 1050;
+  const fxDone = tween(dur, (e, k) => {
+    const dt = 0.016;
+    flash.scale.setScalar(1 + Math.min(k * 5, 1) * (big ? 2.4 : 1.5));
+    flash.material.opacity = Math.max(0, 1 - k * 4);
+    ring.scale.setScalar(1 + Math.min(k * 3, 1) * 4.5);
+    ring.material.opacity = Math.max(0, 0.9 - k * 2.4);
+    const tSec = k * dur / 1000;
+    for (const p of parts) {
+      if (tSec < p.delay) continue;
+      const life = (tSec - p.delay) / (dur / 1000 - p.delay);
+      p.sp.position.x += p.vx * dt;
+      p.sp.position.z += p.vz * dt;
+      p.sp.position.y += p.vy * dt;
+      p.vx *= 0.97; p.vz *= 0.97;
+      if (p.kind === 'fire') {
+        p.vy *= 0.95;
+        p.sp.scale.setScalar(p.s0 * (1 + life * 2.2));
+        // 노랑 → 주황 → 검붉게
+        fireCol.setHSL(0.09 - life * 0.06, 1, Math.max(0.12, 0.62 - life * 0.55));
+        p.sp.material.color.copy(fireCol);
+        p.sp.material.opacity = Math.max(0, 0.95 * (1 - life * 1.35));
+      } else {
+        p.vy *= 0.988;
+        p.sp.scale.setScalar(p.s0 * (1 + life * 3.4));
+        p.sp.material.opacity = Math.max(0, 0.8 * (1 - life) * (life < 0.12 ? life / 0.12 : 1));
+      }
+    }
+  }, linear).then(() => {
+    scene.remove(flash); scene.remove(ring);
+    for (const p of parts) { scene.remove(p.sp); p.sp.material.dispose(); }
+  });
+  // 게임 흐름은 초반 임팩트만 기다린다 (연기 여운은 백그라운드로)
+  await tween(big ? 430 : 300, () => {}, linear);
+  void fxDone;
 }
 
 // 떠오르는 텍스트 (명중/빗나감/데미지)
@@ -3826,42 +3969,138 @@ function showTargets(targets) {
 // 효과음
 // ---------------------------------------------------------------------------
 let actx = null;
+// RC 안테나 흔들림: 이동/선회 가속을 감쇠 스프링으로 받아 대롱대롱.
+// 멈추면 몇 번 진동하다 곧게 선다.
+function updateAntennas(dt) {
+  if (dt <= 0) return;
+  for (const u of units) {
+    if (!u.antenna) continue;
+    const p = u.group.position;
+    const pv = u._antPrev;
+    const vx = (p.x - pv.x) / dt, vz = (p.z - pv.z) / dt;
+    const wy = normAngle(u.group.rotation.y - pv.ry) / dt;
+    pv.x = p.x; pv.z = p.z; pv.ry = u.group.rotation.y;
+    if (!u.alive) continue;
+    const ry = u.group.rotation.y;
+    // 로컬 성분: 전진 속도(fwd) → 뒤로 젖혀짐, 횡/선회 → 옆으로 낭창
+    const fwd = vx * Math.sin(ry) + vz * Math.cos(ry);
+    const side = vx * Math.cos(ry) - vz * Math.sin(ry);
+    const tx = THREE.MathUtils.clamp(fwd * 0.13, -0.55, 0.55);
+    const tz = THREE.MathUtils.clamp(side * 0.1 + wy * 0.28, -0.55, 0.55);
+    const K = 34, DAMP = 4.2;
+    u._antVel.x += (tx - u.antenna.rotation.x) * K * dt;
+    u._antVel.z += (tz - u.antenna.rotation.z) * K * dt;
+    const dmp = Math.exp(-DAMP * dt);
+    u._antVel.x *= dmp; u._antVel.z *= dmp;
+    u.antenna.rotation.x += u._antVel.x * dt;
+    u.antenna.rotation.z += u._antVel.z * dt;
+  }
+}
+
+// ── 실전차 느낌의 절차 합성 사운드 ──
+// 발사: 초고역 크랙 + 노이즈 몸통 + 서브 붐(60→28Hz).
+// 폭발: 딥 서브 드롭 + 길게 구르는 저역 럼블 + 잔해 크래클.
+// 엔진: 주행 중 저역 노이즈 + 부밍 험 루프 (참조 카운트).
+function noiseBuffer(dur) {
+  const buf = actx.createBuffer(1, Math.ceil(actx.sampleRate * dur), actx.sampleRate);
+  const d = buf.getChannelData(0);
+  let last = 0;
+  for (let i = 0; i < d.length; i++) {
+    // 핑크빛 노이즈 (1차 저역 누적) — 화이트보다 묵직하다
+    const w = Math.random() * 2 - 1;
+    last = last * 0.82 + w * 0.18;
+    d[i] = last * 3.2;
+  }
+  return buf;
+}
+function playNoise({ dur, filterType = 'lowpass', freq0 = 800, freq1 = null, q = 0.8, gain0 = 0.2, atk = 0.005 }) {
+  const t = actx.currentTime;
+  const src = actx.createBufferSource();
+  src.buffer = noiseBuffer(dur);
+  const f = actx.createBiquadFilter();
+  f.type = filterType; f.Q.value = q;
+  f.frequency.setValueAtTime(freq0, t);
+  if (freq1 !== null) f.frequency.exponentialRampToValueAtTime(Math.max(20, freq1), t + dur);
+  const g = actx.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(gain0, t + atk);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  src.connect(f).connect(g).connect(actx.destination);
+  src.start(t); src.stop(t + dur + 0.05);
+}
+function playSub({ f0, f1, dur, gain0 = 0.5, type = 'sine' }) {
+  const t = actx.currentTime;
+  const o = actx.createOscillator();
+  o.type = type;
+  o.frequency.setValueAtTime(f0, t);
+  o.frequency.exponentialRampToValueAtTime(Math.max(18, f1), t + dur);
+  const g = actx.createGain();
+  g.gain.setValueAtTime(gain0, t);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  o.connect(g).connect(actx.destination);
+  o.start(t); o.stop(t + dur + 0.05);
+}
+let engineNodes = null;
+let engineUsers = 0;
+function engineOn() {
+  try {
+    actx ??= new (window.AudioContext || window.webkitAudioContext)();
+    if (actx.state === 'suspended') actx.resume();
+    engineUsers++;
+    if (engineNodes) return;
+    // 디젤 럼블: 저역 노이즈 + 60Hz 부밍(느린 LFO로 부하 변동)
+    const src = actx.createBufferSource();
+    src.buffer = noiseBuffer(2.0); src.loop = true;
+    const f = actx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 160; f.Q.value = 0.6;
+    const hum = actx.createOscillator(); hum.type = 'sawtooth'; hum.frequency.value = 52;
+    const humF = actx.createBiquadFilter(); humF.type = 'lowpass'; humF.frequency.value = 110;
+    const lfo = actx.createOscillator(); lfo.frequency.value = 6.5;
+    const lfoG = actx.createGain(); lfoG.gain.value = 5;
+    lfo.connect(lfoG).connect(hum.frequency);
+    const g = actx.createGain();
+    g.gain.setValueAtTime(0.0001, actx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.16, actx.currentTime + 0.25);
+    src.connect(f).connect(g);
+    hum.connect(humF).connect(g);
+    g.connect(actx.destination);
+    src.start(); hum.start(); lfo.start();
+    engineNodes = { src, hum, lfo, g };
+  } catch { /* ignore */ }
+}
+function engineOff() {
+  engineUsers = Math.max(0, engineUsers - 1);
+  if (engineUsers > 0 || !engineNodes) return;
+  try {
+    const n = engineNodes; engineNodes = null;
+    const t = actx.currentTime;
+    n.g.gain.cancelScheduledValues(t);
+    n.g.gain.setValueAtTime(n.g.gain.value, t);
+    n.g.gain.exponentialRampToValueAtTime(0.0001, t + 0.5);
+    setTimeout(() => { try { n.src.stop(); n.hum.stop(); n.lfo.stop(); } catch {} }, 600);
+  } catch { /* ignore */ }
+}
 function sfx(kind) {
   try {
     actx ??= new (window.AudioContext || window.webkitAudioContext)();
     if (actx.state === 'suspended') actx.resume();
-    const t = actx.currentTime;
-    const gain = actx.createGain();
-    gain.connect(actx.destination);
     if (kind === 'fire') {
-      const osc = actx.createOscillator();
-      osc.type = 'square';
-      osc.frequency.setValueAtTime(240, t);
-      osc.frequency.exponentialRampToValueAtTime(55, t + 0.16);
-      gain.gain.setValueAtTime(0.14, t);
-      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
-      osc.connect(gain); osc.start(t); osc.stop(t + 0.2);
-    } else if (kind === 'step' || kind === 'splash') {
-      const osc = actx.createOscillator();
-      osc.type = kind === 'splash' ? 'sine' : 'triangle';
-      osc.frequency.setValueAtTime(kind === 'splash' ? 130 : 190 + Math.random() * 40, t);
-      gain.gain.setValueAtTime(0.05, t);
-      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.07);
-      osc.connect(gain); osc.start(t); osc.stop(t + 0.08);
-    } else {
-      const dur = kind === 'explode' ? 0.5 : 0.16;
-      const buf = actx.createBuffer(1, actx.sampleRate * dur, actx.sampleRate);
-      const data = buf.getChannelData(0);
-      for (let i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / data.length);
-      const src = actx.createBufferSource();
-      src.buffer = buf;
-      const filter = actx.createBiquadFilter();
-      filter.type = 'lowpass';
-      filter.frequency.value = kind === 'explode' ? 900 : 2200;
-      gain.gain.setValueAtTime(kind === 'explode' ? 0.22 : 0.12, t);
-      gain.gain.exponentialRampToValueAtTime(0.001, t + dur);
-      src.connect(filter).connect(gain);
-      src.start(t);
+      // 주포 발사: 크랙(고역) + 총구 폭풍(중저역) + 서브 붐
+      playNoise({ dur: 0.06, filterType: 'highpass', freq0: 2600, gain0: 0.28, atk: 0.002 });
+      playNoise({ dur: 0.42, filterType: 'lowpass', freq0: 900, freq1: 120, gain0: 0.34, atk: 0.004 });
+      playSub({ f0: 68, f1: 26, dur: 0.5, gain0: 0.5 });
+    } else if (kind === 'explode') {
+      // 폭발: 서브 드롭 + 길게 구르는 럼블 + 크래클
+      playSub({ f0: 52, f1: 20, dur: 1.15, gain0: 0.6 });
+      playNoise({ dur: 1.5, filterType: 'lowpass', freq0: 420, freq1: 60, gain0: 0.42, atk: 0.006 });
+      playNoise({ dur: 0.35, filterType: 'bandpass', freq0: 1600, q: 1.2, gain0: 0.14, atk: 0.003 });
+    } else if (kind === 'hit') {
+      playNoise({ dur: 0.22, filterType: 'lowpass', freq0: 1400, freq1: 200, gain0: 0.2, atk: 0.003 });
+      playSub({ f0: 90, f1: 40, dur: 0.18, gain0: 0.2 });
+    } else if (kind === 'splash') {
+      playNoise({ dur: 0.4, filterType: 'bandpass', freq0: 700, q: 1.4, gain0: 0.16, atk: 0.02 });
+    } else if (kind === 'step') {
+      // 궤도 링크 철컥임
+      playNoise({ dur: 0.07, filterType: 'bandpass', freq0: 500 + Math.random() * 250, q: 2.5, gain0: 0.06, atk: 0.004 });
     }
   } catch { /* ignore */ }
 }
@@ -3942,13 +4181,28 @@ ghost.traverse((o) => {
 ghostKit.hitbox.visible = false;
 ghost.visible = false;
 scene.add(ghost);
-// 전면 방향 화살표 (고스트 발밑)
-const ghostArrow = new THREE.Mesh(
-  new THREE.ConeGeometry(0.32, 0.9, 3),
-  new THREE.MeshBasicMaterial({ color: 0x9ccaff, transparent: true, opacity: 0.85, depthWrite: false })
-);
-ghostArrow.rotation.x = Math.PI / 2; // +z를 향하는 납작 화살표
-ghostArrow.position.set(0, 0.15, 1.6);
+// 전면 방향 표식 — 어느 쪽이 차체 전면인지 확실히 보이도록:
+// 큰 주황 화살표 + 전면 범퍼 발광 바 + 이중 셰브론 (전부 depthTest 없이 항상 보임)
+function makeFrontMarker(scale = 1) {
+  const g = new THREE.Group();
+  const mat = new THREE.MeshBasicMaterial({ color: 0xffb02e, transparent: true, opacity: 0.95, depthTest: false, depthWrite: false, side: THREE.DoubleSide });
+  const arrow = new THREE.Mesh(new THREE.ConeGeometry(0.4 * scale, 1.1 * scale, 3), mat);
+  arrow.rotation.x = Math.PI / 2;
+  arrow.scale.y = 0.5; // 납작
+  arrow.position.set(0, 0.14, 2.05 * scale);
+  arrow.renderOrder = 13;
+  const bar = new THREE.Mesh(new THREE.BoxGeometry(1.3 * scale, 0.07, 0.09), mat);
+  bar.position.set(0, 0.6, 1.12 * scale);
+  bar.renderOrder = 13;
+  const chev = new THREE.Mesh(new THREE.ConeGeometry(0.24 * scale, 0.55 * scale, 3), mat);
+  chev.rotation.x = Math.PI / 2;
+  chev.scale.y = 0.5;
+  chev.position.set(0, 0.14, 1.35 * scale);
+  chev.renderOrder = 13;
+  g.add(arrow, bar, chev);
+  return g;
+}
+const ghostArrow = makeFrontMarker(1);
 ghost.add(ghostArrow);
 function showGhost(cell, facing, turretYaw = null) {
   const p = cellToWorld(cell.gx, cell.gz);
@@ -3972,6 +4226,7 @@ for (let i = 0; i < PLAN_AHEAD; i++) {
   });
   gk.hitbox.visible = false;
   gk.group.visible = false;
+  gk.group.add(makeFrontMarker(0.85)); // 예약 고스트에도 전면 표식
   // 순번 라벨
   const badge = makeQueueBadge(i + 1);
   badge.position.set(0, 3.2, 0);
@@ -4800,12 +5055,13 @@ function updateAimPreview(dt) {
     const rel = normAngle(targetYaw - S.group.rotation.y);
     S.turret.rotation.y += normAngle(rel - S.turret.rotation.y) * k;
   }
-  // 포신 부앙각 미리보기: 사격 출발점 셀 기준
+  // 포신 부앙각 미리보기: 사격 출발점 셀 기준 (차체 기울기로 창이 이동)
   const from = muzzleApprox(player, { gx: fo.gx, gz: fo.gz });
   const horiz = Math.hypot(aim.x - from.x, aim.z - from.z);
+  const tiltPrev = hullTiltAtCellDeg({ gx: fo.gx, gz: fo.gz }, aim.x, aim.z);
   const pitchDeg = THREE.MathUtils.clamp(
     (Math.atan2(aim.y - from.y, Math.max(horiz, 0.001)) * 180) / Math.PI,
-    player.gun?.pitchMin ?? PITCH_MIN, player.gun?.pitchMax ?? PITCH_MAX
+    (player.gun?.pitchMin ?? PITCH_MIN) + tiltPrev, (player.gun?.pitchMax ?? PITCH_MAX) + tiltPrev
   );
   const target = -THREE.MathUtils.degToRad(pitchDeg);
   pitchGun.rotation.x += (target - pitchGun.rotation.x) * k;
@@ -4848,6 +5104,7 @@ function animate(now) {
   rippleTex.offset.set((now * 0.0000121) % 1, (now * -0.0000324) % 1);
   windUniform.value = now * 0.001; // 식생 바람
   sparkleTex.offset.set((now * 0.000021) % 1, (now * -0.000013) % 1); // 윤슬 흐름
+  updateAntennas(dt); // RC 안테나 대롱대롱
   controls.update();
   renderer.info.reset();
   composer.render();
