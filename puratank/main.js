@@ -2248,6 +2248,126 @@ const hullDownCells = new Set();
 }
 
 // ---------------------------------------------------------------------------
+// 아이템: 수리 키트(+40 HP) / 연료통(⚡ 기동 +4, 3턴) — 지나가면 획득
+// ---------------------------------------------------------------------------
+const items = new Map(); // cellKey -> { type, group }
+{
+  const crossTex = (() => {
+    const c = document.createElement('canvas'); c.width = c.height = 32;
+    const x = c.getContext('2d');
+    x.fillStyle = '#f2ede2'; x.fillRect(0, 0, 32, 32);
+    x.fillStyle = '#c8342a'; x.fillRect(13, 5, 6, 22); x.fillRect(5, 13, 22, 6);
+    return new THREE.CanvasTexture(c);
+  })();
+  function makeItemMesh(type) {
+    const g = new THREE.Group();
+    if (type === 'repair') {
+      const box = new THREE.Mesh(
+        new THREE.BoxGeometry(0.5, 0.34, 0.5),
+        [null, null, new THREE.MeshStandardMaterial({ map: crossTex, roughness: 0.8 }), null, null, null]
+          .map((m) => m ?? new THREE.MeshStandardMaterial({ color: 0xf2ede2, roughness: 0.8 }))
+      );
+      box.position.y = 0.17;
+      g.add(box);
+    } else {
+      // 제리캔 (연료통)
+      const can = new THREE.Mesh(
+        new THREE.BoxGeometry(0.34, 0.5, 0.42),
+        new THREE.MeshStandardMaterial({ color: 0xd8a625, roughness: 0.65 })
+      );
+      can.position.y = 0.25;
+      const handle = new THREE.Mesh(
+        new THREE.BoxGeometry(0.07, 0.09, 0.3),
+        new THREE.MeshStandardMaterial({ color: 0xa87d18, roughness: 0.65 })
+      );
+      handle.position.y = 0.56;
+      g.add(can, handle);
+    }
+    g.traverse((o) => { if (o.isMesh) { o.castShadow = true; } });
+    // 표식 링
+    const ring = new THREE.Mesh(
+      new THREE.RingGeometry(0.5, 0.62, 24),
+      new THREE.MeshBasicMaterial({ color: type === 'repair' ? 0xff8577 : 0xffd24d, transparent: true, opacity: 0.7, side: THREE.DoubleSide, depthWrite: false })
+    );
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.y = 0.05;
+    noAO(ring);
+    g.add(ring);
+    return g;
+  }
+  const N_ITEM = Math.max(2, Math.round(3 * AREA_F));
+  const types = [];
+  for (let i = 0; i < N_ITEM; i++) types.push('repair', 'fuel');
+  let placedI = 0, guard = 0;
+  while (placedI < types.length && guard++ < 3000) {
+    const gx = 2 + Math.floor(rng() * (GW - 4)), gz = 2 + Math.floor(rng() * (GH - 4));
+    const k = cellKey(gx, gz);
+    if (items.has(k) || props.has(k) || terrainAt(gx, gz) === T.WATER) continue;
+    if ([PLAYER_SPAWN, ...ENEMY_SPAWNS].some((s) => Math.hypot(s.gx - gx, s.gz - gz) < 5)) continue;
+    const type = types[placedI];
+    const g = makeItemMesh(type);
+    const p = cellToWorld(gx, gz);
+    g.position.set(p.x, heightAt(gx, gz) + 0.05, p.z);
+    scene.add(g);
+    items.set(k, { type, group: g });
+    placedI++;
+  }
+}
+// 획득 이펙트: 솟는 링 + 반짝이 + 텍스트
+function pickupFx(unit, item) {
+  const pos = unit.group.position.clone();
+  sfx('hit');
+  const col = item.type === 'repair' ? 0x7ce287 : 0xffd24d;
+  const ring = new THREE.Mesh(
+    new THREE.RingGeometry(0.5, 0.7, 26),
+    new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.9, side: THREE.DoubleSide, depthWrite: false })
+  );
+  ring.rotation.x = -Math.PI / 2;
+  ring.position.set(pos.x, pos.y + 0.2, pos.z);
+  noAO(ring);
+  scene.add(ring);
+  const sparks = [];
+  for (let i = 0; i < 10; i++) {
+    const sp = makePuff(col, THREE.AdditiveBlending);
+    sp.scale.setScalar(0.16);
+    sp.position.set(pos.x + (rng() - 0.5) * 0.6, pos.y + 0.4, pos.z + (rng() - 0.5) * 0.6);
+    scene.add(sp);
+    sparks.push({ sp, vy: 1.4 + rng() * 1.6, vx: (rng() - 0.5) * 1.2, vz: (rng() - 0.5) * 1.2 });
+  }
+  tween(750, (e, k) => {
+    ring.scale.setScalar(1 + k * 2.4);
+    ring.position.y = pos.y + 0.2 + k * 0.8;
+    ring.material.opacity = 0.9 * (1 - k);
+    for (const s of sparks) {
+      s.sp.position.y += s.vy * 0.016;
+      s.sp.position.x += s.vx * 0.016;
+      s.sp.position.z += s.vz * 0.016;
+      s.sp.material.opacity = 1 - k;
+    }
+  }, easeOut).then(() => {
+    scene.remove(ring);
+    sparks.forEach((s) => { scene.remove(s.sp); s.sp.material.dispose(); });
+  });
+}
+function tryPickupItem(unit) {
+  const k = cellKey(unit.gx, unit.gz);
+  const item = items.get(k);
+  if (!item) return;
+  items.delete(k);
+  scene.remove(item.group);
+  if (item.type === 'repair') {
+    unit.hp = Math.min(unit.maxHp, unit.hp + 40);
+    updateHpBar(unit);
+    if (unit.isPlayer) updatePlayerHpUI();
+    popText(unit.group.position.clone().add(new THREE.Vector3(0, 1.5, 0)), '🔧 +40 HP', '#8df08f');
+  } else {
+    unit.boostTurns = 3;
+    popText(unit.group.position.clone().add(new THREE.Vector3(0, 1.5, 0)), '⚡ 기동 +4 (3턴)', '#ffd24d');
+  }
+  pickupFx(unit, item);
+}
+
+// ---------------------------------------------------------------------------
 // 지면 클릭 → 셀 계산 (하이트필드 직접 레이캐스트)
 // ---------------------------------------------------------------------------
 function raycastGroundCell(raycaster) {
@@ -2368,6 +2488,7 @@ function spawnUnit(isPlayer, gx, gz, facing) {
     reloadLeft: 0,
     movedLastTurn: false,
     aimStack: 0,
+    boostTurns: 0,
     mp: base.mp, fireRange: base.fireRange, damage: base.damage,
     hullLv, driverLv,
     hp: maxHp, maxHp,
@@ -2494,7 +2615,7 @@ function reachableCells(unit) {
         const hull = rev ? (d + 4) % 8 : d;
         const turn = Math.min(Math.abs(hull - cur.hull), 8 - Math.abs(hull - cur.hull)) * TURN_COST45;
         const nc = cur.cost + turn + sc * (rev ? REVERSE_COST : 1);
-        if (nc > unit.mp) continue;
+        if (nc > unit.mp + (unit.boostTurns > 0 ? 4 : 0)) continue; // ⚡ 부스트 반영
         const nk = `${nx},${nz},${hull}`;
         if (nc < (best.get(nk) ?? Infinity)) {
           best.set(nk, nc);
@@ -2825,6 +2946,7 @@ async function moveUnit(unit, path, finalFacing = null, onStep = null) {
     unit.gx = cell.gx;
     unit.gz = cell.gz;
     unit.group.position.y = driveHeight(to.x, to.z);
+    tryPickupItem(unit); // 아이템 위를 지나면 획득
     if (onStep) onStep(unit);
   }
   } finally { if (path.length) engineOff(); }
@@ -4848,6 +4970,7 @@ async function resolveOneTurn() {
       u.aimStack = 0;
     }
     u._snapped = false;
+    if (u.boostTurns > 0) u.boostTurns--;
     u.movedLastTurn = u.plan?.type === 'move' && !!u.plan.path?.length;
   }
   // AI 예측용: 이번 턴 플레이어 변위 기록
@@ -5129,6 +5252,10 @@ function animate(now) {
   windUniform.value = now * 0.001; // 식생 바람
   sparkleTex.offset.set((now * 0.000021) % 1, (now * -0.000013) % 1); // 윤슬 흐름
   updateAntennas(dt); // RC 안테나 대롱대롱
+  for (const it of items.values()) { // 아이템 부유/회전
+    it.group.rotation.y = now * 0.0012;
+    it.group.position.y += Math.sin(now * 0.0028 + it.group.position.x) * 0.0007;
+  }
   controls.update();
   renderer.info.reset();
   composer.render();
@@ -5202,6 +5329,8 @@ window.__puratank = {
     enqueuePlan({ type: 'move', path: info.path.slice(), facing: null, turretYaw: dirAngle(info.endDir), endDir: info.endDir });
     return true;
   },
+  itemCells: () => [...items.keys()].map((k) => k.split(',').map(Number)),
+  debugPickup(gx, gz) { player.gx = gx; player.gz = gz; tryPickupItem(player); return { hp: player.hp, boost: player.boostTurns }; },
   queueLen: () => planQueue.length,
   projOrigin: () => projectedOrigin(),
   // 부분 파괴 테스트용
