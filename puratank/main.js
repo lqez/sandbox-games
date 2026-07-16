@@ -193,9 +193,9 @@ scene.background = skyTex;
 const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
 const ssaoPass = new SSAOPass(scene, camera, window.innerWidth, window.innerHeight);
-ssaoPass.kernelRadius = 0.9;
-ssaoPass.minDistance = 0.0004;
-ssaoPass.maxDistance = 0.12;
+ssaoPass.kernelRadius = 1.5;      // 더 넓게 — 접지·틈 음영 강하게
+ssaoPass.minDistance = 0.0006;
+ssaoPass.maxDistance = 0.22;
 composer.addPass(ssaoPass);
 composer.addPass(new OutputPass());
 // 컬러 그레이드: 디오라마 촬영 톤 — 과채도 억제 + 대비 + 웜 틴트 + 비네트
@@ -1748,12 +1748,53 @@ const decorMeshes = []; // 풀/꽃/낙엽/잔가지 — 디버그 토글용
   if (pebMesh.instanceColor) pebMesh.instanceColor.needsUpdate = true;
   scene.add(pebMesh);
 
-  // 바위 노두: 급경사면에 반쯤 묻힌 각진 화강암 (플랫 셰이딩 결정면).
-  // 일부는 큰 바위덩이로 솟아 레퍼런스의 암반 노두 느낌.
-  const ROCK_N = 260;
+  // 바위 노두: 노이즈 변위한 울퉁불퉁 화강암 (플랫 셰이딩) + 암석 텍스처.
+  // 밝은 크리스털 느낌을 없애고 어두운 이끼 낀 바위로.
+  function makeRockTexture() {
+    const c = document.createElement('canvas'); c.width = c.height = 128;
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = '#847a6d'; ctx.fillRect(0, 0, 128, 128);
+    for (let i = 0; i < 900; i++) {
+      const x = Math.random() * 128, y = Math.random() * 128, r = 1 + Math.random() * 4.5;
+      const dark = Math.random() > 0.5;
+      ctx.fillStyle = dark ? `rgba(42,37,30,${0.1 + Math.random() * 0.2})` : `rgba(190,182,166,${0.07 + Math.random() * 0.13})`;
+      ctx.beginPath(); ctx.ellipse(x, y, r, r * (0.5 + Math.random() * 0.6), Math.random() * Math.PI, 0, Math.PI * 2); ctx.fill();
+    }
+    // 이끼 얼룩 (녹색기)
+    for (let i = 0; i < 60; i++) {
+      const x = Math.random() * 128, y = Math.random() * 128, r = 2 + Math.random() * 6;
+      ctx.fillStyle = `rgba(70,86,44,${0.06 + Math.random() * 0.12})`;
+      ctx.beginPath(); ctx.ellipse(x, y, r, r * 0.7, Math.random() * Math.PI, 0, Math.PI * 2); ctx.fill();
+    }
+    // 균열
+    ctx.strokeStyle = 'rgba(28,24,20,0.4)';
+    for (let i = 0; i < 14; i++) {
+      ctx.lineWidth = 0.5 + Math.random(); let x = Math.random() * 128, y = Math.random() * 128;
+      ctx.beginPath(); ctx.moveTo(x, y);
+      for (let s = 0; s < 4; s++) { x += (Math.random() - 0.5) * 42; y += (Math.random() - 0.5) * 42; ctx.lineTo(x, y); }
+      ctx.stroke();
+    }
+    const tex = new THREE.CanvasTexture(c); tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+    return tex;
+  }
+  const rockTex = makeRockTexture();
+  // 이코스피어를 정점별 유사난수로 변위 — 각진 크리스털 대신 울퉁불퉁 바위
+  const rockGeo = new THREE.IcosahedronGeometry(0.42, 1);
+  {
+    const p = rockGeo.attributes.position, v = new THREE.Vector3();
+    for (let i = 0; i < p.count; i++) {
+      v.fromBufferAttribute(p, i);
+      const hsh = Math.sin(v.x * 91.3 + v.y * 47.1 + v.z * 63.7) * 43758.5453;
+      const disp = 0.72 + (hsh - Math.floor(hsh)) * 0.62;
+      v.multiplyScalar(disp);
+      p.setXYZ(i, v.x, v.y, v.z);
+    }
+    rockGeo.computeVertexNormals();
+  }
+  const ROCK_N = 200;
   const rockMesh = new THREE.InstancedMesh(
-    new THREE.IcosahedronGeometry(0.42, 0),
-    new THREE.MeshStandardMaterial({ roughness: 0.96, flatShading: true }),
+    rockGeo,
+    new THREE.MeshStandardMaterial({ map: rockTex, roughness: 1, metalness: 0, envMapIntensity: 0, flatShading: true }),
     ROCK_N
   );
   rockMesh.castShadow = true;
@@ -1765,17 +1806,16 @@ const decorMeshes = []; // 풀/꽃/낙엽/잔가지 — 디버그 토글용
     const h = sampleHeight(wx, wz);
     if (h < WATER_Y + 0.05) continue;
     const w = surfaceWeights(wx, wz, h);
-    if (w.rock < 0.28 || rng() > w.rock) continue;
+    if (w.rock < 0.42 || rng() > w.rock * 0.85) continue; // 더 가파른 곳만, 덜 촘촘히
     gq.setFromEuler(new THREE.Euler(rng() * Math.PI, rng() * Math.PI, rng() * Math.PI));
-    // 25%는 큰 바위덩이
-    const big = rng() < 0.25;
-    const sc = big ? 1.7 + rng() * 1.5 : 0.55 + rng() * 1.0;
-    gs.set(sc, sc * (0.5 + rng() * 0.5), sc);
-    gv.set(wx, h - 0.16 + rng() * 0.12, wz);
+    const big = rng() < 0.16;
+    const sc = big ? 1.6 + rng() * 1.3 : 0.55 + rng() * 0.95;
+    gs.set(sc * (0.85 + rng() * 0.3), sc * (0.5 + rng() * 0.5), sc * (0.85 + rng() * 0.3));
+    gv.set(wx, h - 0.2 + rng() * 0.1, wz);
     gm.compose(gv, gq, gs);
     rockMesh.setMatrixAt(placed, gm);
-    // 화강암: 탈색된 회갈색, 결마다 미묘한 명암
-    gCol.setHSL(0.08 + rng() * 0.05, 0.05 + rng() * 0.12, 0.36 + rng() * 0.16);
+    // 어두운 화강암 톤 (map과 곱해져 더 어두워진다) — 밝은 흰 바위 방지
+    gCol.setHSL(0.07 + rng() * 0.05, 0.08 + rng() * 0.1, 0.34 + rng() * 0.12);
     rockMesh.setColorAt(placed, gCol);
     placed++;
   }
@@ -1960,7 +2000,7 @@ const decorMeshes = []; // 풀/꽃/낙엽/잔가지 — 디버그 토글용
   const MOSS_N = 620;
   const mossMesh = new THREE.InstancedMesh(
     new THREE.IcosahedronGeometry(0.16, 0),
-    new THREE.MeshStandardMaterial({ roughness: 0.98 }),
+    new THREE.MeshStandardMaterial({ roughness: 1, envMapIntensity: 0, flatShading: true }),
     MOSS_N
   );
   mossMesh.receiveShadow = true;
@@ -1971,13 +2011,14 @@ const decorMeshes = []; // 풀/꽃/낙엽/잔가지 — 디버그 토글용
     const h = sampleHeight(wx, wz);
     if (h < WATER_Y + 0.05) continue;
     const w = surfaceWeights(wx, wz, h);
-    if (w.rock < 0.28 || rng() > w.rock * 1.1) continue;
+    if (w.rock < 0.32 || rng() > w.rock * 0.8) continue;
     gq.setFromEuler(new THREE.Euler(rng() * 0.4, rng() * Math.PI, rng() * 0.4));
-    gs.set(1 + rng() * 1.4, 0.3 + rng() * 0.3, 1 + rng() * 1.4);
-    gv.set(wx, h + 0.04, wz);
+    gs.set(1 + rng() * 1.2, 0.22 + rng() * 0.22, 1 + rng() * 1.2); // 더 납작하게
+    gv.set(wx, h + 0.03, wz);
     gm.compose(gv, gq, gs);
     mossMesh.setMatrixAt(placed, gm);
-    gCol.setHSL(0.26 + rng() * 0.06, 0.4 + rng() * 0.18, 0.24 + rng() * 0.1);
+    // 어둡고 탁한 이끼 초록 (밝은 초록 조각 방지)
+    gCol.setHSL(0.24 + rng() * 0.06, 0.28 + rng() * 0.14, 0.16 + rng() * 0.07);
     mossMesh.setColorAt(placed, gCol);
     placed++;
   }
