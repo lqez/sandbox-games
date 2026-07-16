@@ -744,6 +744,8 @@ const PROP_DEF = {
   tree:     { hp: 30, blockMove: true,  blockShotH: 0,   coverH: 2.4, cover: 1.0, name: '수목' },
   bush:     { hp: 12, blockMove: false, blockShotH: 0,   coverH: 0.9, cover: 0.5, name: '덤불', moveExtra: 1.0 },
   house:    { hp: 85, blockMove: true,  blockShotH: 2.3, coverH: 0,   cover: 0,   name: '농가' },
+  // 2층 벽돌 건물: 2×2칸 점유, 프리컷 청크로 부분 파괴
+  building: { hp: 200, blockMove: true, blockShotH: 3.2, coverH: 0,   cover: 0,   name: '벽돌 건물', footprint: [[0, 0], [1, 0], [0, 1], [1, 1]] },
   rubble:   { hp: 35, blockMove: false, blockShotH: 0,   coverH: 0.9, cover: 0.6, name: '잔해', moveExtra: 1.6 },
   hedgehog: { hp: 40, blockMove: true,  blockShotH: 0,   coverH: 0.8, cover: 0.4, name: '대전차 장애물' },
   sandbag:  { hp: 26, blockMove: true,  blockShotH: 0,   coverH: 0.8, cover: 0.5, name: '모래주머니' },
@@ -949,6 +951,186 @@ function buildHouseMesh() {
   addWindow(W / 2 + 0.005, 0.8, -0.3, Math.PI / 2);
   return g;
 }
+
+// ---------------------------------------------------------------------------
+// 2층 벽돌 건물 — 프리컷 청크 구조.
+// 벽/지붕/창을 작은 청크 상자로 미리 잘라 두고 재질별로 병합(bake)해 그린다.
+// 피격 시 착탄 반경의 청크만 떼어 물리 낙하 → 남은 청크로 재병합 = 부분 파괴.
+// ---------------------------------------------------------------------------
+const trimMat = new THREE.MeshStandardMaterial({ color: 0xd8cbb0, roughness: 0.85 });
+const shopMats = [
+  new THREE.MeshStandardMaterial({ color: 0x2f5d43, roughness: 0.8 }), // 부티크 그린
+  new THREE.MeshStandardMaterial({ color: 0x6d3630, roughness: 0.8 }), // 와인 레드
+  new THREE.MeshStandardMaterial({ color: 0x3a4a63, roughness: 0.8 }), // 네이비
+];
+function buildBuildingMesh() {
+  const g = new THREE.Group();
+  const chunks = [];
+  const tmp = new THREE.Object3D();
+  const addChunk = (w, h, d, x, y, z, mat, ry = 0) => {
+    tmp.position.set(x, y, z);
+    tmp.rotation.set(0, ry, 0);
+    tmp.updateMatrix();
+    chunks.push({
+      size: [w, h, d], mat, matrix: tmp.matrix.clone(),
+      center: new THREE.Vector3(x, y, z), dead: false,
+    });
+  };
+  const W = 3.0, D = 2.2, WT = 0.18;     // 폭/깊이/벽 두께
+  const ROWS = 4, RH = 0.56;             // 벽 청크 4단 (총높이 ~2.24)
+  const shop = rng() < 0.45;             // 1층 상점 파사드 (레퍼런스 불랑제리풍)
+  const shopMat = shopMats[Math.floor(rng() * shopMats.length)];
+  // 벽 4면을 그리드 청크로 — 창/문 위치는 청크를 창 청크로 교체
+  const walls = [
+    { len: W, ry: 0, ox: 0, oz: D / 2 - WT / 2, front: true },   // 전면(+z)
+    { len: W, ry: 0, ox: 0, oz: -D / 2 + WT / 2, front: false }, // 후면
+    { len: D, ry: Math.PI / 2, ox: W / 2 - WT / 2, oz: 0, front: false },  // 우측
+    { len: D, ry: Math.PI / 2, ox: -W / 2 + WT / 2, oz: 0, front: false }, // 좌측
+  ];
+  for (const wall of walls) {
+    const cols = Math.round(wall.len / 0.6);
+    const cw = wall.len / cols;
+    for (let r = 0; r < ROWS; r++) {
+      for (let c = 0; c < cols; c++) {
+        const along = -wall.len / 2 + (c + 0.5) * cw;
+        const x = wall.ry ? wall.ox : along;
+        const z = wall.ry ? along : wall.oz;
+        const y = (r + 0.5) * RH;
+        const isDoor = wall.front && r === 0 && c === Math.floor(cols / 2);
+        const isWin = !isDoor && (r === 1 || r === 3) && c % 2 === 1;
+        if (isDoor) {
+          addChunk(cw * 0.94, RH, WT + 0.04, x, y, z, shop ? shopMat : trimMat, wall.ry);
+        } else if (isWin) {
+          // 창: 유리 + 밝은 틀 (둘 다 청크 — 부서지면 같이 날아간다)
+          addChunk(cw * 0.9, RH * 0.92, WT * 0.5, x, y, z, glassMat, wall.ry);
+          addChunk(cw * 0.94, RH * 0.2, WT + 0.03, x, y + RH * 0.42, z, trimMat, wall.ry);
+        } else if (shop && wall.front && r === 0) {
+          addChunk(cw, RH, WT, x, y, z, shopMat, wall.ry);
+        } else {
+          addChunk(cw, RH, WT, x, y, z, brickMat, wall.ry);
+        }
+      }
+    }
+  }
+  const H = ROWS * RH;
+  // 상점 간판 띠
+  if (shop) addChunk(W * 0.96, 0.22, WT + 0.08, 0, H * 0.28 + RH, D / 2 - WT / 2, trimMat, 0);
+  // 박공(측면 계단식 벽돌) + 지붕 슬레이트 슬랩
+  const RHT = 1.0; // 지붕 높이
+  const gsteps = 4;
+  for (const sx of [-1, 1]) {
+    for (let s = 0; s < gsteps; s++) {
+      const t = s / gsteps;
+      addChunk(WT, RHT / gsteps, D * (1 - t * 0.92), sx * (W / 2 - WT / 2), H + (s + 0.5) * (RHT / gsteps), 0, brickMat, 0);
+    }
+  }
+  const slopeLen = Math.hypot(D / 2 + 0.15, RHT);
+  const slabsA = 5, slabsB = 2; // 경사면당 5×2 슬랩
+  for (const sz of [-1, 1]) {
+    const ang = sz * Math.atan2(RHT, D / 2 + 0.15);
+    for (let a = 0; a < slabsA; a++) {
+      for (let b = 0; b < slabsB; b++) {
+        const alongW = -W / 2 - 0.12 + (a + 0.5) * ((W + 0.24) / slabsA);
+        const alongS = (b + 0.5) / slabsB; // 0(처마)→1(용마루)
+        const zPos = sz * (D / 2 + 0.15) * (1 - alongS);
+        const yPos = H + RHT * alongS;
+        tmp.position.set(alongW, yPos, zPos);
+        tmp.rotation.set(ang, 0, 0);
+        tmp.updateMatrix();
+        chunks.push({
+          size: [(W + 0.24) / slabsA - 0.02, 0.07, slopeLen / slabsB],
+          mat: slateMat, matrix: tmp.matrix.clone(),
+          center: new THREE.Vector3(alongW, yPos, zPos), dead: false,
+        });
+      }
+    }
+  }
+  // 굴뚝
+  addChunk(0.26, 0.5, 0.26, W * 0.28, H + RHT + 0.2, 0, brickMat, 0);
+  g.userData.chunks = chunks;
+  return g;
+}
+
+// 남은 청크를 재질별 단일 지오메트리로 병합해 다시 그린다 (부분 파괴 후 재호출)
+function bakeChunkProp(prop) {
+  for (const m of prop.baked ?? []) { prop.group.remove(m); m.geometry.dispose(); }
+  prop.baked = [];
+  const byMat = new Map();
+  for (const ch of prop.chunks) {
+    if (ch.dead) continue;
+    if (!byMat.has(ch.mat)) byMat.set(ch.mat, []);
+    byMat.get(ch.mat).push(ch);
+  }
+  for (const [mat, chs] of byMat) {
+    const geos = [];
+    for (const ch of chs) {
+      if (!ch._ngeo) ch._ngeo = new THREE.BoxGeometry(...ch.size).toNonIndexed();
+      const g2 = ch._ngeo.clone();
+      g2.applyMatrix4(ch.matrix);
+      geos.push(g2);
+    }
+    let total = 0;
+    for (const g2 of geos) total += g2.attributes.position.count;
+    const pos = new Float32Array(total * 3);
+    const nor = new Float32Array(total * 3);
+    const uv = new Float32Array(total * 2);
+    let off = 0;
+    for (const g2 of geos) {
+      pos.set(g2.attributes.position.array, off * 3);
+      nor.set(g2.attributes.normal.array, off * 3);
+      uv.set(g2.attributes.uv.array, off * 2);
+      off += g2.attributes.position.count;
+      g2.dispose();
+    }
+    const merged = new THREE.BufferGeometry();
+    merged.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    merged.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+    merged.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+    const mesh = new THREE.Mesh(merged, mat);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    prop.group.add(mesh);
+    prop.baked.push(mesh);
+  }
+}
+
+// 떼어진 청크들을 물리 낙하 데브리로 — 착탄점에서 바깥으로 튄다
+function spawnChunkDebris(prop, chunks, impact) {
+  prop.group.updateMatrixWorld(true);
+  const pieces = [];
+  const m = new THREE.Matrix4();
+  for (const ch of chunks) {
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(...ch.size), ch.mat);
+    m.multiplyMatrices(prop.group.matrixWorld, ch.matrix);
+    m.decompose(mesh.position, mesh.quaternion, mesh.scale);
+    mesh.castShadow = true;
+    scene.add(mesh);
+    const dir = mesh.position.clone().sub(impact);
+    dir.y = Math.abs(dir.y) * 0.4 + 0.4;
+    if (dir.lengthSq() < 0.01) dir.set(rng() - 0.5, 1, rng() - 0.5);
+    dir.normalize();
+    pieces.push({
+      mesh,
+      vel: dir.multiplyScalar(2.2 + Math.random() * 3.2).add(new THREE.Vector3(0, 1.6 + Math.random() * 1.8, 0)),
+      spin: new THREE.Vector3(Math.random() * 9 - 4.5, Math.random() * 9 - 4.5, Math.random() * 9 - 4.5),
+    });
+  }
+  const floorY = sampleHeight(prop.group.position.x, prop.group.position.z);
+  tween(1500, (e, rawK) => {
+    const dt = 0.016;
+    for (const p of pieces) {
+      p.vel.y -= 15 * dt;
+      p.mesh.position.addScaledVector(p.vel, dt);
+      if (p.mesh.position.y < floorY + 0.1) {
+        p.mesh.position.y = floorY + 0.1;
+        p.vel.y *= -0.3; p.vel.x *= 0.72; p.vel.z *= 0.72;
+      }
+      p.mesh.rotation.x += p.spin.x * dt;
+      p.mesh.rotation.z += p.spin.z * dt;
+      if (rawK > 0.78) p.mesh.scale.multiplyScalar(0.92);
+    }
+  }, linear).then(() => pieces.forEach((p) => { scene.remove(p.mesh); p.mesh.geometry.dispose(); }));
+}
 function buildRubbleMesh() {
   const g = new THREE.Group();
   // 부서진 콘크리트/석재 덩이 (각진 이코사면)
@@ -995,31 +1177,45 @@ function buildSandbagMesh() {
   return g;
 }
 const PROP_BUILDERS = {
-  tree: buildTreeMesh, bush: buildBushMesh, house: buildHouseMesh,
+  tree: buildTreeMesh, bush: buildBushMesh, house: buildHouseMesh, building: buildBuildingMesh,
   rubble: buildRubbleMesh, hedgehog: buildHedgehogMesh, sandbag: buildSandbagMesh,
 };
 
 function placeProp(type, gx, gz) {
   const def = PROP_DEF[type];
   const group = PROP_BUILDERS[type]();
-  const p = cellToWorld(gx, gz);
-  group.position.set(p.x, heightAt(gx, gz), p.z);
-  group.rotation.y = rng() * Math.PI * 2;
+  // 다중 칸 풋프린트: 점유 칸 전부에 프랍을 등록, 그룹은 풋프린트 중심에
+  const foot = def.footprint ?? [[0, 0]];
+  const cells = foot.map(([dx, dz]) => cellKey(gx + dx, gz + dz));
+  const cgx = gx + (foot.length > 1 ? 0.5 : 0);
+  const cgz = gz + (foot.length > 1 ? 0.5 : 0);
+  const p = cellToWorld(cgx, cgz);
+  let baseY = -Infinity;
+  for (const [dx, dz] of foot) baseY = Math.max(baseY, heightAt(gx + dx, gz + dz));
+  group.position.set(p.x, baseY, p.z);
+  // 건물은 축 정렬(90° 단위), 나머지는 자유 회전
+  group.rotation.y = foot.length > 1 ? Math.floor(rng() * 4) * (Math.PI / 2) : rng() * Math.PI * 2;
   // 수목/덤불은 개체마다 크기 변주 — 같은 종이라도 들쭉날쭉
   if (type === 'tree') group.scale.setScalar(0.82 + rng() * 0.55);
   else if (type === 'bush') group.scale.setScalar(0.85 + rng() * 0.5);
   // 클릭 판정용 히트박스
-  const hit = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.9, 0.9, 2.4, 8),
-    new THREE.MeshBasicMaterial({ visible: false })
-  );
-  hit.position.y = 1.2;
+  const hit = foot.length > 1
+    ? new THREE.Mesh(new THREE.BoxGeometry(3.4, 3.4, 3.4), new THREE.MeshBasicMaterial({ visible: false }))
+    : new THREE.Mesh(new THREE.CylinderGeometry(0.9, 0.9, 2.4, 8), new THREE.MeshBasicMaterial({ visible: false }));
+  hit.position.y = foot.length > 1 ? 1.7 : 1.2;
   group.add(hit);
   scene.add(group);
-  mergeStatic(group, [hit]); // 드로콜 절감: 프랍 메시 재질별 병합
-  const prop = { type, def, gx, gz, hp: def.hp, group, hit };
+  const prop = { type, def, gx, gz, hp: def.hp, group, hit, cells };
+  if (group.userData.chunks) {
+    // 프리컷 청크 건물: 자체 bake (부분 파괴를 위해 mergeStatic 대신)
+    prop.chunks = group.userData.chunks;
+    prop.baked = [];
+    bakeChunkProp(prop);
+  } else {
+    mergeStatic(group, [hit]); // 드로콜 절감: 프랍 메시 재질별 병합
+  }
   hit.userData.prop = prop;
-  props.set(cellKey(gx, gz), prop);
+  for (const k of cells) props.set(k, prop);
   return prop;
 }
 
@@ -1057,7 +1253,25 @@ function placeProp(type, gx, gz) {
       placed++;
     }
   };
-  scatter('house', 9, (x, z) => terrainAt(x, z) !== T.MUD && heightAt(x, z) <= 1.5);
+  // 2층 벽돌 건물 (2×2칸): 평평하고 4칸 모두 빈 자리에 — 레퍼런스처럼
+  // 벽돌 건물이 주가 되고 작은 농가는 보조
+  {
+    let placedB = 0, guard = 0;
+    while (placedB < 7 && guard++ < 1600) {
+      const gx = 1 + Math.floor(rng() * (GRID - 3)), gz = 1 + Math.floor(rng() * (GRID - 3));
+      const foot = PROP_DEF.building.footprint;
+      if (!foot.every(([dx, dz]) => free(gx + dx, gz + dz) && terrainAt(gx + dx, gz + dz) !== T.MUD)) continue;
+      let hMin = Infinity, hMax = -Infinity;
+      for (const [dx, dz] of foot) {
+        const h = heightAt(gx + dx, gz + dz);
+        hMin = Math.min(hMin, h); hMax = Math.max(hMax, h);
+      }
+      if (hMax - hMin > 0.45 || hMax > 1.8) continue; // 평평한 곳만
+      placeProp('building', gx, gz);
+      placedB++;
+    }
+  }
+  scatter('house', 4, (x, z) => terrainAt(x, z) !== T.MUD && heightAt(x, z) <= 1.5);
   scatter('hedgehog', 13);
   scatter('sandbag', 10);
   scatter('bush', 11);
@@ -1144,6 +1358,11 @@ const decorMeshes = []; // 풀/꽃/낙엽/잔가지 — 디버그 토글용
     GRASS_N
   );
   grassMesh.receiveShadow = true;
+  // 풀도 그림자를 드리운다 — 컷아웃 실루엣 그대로 깊이 패스에 반영
+  grassMesh.castShadow = true;
+  grassMesh.customDepthMaterial = new THREE.MeshDepthMaterial({
+    depthPacking: THREE.RGBADepthPacking, map: grassTex, alphaTest: 0.42,
+  });
   const gm = new THREE.Matrix4();
   const gq = new THREE.Quaternion();
   const gv = new THREE.Vector3();
@@ -1224,6 +1443,10 @@ const decorMeshes = []; // 풀/꽃/낙엽/잔가지 — 디버그 토글용
     new THREE.MeshStandardMaterial({ map: flowerTex, alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.9 }),
     FLOWER_N
   );
+  flowerMesh.castShadow = true;
+  flowerMesh.customDepthMaterial = new THREE.MeshDepthMaterial({
+    depthPacking: THREE.RGBADepthPacking, map: flowerTex, alphaTest: 0.5,
+  });
   placed = 0; guard = 0;
   const flowerCols = [0xf4d94a, 0xf6e58d, 0xffffff, 0xe8ecef, 0xe6b8d6];
   while (placed < FLOWER_N && guard++ < FLOWER_N * 20) {
@@ -1458,6 +1681,10 @@ const decorMeshes = []; // 풀/꽃/낙엽/잔가지 — 디버그 토글용
     REED_N
   );
   reedMesh.receiveShadow = true;
+  reedMesh.castShadow = true;
+  reedMesh.customDepthMaterial = new THREE.MeshDepthMaterial({
+    depthPacking: THREE.RGBADepthPacking, map: reedTex, alphaTest: 0.4,
+  });
   const reedCols = [0x5a7a3a, 0x6b8540, 0x4e6a30, 0x8a8a44];
   placed = 0; guard = 0;
   while (placed < REED_N && guard++ < REED_N * 14) {
@@ -2465,9 +2692,48 @@ function crater(gx, gz) {
   }
 }
 
-function damageProp(prop, dmg) {
+function damageProp(prop, dmg, impactPos = null) {
   if (!props.has(cellKey(prop.gx, prop.gz))) return;
   prop.hp -= dmg;
+  // 프리컷 청크 프랍(벽돌 건물): 착탄 반경의 청크만 떼어내는 부분 파괴
+  if (prop.chunks) {
+    if (impactPos) {
+      prop.group.updateMatrixWorld(true);
+      const radius = 0.55 + dmg * 0.016; // 직격 60 → ~1.5, 여파 20 → ~0.9
+      const world = new THREE.Vector3();
+      const toBreak = [];
+      for (const ch of prop.chunks) {
+        if (ch.dead) continue;
+        world.copy(ch.center).applyMatrix4(prop.group.matrixWorld);
+        if (world.distanceTo(impactPos) < radius) toBreak.push(ch);
+      }
+      if (toBreak.length) {
+        for (const ch of toBreak) ch.dead = true;
+        spawnChunkDebris(prop, toBreak, impactPos);
+        bakeChunkProp(prop);
+        sfx('hit');
+      }
+    }
+    const remain = prop.chunks.filter((c) => !c.dead).length / prop.chunks.length;
+    if (prop.hp > 0 && remain > 0.42) {
+      const g = prop.group;
+      const rot = g.rotation.y;
+      tween(200, (e, rawK) => { g.rotation.y = rot + Math.sin(rawK * 30) * 0.04 * (1 - rawK); }, linear);
+      return;
+    }
+    // 붕괴: 남은 청크 전부 무너뜨리고 잔해로
+    const rest = prop.chunks.filter((c) => !c.dead);
+    for (const ch of rest) ch.dead = true;
+    spawnChunkDebris(prop, rest, impactPos ?? prop.group.position.clone());
+    for (const k of prop.cells ?? [cellKey(prop.gx, prop.gz)]) props.delete(k);
+    scene.remove(prop.group);
+    sfx('explode');
+    for (const k of (prop.cells ?? []).slice(0, 2)) {
+      const [rx, rz] = k.split(',').map(Number);
+      if (!props.has(k)) placeProp('rubble', rx, rz);
+    }
+    return;
+  }
   if (prop.hp > 0) {
     // 흔들림
     const g = prop.group;
@@ -2475,7 +2741,7 @@ function damageProp(prop, dmg) {
     tween(200, (e, rawK) => { g.rotation.y = rot + Math.sin(rawK * 30) * 0.08 * (1 - rawK); }, linear);
     return;
   }
-  props.delete(cellKey(prop.gx, prop.gz));
+  for (const k of prop.cells ?? [cellKey(prop.gx, prop.gz)]) props.delete(k);
   breakApartGroup(prop.group, 6);
   sfx('hit');
   if (prop.type === 'house') {
@@ -2609,15 +2875,18 @@ async function resolveImpact(impact, attacker, directUnit = null) {
     if (bridge.cells.has(cellKey(c.gx, c.gz))) damageBridge(60, impact);
     else if ([...bridge.cells].some((k) => { const [bx, bz] = k.split(',').map(Number); return Math.max(Math.abs(bx - c.gx), Math.abs(bz - c.gz)) <= 1; })) damageBridge(25, impact);
   }
-  // 프랍 피해 (착탄 셀 + 주변 2칸, 거리 감쇠)
+  // 프랍 피해 (착탄 셀 + 주변 2칸, 거리 감쇠) — 같은 프랍(다중 칸)은 1회만
+  const hitProps = new Map();
   for (let dx = -2; dx <= 2; dx++) {
     for (let dz = -2; dz <= 2; dz++) {
       const prop = props.get(cellKey(c.gx + dx, c.gz + dz));
       if (!prop) continue;
       const ring = Math.max(Math.abs(dx), Math.abs(dz));
-      damageProp(prop, ring === 0 ? 60 : ring === 1 ? 38 : 20);
+      const dmg = ring === 0 ? 60 : ring === 1 ? 38 : 20;
+      if (!hitProps.has(prop) || hitProps.get(prop) < dmg) hitProps.set(prop, dmg);
     }
   }
+  for (const [prop, dmg] of hitProps) damageProp(prop, dmg, impact);
   if (directUnit) {
     await applyUnitDamage(directUnit, attacker.damage, attacker.group.position);
   }
@@ -4082,6 +4351,7 @@ window.__puratank = {
   ssaoPass,
   composer,
   camera,
+  controls,
   sun,
   hideDecor: (v = true) => decorMeshes.forEach((m) => (m.visible = !v)),
   moveHighlightGroup,
@@ -4139,6 +4409,16 @@ window.__puratank = {
   },
   queueLen: () => planQueue.length,
   projOrigin: () => projectedOrigin(),
+  // 부분 파괴 테스트용
+  propAt: (gx, gz) => {
+    const p = props.get(cellKey(gx, gz));
+    return p ? { type: p.type, hp: p.hp, gx: p.gx, gz: p.gz, alive: p.chunks ? p.chunks.filter((c) => !c.dead).length : null, total: p.chunks ? p.chunks.length : null } : null;
+  },
+  propCells: () => [...props.entries()].map(([k, p]) => ({ k, type: p.type })),
+  blastAt: (gx, gz, h = 1.2) => {
+    const p = cellToWorld(gx, gz);
+    return resolveImpact(new THREE.Vector3(p.x, sampleHeight(p.x, p.z) + h, p.z), player);
+  },
   curMoveKeys: () => [...currentMoveCells.keys()],
   curFireKeys: () => [...currentFireCells.keys()],
   fireOriginCell: () => { const o = fireOrigin(); return { gx: o.gx, gz: o.gz, ghost: o.ghost }; },
