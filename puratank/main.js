@@ -1669,39 +1669,39 @@ const decorMeshes = []; // 풀/꽃/낙엽/잔가지 — 디버그 토글용
   // 스태틱 그래스 텍스처: 가는 잎 다발 + 밑동 어둡고 끝 밝은 세로 그라데이션.
   // 흰색으로 그려 instanceColor로 톤을 입히면 밑동 그늘/끝 하이라이트가 자연스럽다.
   const grassTexCanvas = document.createElement('canvas');
-  grassTexCanvas.width = grassTexCanvas.height = 64;
+  grassTexCanvas.width = grassTexCanvas.height = 128;
   {
     const ctx = grassTexCanvas.getContext('2d');
-    ctx.clearRect(0, 0, 64, 64);
-    // 잎 가장자리를 살짝 흐리게 — alphaTest 실루엣이 덜 날카롭게(소프트) 잘린다
-    ctx.filter = 'blur(0.7px)';
-    for (let i = 0; i < 15; i++) {
-      const bx = 4 + rng() * 56;
-      const lean = (rng() - 0.5) * 20;
-      const hgt = 34 + rng() * 28;
-      const wdt = 0.8 + rng() * 1.1; // 가는 줄기 — 하단이 벽처럼 두껍지 않게
-      const tipY = 64 - hgt;
-      // 밑동(그늘) → 끝 그라데이션 — 끝을 흰색까지 올리지 않아 하이라이트가 덜 뜬다
-      const grad = ctx.createLinearGradient(0, 64, 0, tipY);
-      grad.addColorStop(0, 'rgba(110,110,110,1)');
-      grad.addColorStop(0.5, 'rgba(160,160,160,1)');
-      grad.addColorStop(1, 'rgba(196,196,196,1)');
+    ctx.clearRect(0, 0, 128, 128);
+    // 잎 가장자리를 살짝 흐리게 + 가닥을 훨씬 촘촘히(26) — 얼기설기 해소.
+    // 가닥마다 밝기를 달리 베이크해 카드 하나가 "풀 포기"로 읽힌다.
+    ctx.filter = 'blur(1px)';
+    for (let i = 0; i < 26; i++) {
+      const bx = 6 + rng() * 116;
+      const lean = (rng() - 0.5) * 34;
+      const hgt = 62 + rng() * 58;
+      const wdt = 1.4 + rng() * 2.0;
+      const tipY = 128 - hgt;
+      const tone = 0.68 + rng() * 0.5; // 가닥별 밝기 변주
+      const grad = ctx.createLinearGradient(0, 128, 0, tipY);
+      grad.addColorStop(0, `rgba(${100 * tone | 0},${104 * tone | 0},${92 * tone | 0},1)`);
+      grad.addColorStop(0.55, `rgba(${158 * tone | 0},${162 * tone | 0},${142 * tone | 0},1)`);
+      grad.addColorStop(1, `rgba(${198 * tone | 0},${200 * tone | 0},${176 * tone | 0},1)`);
       ctx.fillStyle = grad;
       ctx.beginPath();
-      ctx.moveTo(bx - wdt, 64);
-      ctx.quadraticCurveTo(bx - wdt * 0.35 + lean * 0.4, 64 - hgt * 0.55, bx + lean, tipY);
-      ctx.quadraticCurveTo(bx + wdt * 0.45 + lean * 0.4, 64 - hgt * 0.55, bx + wdt, 64);
+      ctx.moveTo(bx - wdt, 128);
+      ctx.quadraticCurveTo(bx - wdt * 0.35 + lean * 0.4, 128 - hgt * 0.55, bx + lean, tipY);
+      ctx.quadraticCurveTo(bx + wdt * 0.45 + lean * 0.4, 128 - hgt * 0.55, bx + wdt, 128);
       ctx.fill();
     }
-    // 하단 알파 페이드: 지면과 만나는 밑동을 부드럽게 지워
-    // "땅에서 뚝 잘린" 느낌 제거 (alphaTest에 걸려 밑이 가늘어진다)
+    // 하단 알파 페이드: 지면과 만나는 밑동을 부드럽게
     ctx.filter = 'none';
     ctx.globalCompositeOperation = 'destination-out';
-    const fade = ctx.createLinearGradient(0, 64, 0, 46);
-    fade.addColorStop(0, 'rgba(0,0,0,0.9)');
+    const fade = ctx.createLinearGradient(0, 128, 0, 94);
+    fade.addColorStop(0, 'rgba(0,0,0,0.85)');
     fade.addColorStop(1, 'rgba(0,0,0,0)');
     ctx.fillStyle = fade;
-    ctx.fillRect(0, 46, 64, 18);
+    ctx.fillRect(0, 94, 128, 34);
     ctx.globalCompositeOperation = 'source-over';
   }
   const grassTex = new THREE.CanvasTexture(grassTexCanvas);
@@ -2178,6 +2178,122 @@ const decorMeshes = []; // 풀/꽃/낙엽/잔가지 — 디버그 토글용
   if (mossMesh.instanceColor) mossMesh.instanceColor.needsUpdate = true;
   noAO(mossMesh);
   scene.add(mossMesh); decorMeshes.push(mossMesh);
+
+  // 클로버/잡초 패치: 지면에 납작 붙는 얼룩 원반 — 풀 포기 사이 틈을
+  // 낮은 지피식물로 메워 맨땅 느낌을 없앤다
+  const cloverCanvas = document.createElement('canvas');
+  cloverCanvas.width = cloverCanvas.height = 64;
+  {
+    const ctx = cloverCanvas.getContext('2d');
+    ctx.clearRect(0, 0, 64, 64);
+    for (let i = 0; i < 40; i++) {
+      const a = rng() * Math.PI * 2, r = Math.sqrt(rng()) * 26;
+      const x = 32 + Math.cos(a) * r, y = 32 + Math.sin(a) * r;
+      const s2 = 2 + rng() * 3;
+      const v = 150 + rng() * 90;
+      ctx.fillStyle = `rgba(${v * 0.75 | 0},${v | 0},${v * 0.6 | 0},0.9)`;
+      ctx.beginPath(); ctx.ellipse(x, y, s2, s2 * 0.8, rng() * Math.PI, 0, Math.PI * 2); ctx.fill();
+    }
+  }
+  const cloverTex = new THREE.CanvasTexture(cloverCanvas);
+  const CLOVER_N = Math.round(2600 * AREA_F);
+  const cloverMesh = new THREE.InstancedMesh(
+    new THREE.PlaneGeometry(0.55, 0.55),
+    new THREE.MeshStandardMaterial({ map: cloverTex, alphaTest: 0.35, roughness: 1, envMapIntensity: 0, side: THREE.DoubleSide }),
+    CLOVER_N
+  );
+  cloverMesh.receiveShadow = true;
+  placed = 0; guard = 0;
+  while (placed < CLOVER_N && guard++ < CLOVER_N * 8) {
+    const wx = (rng() - 0.5) * (GW * TILE - 1.4);
+    const wz = (rng() - 0.5) * (GH * TILE - 1.4);
+    const h = sampleHeight(wx, wz);
+    if (h < WATER_Y + 0.05) continue;
+    const w = surfaceWeights(wx, wz, h);
+    const grassW = (1 - w.sand * 0.7) * (1 - w.rock) * (1 - w.bed);
+    if (rng() > grassW * 0.85) continue;
+    gq.setFromEuler(new THREE.Euler(-Math.PI / 2 + (rng() - 0.5) * 0.24, 0, rng() * Math.PI * 2, 'ZYX'));
+    gs.setScalar(0.7 + rng() * 1.1);
+    gv.set(wx, h + 0.025, wz);
+    gm.compose(gv, gq, gs);
+    cloverMesh.setMatrixAt(placed, gm);
+    gCol.setHSL(0.25 + rng() * 0.06, 0.3 + rng() * 0.16, 0.17 + rng() * 0.1);
+    cloverMesh.setColorAt(placed, gCol);
+    placed++;
+  }
+  cloverMesh.count = placed;
+  cloverMesh.instanceMatrix.needsUpdate = true;
+  if (cloverMesh.instanceColor) cloverMesh.instanceColor.needsUpdate = true;
+  noAO(cloverMesh);
+  scene.add(cloverMesh); decorMeshes.push(cloverMesh);
+
+  // 고사리: 숲/물가 그늘에 호를 그리는 잎 — 카드 십자
+  const fernCanvas = document.createElement('canvas');
+  fernCanvas.width = fernCanvas.height = 64;
+  {
+    const ctx = fernCanvas.getContext('2d');
+    ctx.clearRect(0, 0, 64, 64);
+    ctx.filter = 'blur(0.5px)';
+    for (let i = 0; i < 6; i++) {
+      const a = -Math.PI / 2 + (i - 2.5) * 0.38;
+      ctx.strokeStyle = `rgba(${150 + rng() * 60 | 0},${190 + rng() * 50 | 0},${120 | 0},0.95)`;
+      ctx.lineWidth = 2.4;
+      ctx.beginPath();
+      ctx.moveTo(32, 62);
+      ctx.quadraticCurveTo(32 + Math.cos(a) * 20, 62 + Math.sin(a) * 34, 32 + Math.cos(a) * 30, 62 + Math.sin(a) * 46);
+      ctx.stroke();
+      // 잔잎
+      for (let s2 = 0.3; s2 < 1; s2 += 0.16) {
+        const px = 32 + Math.cos(a) * 28 * s2, py = 62 + Math.sin(a) * 42 * s2;
+        ctx.fillStyle = 'rgba(160,200,130,0.9)';
+        ctx.beginPath(); ctx.ellipse(px, py, 3.4, 1.6, a, 0, Math.PI * 2); ctx.fill();
+      }
+    }
+  }
+  const fernTex = new THREE.CanvasTexture(fernCanvas);
+  const fPos = [], fUv = [], fIdx = [];
+  for (const rot of [0, Math.PI / 2]) {
+    const cc = Math.cos(rot), sn = Math.sin(rot);
+    const b = fPos.length / 3; const w2 = 0.7, hh = 0.55;
+    fPos.push(-w2 / 2 * cc, 0, -w2 / 2 * sn,  w2 / 2 * cc, 0, w2 / 2 * sn,  w2 / 2 * cc, hh, w2 / 2 * sn,  -w2 / 2 * cc, hh, -w2 / 2 * sn);
+    fUv.push(0, 0, 1, 0, 1, 1, 0, 1);
+    fIdx.push(b, b + 1, b + 2, b, b + 2, b + 3);
+  }
+  const fernGeo = new THREE.BufferGeometry();
+  fernGeo.setAttribute('position', new THREE.Float32BufferAttribute(fPos, 3));
+  fernGeo.setAttribute('uv', new THREE.Float32BufferAttribute(fUv, 2));
+  fernGeo.setIndex(fIdx);
+  fernGeo.computeVertexNormals();
+  const FERN_N = Math.round(620 * AREA_F);
+  const fernWind = new THREE.MeshStandardMaterial({ map: fernTex, alphaTest: 0.35, side: THREE.DoubleSide, roughness: 1, envMapIntensity: 0 });
+  addWind(fernWind, 0.045, 1.5);
+  const fernMesh = new THREE.InstancedMesh(fernGeo, fernWind, FERN_N);
+  fernMesh.receiveShadow = true;
+  placed = 0; guard = 0;
+  while (placed < FERN_N && guard++ < FERN_N * 16) {
+    const wx = (rng() - 0.5) * (GW * TILE - 1.4);
+    const wz = (rng() - 0.5) * (GH * TILE - 1.4);
+    const h = sampleHeight(wx, wz);
+    if (h < WATER_Y + 0.04) continue;
+    // 숲 근처(수목 프랍 인접) 또는 물가에 군락
+    const c = worldToCell({ x: wx, z: wz });
+    const nearTree = props.has(cellKey(c.gx, c.gz)) || props.has(cellKey(c.gx + 1, c.gz)) || props.has(cellKey(c.gx, c.gz + 1));
+    const nearWater = distToRiver(wx, wz) < 3.5;
+    if (!nearTree && !nearWater && rng() > 0.12) continue;
+    gq.setFromAxisAngle(up, rng() * Math.PI * 2);
+    gs.setScalar(0.7 + rng() * 0.8);
+    gv.set(wx, h - 0.02, wz);
+    gm.compose(gv, gq, gs);
+    fernMesh.setMatrixAt(placed, gm);
+    gCol.setHSL(0.29 + rng() * 0.05, 0.32 + rng() * 0.14, 0.2 + rng() * 0.09);
+    fernMesh.setColorAt(placed, gCol);
+    placed++;
+  }
+  fernMesh.count = placed;
+  fernMesh.instanceMatrix.needsUpdate = true;
+  if (fernMesh.instanceColor) fernMesh.instanceColor.needsUpdate = true;
+  noAO(fernMesh);
+  scene.add(fernMesh); decorMeshes.push(fernMesh);
 }
 
 // ---------------------------------------------------------------------------
