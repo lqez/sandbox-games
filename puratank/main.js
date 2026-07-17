@@ -5649,26 +5649,95 @@ function renderHand() {
     handEl.appendChild(el);
   }
 }
+// 카드 탭 = 즉시 예약. 목적지·표적 등 모든 결정은 실행 시 🎲 주사위가
+// 카드 제약 안에서 자동으로 내린다 (운이 좋으면 최적 수, 나쁘면 흔들린 수).
 function cardClick(c) {
   if (phase !== 'plan' || busy || c.used) return;
-  if (c.def.kind === 'brace' || c.def.kind === 'overwatch') {
-    // 목표가 필요 없는 카드 — 탭 즉시 예약
-    activeCard = null;
-    clearPending();
-    enqueuePlan({ type: c.def.kind, _card: c });
-    return;
+  activeCard = null;
+  clearPending();
+  enqueuePlan({ type: 'auto', _card: c });
+  if (phase === 'plan' && !busy) {
+    setHint(`${c.def.ico} ${c.def.label} 예약 (${planQueue.length}/${PLAN_AHEAD})`);
   }
-  // 이동/공격 카드: 토글 선택 — 필드가 이 카드의 방향/탄종으로 좁아진다
-  activeCard = activeCard === c ? null : c;
-  clearPending(true);
-  fireMode = activeCard?.def.kind === 'fire';
-  renderHand();
-  refreshPlanUI(fireMode);
-  if (activeCard) {
-    setHint(activeCard.def.kind === 'fire'
-      ? `${activeCard.def.ico} ${activeCard.def.label} — 목표를 탭하세요`
-      : `${activeCard.def.ico} ${activeCard.def.label} — 도착 칸을 탭하세요`);
+}
+// 가장 가까운 적 (안개 속에서도 엔진 소리로 대략적 위치는 안다)
+function nearestEnemy() {
+  let best = null, bd = Infinity;
+  for (const e of enemies) {
+    if (!e.alive) continue;
+    const d = Math.hypot(e.gx - player.gx, e.gz - player.gz);
+    if (d < bd) { bd = d; best = e; }
   }
+  return best;
+}
+// 예약 카드 → 구체 플랜: 실행 서브턴마다 현재 전장 상태 + 🎲 운으로 자동 결정
+function materializePlan(q) {
+  if (!q || q.type !== 'auto') return q; // 테스트 훅의 구체 플랜은 그대로
+  const def = q._card.def;
+  const pp = () => player.group.position.clone().add(new THREE.Vector3(0, 1.9, 0));
+  popText(pp(), `${def.ico} ${def.label}`, '#e8e4d8');
+  if (def.kind === 'brace') return { type: 'brace', _card: q._card };
+  if (def.kind === 'overwatch') return { type: 'overwatch', _card: q._card };
+  if (def.kind === 'fire') {
+    // 표적 자동 선택: 보이는 적 중 카드 탄종으로 맞힐 수 있는 것 —
+    // 운이 좋으면 최고 명중 표적, 나쁘면 아무 표적
+    const cells = computeFireCells(player);
+    const targets = [];
+    for (const e of enemies) {
+      if (!e.alive || e.hidden) continue;
+      const f = cells.get(cellKey(e.gx, e.gz));
+      if (f && !!f.shot.lob === def.lob) targets.push({ cell: { gx: e.gx, gz: e.gz }, shot: f.shot });
+    }
+    if (!targets.length) {
+      popText(pp(), '표적 없음…', '#c8c2b4');
+      return { type: 'wait', _card: q._card };
+    }
+    targets.sort((a, b) => b.shot.chance - a.shot.chance);
+    const pick = roundLuckMod >= 0 ? targets[0] : targets[Math.floor(Math.random() * targets.length)];
+    return { type: 'fire', cell: pick.cell, shot: pick.shot, _card: q._card };
+  }
+  // 이동 카드: 방향 호 안의 도달 셀을 채점해 자동 선택
+  const o = { gx: player.gx, gz: player.gz, dir: facingDir(player) };
+  const face = dirAngle(o.dir);
+  const near = nearestEnemy();
+  const cand = [];
+  for (const [k, info] of reachableCells(player)) {
+    const [gx, gz] = k.split(',').map(Number);
+    if (moveArcOf(o, face, gx, gz) !== def.arc) continue;
+    let score = -info.cost;
+    if (near) {
+      const dNow = Math.hypot(player.gx - near.gx, player.gz - near.gz);
+      const dNew = Math.hypot(gx - near.gx, gz - near.gz);
+      if (def.arc === 'fwd') {
+        // 전진: 사격 위치 확보 — 접근 + 보이는 적에게 직사각이 서면 크게 가산
+        const s = !near.hidden ? computeShot(player, { unit: near }, { gx, gz }) : { ok: false };
+        score += (s.ok ? 150 + s.chance : 0) + (dNow - dNew) * 6;
+      } else if (def.arc === 'side') {
+        // 횡보: 예측탄 회피 — 옆으로 크게, 거리는 유지
+        score += Math.hypot(gx - player.gx, gz - player.gz) * 8 - Math.abs(dNew - dNow) * 3;
+      } else {
+        // 후퇴: 전면을 문 채(후진 기어) 거리 벌리기
+        score += (dNew - dNow) * 10;
+      }
+      if (hullDownCells.has(k)) score += 25; // 헐다운 스팟 보너스
+    } else {
+      score += Math.hypot(gx - player.gx, gz - player.gz); // 표적 없음: 일단 크게 기동
+    }
+    cand.push({ score, info, gx, gz });
+  }
+  if (!cand.length) {
+    popText(pp(), '길 없음…', '#c8c2b4');
+    return { type: 'wait', _card: q._card };
+  }
+  cand.sort((a, b) => b.score - a.score);
+  // 🎲 운: 좋으면 최적 셀, 나쁠수록 상위권 밖에서도 뽑힌다
+  const spread = Math.max(1, Math.min(cand.length, 1 + Math.max(0, -roundLuckMod) * 2));
+  const pick = cand[Math.floor(Math.random() * spread)];
+  const turretYaw = near ? Math.atan2(near.gx - pick.gx, near.gz - pick.gz) : null;
+  return {
+    type: 'move', path: pick.info.path.slice(), facing: null,
+    turretYaw, endDir: pick.info.endDir, _card: q._card,
+  };
 }
 // 셀이 어느 이동 카드 방향인지: 투영 원점·차체 방향 기준 전방 ≤65° / 측면 / ≥115° 후방
 function moveArcOf(o, faceRad, gx, gz) {
@@ -5806,10 +5875,11 @@ async function resolveQueue() {
   const d1 = 1 + Math.floor(Math.random() * 6);
   const d2 = 1 + Math.floor(Math.random() * 6);
   roundLuckMod = d1 + d2 - 7;
+  const FACE = ['⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
   const lp = player.group.position.clone();
   lp.y += 2.4;
-  popText(lp, `🎲 ${d1}+${d2}`, roundLuckMod > 0 ? '#8de08a' : roundLuckMod < 0 ? '#ff9a8a' : '#e8e4d8');
-  setHint(`🎲 ${d1}+${d2}=${d1 + d2} ${roundLuckMod > 0 ? `— 행운 +${roundLuckMod}` : roundLuckMod < 0 ? `— 불운 ${roundLuckMod}` : ''}`);
+  popText(lp, `${FACE[d1 - 1]}${FACE[d2 - 1]} ${d1 + d2}`, roundLuckMod > 0 ? '#8de08a' : roundLuckMod < 0 ? '#ff9a8a' : '#e8e4d8');
+  setHint(`🎲 ${FACE[d1 - 1]}${FACE[d2 - 1]} = ${d1 + d2} ${roundLuckMod > 0 ? `— 행운 +${roundLuckMod} (정확한 판단)` : roundLuckMod < 0 ? `— 불운 ${roundLuckMod} (판단이 흔들린다)` : ''}`);
   const queue = planQueue;
   planQueue = [];
   ghost.visible = false;
@@ -5817,7 +5887,8 @@ async function resolveQueue() {
   for (let i = 0; i < queue.length; i++) {
     if (!player.alive) break;
     if (i > 0) for (const u of units) if (u.alive && u.reloadLeft > 0) u.reloadLeft -= 1;
-    player.plan = queue[i];
+    // 카드 → 구체 플랜: 서브턴마다 그 시점의 전장 상태 + 🎲 운으로 자동 결정
+    player.plan = materializePlan(queue[i]);
     planEnemies();
     await resolveOneTurn();
     if (phase === 'gameover') return;
@@ -6235,39 +6306,8 @@ function setPointer(e) {
 
 renderer.domElement.addEventListener('pointerdown', (e) => {
   downPos = { x: e.clientX, y: e.clientY };
-  if (phase !== 'plan' || busy) return;
-  setPointer(e);
-  // 1) 사격 출발점(예약 이동이 있으면 마지막 고스트, 없으면 현재 전차)에서
-  //    드래그 시작 = 사격 조준 / "탭"이면 사격 모드 토글 (pointerup에서 판정)
-  const fo = fireOrigin();
-  if (raycaster.intersectObject(fo.hitbox).length) {
-    if (projReload > 0) { setHint(`재장전 중 — ${projReload}턴 남음`); return; }
-    fireGesture = { cell: null, shot: null };
-    controls.enabled = false;
-    refreshPlanUI(true); // 사격 필드 강조
-    return;
-  }
-  // 사격 모드: 셀 탭으로 조준하므로 여기선 제스처를 만들지 않는다 (궤도만)
-  if (fireMode) return;
-  // 이동 미리보기 중 고스트를 잡으면 = 포탑 방향 조정 드래그
-  if (pendingPlan?.type === 'move') {
-    const gcell = raycastGroundCell(raycaster);
-    if (gcell && Math.abs(gcell.gx - pendingPlan.cell.gx) <= 1 && Math.abs(gcell.gz - pendingPlan.cell.gz) <= 1) {
-      ghostGesture = { adjust: true, cell: pendingPlan.cell, info: pendingPlan.info, facing: pendingPlan.facingRad, turretYaw: pendingPlan.turretYaw, origin: pendingPlan.origin };
-      controls.enabled = false;
-      return;
-    }
-  }
-  // 2) 이동 필드 셀 = 기동 고스트 (드래그로 차체 방향)
-  const cell = raycastGroundCell(raycaster);
-  if (!cell) return;
-  const info = currentMoveCells.get(cellKey(cell.gx, cell.gz));
-  if (!info) return;
-  const endFacing = dirAngle(info.endDir);
-  const o = projectedOrigin(); // 이 기동의 출발 셀 (취소 판정 기준)
-  ghostGesture = { cell, info, facing: endFacing, turretYaw: endFacing, origin: { gx: o.gx, gz: o.gz } };
-  controls.enabled = false;
-  showGhost(cell, endFacing, endFacing);
+  // 자동 결정 모드: 셀/표적을 직접 고르지 않는다 — 3D 뷰는 카메라 조작 전용.
+  // (모든 계획은 하단 카드 탭, 실행 결정은 🎲 주사위)
 });
 
 renderer.domElement.addEventListener('pointermove', (e) => {
@@ -6331,105 +6371,19 @@ renderer.domElement.addEventListener('pointermove', (e) => {
   hoverAim = null;
 });
 
-renderer.domElement.addEventListener('pointerup', async (e) => {
+renderer.domElement.addEventListener('pointerup', (e) => {
+  // 자동 결정 모드: 3D 뷰 탭은 정보 확인용 — 적을 탭하면 조작 안내만
   const movedPx = downPos ? Math.hypot(e.clientX - downPos.x, e.clientY - downPos.y) : 99;
   const isTap = movedPx <= 8;
-  if (fireGesture) {
-    const g = fireGesture;
-    fireGesture = null;
-    controls.enabled = true;
-    hoverAim = null;
-    downPos = null;
-    // 내 전차를 "탭" = 사격 모드 토글 (드래그 없이 목표를 탭해서 조준)
-    if (isTap && !g.cell) {
-      fireMode = !fireMode;
-      clearPending(true);
-      hideBowUI();
-      refreshPlanUI(fireMode);
-      setHint(fireMode ? '🎯 사격 모드 — 목표를 탭하세요' : '사격 모드 해제');
-      return;
-    }
-    hideBowUI();
-    if (g.cell && g.shot) {
-      enqueuePlan({ type: 'fire', cell: g.cell, shot: g.shot });
-    } else {
-      setHint('조준 취소');
-      refreshPlanUI(false);
-    }
-    return;
-  }
-  if (ghostGesture) {
-    const g = ghostGesture;
-    ghostGesture = null;
-    controls.enabled = true;
-    downPos = null;
-    setPointer(e);
-    // 포탑 조정 드래그였다면 미리보기에 반영만
-    if (g.adjust && pendingPlan?.type === 'move') {
-      pendingPlan.turretYaw = g.turretYaw;
-      return;
-    }
-    // 취소는 "출발 셀로 되돌려 놓았을 때"만
-    const gh = raycaster.intersectObject(terrainMesh, false)[0];
-    const rc = gh ? worldToCell(gh.point) : null;
-    if (rc && rc.gx === g.origin.gx && rc.gz === g.origin.gz) {
-      ghost.visible = false;
-      setHint('이동 취소');
-      return;
-    }
-    if (isTap) {
-      // 탭 = 미리보기 + ✓ 확정 대기 (모바일 2단계)
-      pendingPlan = {
-        type: 'move', path: g.info.path.slice(), facing: null, turretYaw: g.turretYaw,
-        endDir: g.info.endDir, cell: g.cell, info: g.info, facingRad: g.facing, origin: g.origin,
-      };
-      setConfirm(true, '✓ 이동');
-      setHint('고스트를 드래그해 포탑 방향 조정 · ✓로 확정');
-      return;
-    }
-    enqueuePlan({ type: 'move', path: g.info.path.slice(), facing: null, turretYaw: g.turretYaw, endDir: g.info.endDir });
-    return;
-  }
-  if (!downPos) return;
   downPos = null;
   if (!isTap || busy || phase !== 'plan') return;
   setPointer(e);
-  // 사격 모드: 목표 탭 → 탄도 미리보기 + ✓ 발사
-  if (fireMode) {
-    let cell = null;
-    const enemyHit = raycaster.intersectObjects(
-      enemies.filter((en) => en.alive && !en.hidden).map((en) => en.hitbox)
-    )[0];
-    if (enemyHit) {
-      const u = enemyHit.object.userData.unit;
-      cell = { gx: u.gx, gz: u.gz };
-    } else {
-      const bridgeHit = bridge.alive && bridge.hit ? raycaster.intersectObject(bridge.hit)[0] : null;
-      if (bridgeHit) cell = worldToCell(bridgeHit.point);
-      else {
-        const ground = raycaster.intersectObject(terrainMesh, false)[0];
-        if (ground) cell = worldToCell(ground.point);
-      }
-    }
-    if (!cell) return;
-    const f = currentFireCells.get(cellKey(cell.gx, cell.gz));
-    if (!f) { setHint('사격 불가 지점'); return; }
-    const aimP = aimPointOf({ gx: cell.gx, gz: cell.gz });
-    updateBowUI(aimP, f.shot);
-    pendingPlan = { type: 'fire', cell: { gx: cell.gx, gz: cell.gz }, shot: f.shot };
-    const fo2 = fireOrigin();
-    const d = Math.hypot(cell.gx - fo2.gx, cell.gz - fo2.gz).toFixed(0);
-    setConfirm(true, `✓ 발사 ${f.shot.chance}%`);
-    setHint(`${f.shot.lob ? '🌕 곡사' : '➡ 직사'} ${d}칸 · ${f.shot.chance}%`);
-    return;
-  }
-  // 탭 안내: 적을 탭하면 조작법 힌트
   const enemyHit = raycaster.intersectObjects(
     enemies.filter((en) => en.alive && !en.hidden).map((en) => en.hitbox)
   )[0];
   if (enemyHit) {
     setHint(hand.some((c) => !c.used && c.def.kind === 'fire')
-      ? '공격 카드를 선택하거나 내 전차를 탭하세요'
+      ? '공격 카드를 예약하면 🎲 주사위가 표적을 고릅니다'
       : '이번 라운드엔 공격 카드가 없습니다');
   }
 });
