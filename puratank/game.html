@@ -127,9 +127,60 @@
   #thumb-detail.show { display: block; }
   #thumb-detail b { color: #1d4ed8; }
 
-  /* 확정 바: 계획 미리보기 상태에서만 표시 — 탭 2단계 조작(모바일) */
+  /* 전술 카드 핸드: 덱 20장 → 5장 드로 → 최대 3장 순서 선택 */
+  #hand {
+    position: fixed; bottom: 12px; left: 50%;
+    transform: translateX(-50%);
+    display: flex; align-items: flex-end; gap: 8px;
+    z-index: 11;
+  }
+  #deck-pill {
+    width: 40px; height: 56px;
+    background: repeating-linear-gradient(135deg, #35507c, #35507c 6px, #2b4066 6px, #2b4066 12px);
+    border: 3px solid #2b3445; border-radius: 8px;
+    box-shadow: 0 3px 0 rgba(43,52,69,0.4);
+    color: #fff; font-size: 12px; font-weight: 800;
+    display: flex; align-items: center; justify-content: center;
+    text-shadow: 0 1px 2px #000;
+    flex-shrink: 0;
+  }
+  .card {
+    width: 64px; height: 88px;
+    background: #fdfaf3;
+    border: 3px solid #2b3445; border-radius: 10px;
+    box-shadow: 0 4px 0 rgba(43,52,69,0.4);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 2px; cursor: pointer; position: relative;
+    font-weight: 800; font-size: 12px; color: #2b3445;
+    transition: transform 0.12s;
+    flex-shrink: 0;
+  }
+  .card .ico { font-size: 21px; line-height: 1; }
+  .card .typ { font-size: 9px; font-weight: 700; color: #8b95a8; }
+  .card.move { border-color: #2f7ee0; }
+  .card.fire { border-color: #d0342c; }
+  .card.guard { border-color: #2e8b57; }
+  .card.active { transform: translateY(-10px); box-shadow: 0 0 0 3px #ffd24d, 0 6px 0 rgba(43,52,69,0.4); }
+  .card.used { opacity: 0.4; transform: translateY(5px); pointer-events: none; }
+  .card .slot {
+    position: absolute; top: -9px; right: -9px;
+    width: 22px; height: 22px; border-radius: 50%;
+    background: #2ea04f; color: #fff; border: 2px solid #2b3445;
+    font-size: 12px; font-weight: 800;
+    display: none; align-items: center; justify-content: center;
+  }
+  .card.used .slot { display: flex; }
+  @media (max-width: 640px) {
+    #hand { gap: 5px; bottom: 8px; }
+    .card { width: 54px; height: 74px; border-width: 2px; }
+    .card .ico { font-size: 18px; }
+    #deck-pill { width: 32px; height: 46px; font-size: 11px; }
+    #btn-settings { bottom: 96px; } /* 카드 핸드와 겹치지 않게 */
+  }
+
+  /* 확정 바: 계획 미리보기 상태에서만 표시 — 카드 핸드 위에 뜬다 */
   #confirm {
-    bottom: 24px; left: 50%;
+    bottom: 112px; left: 50%;
     transform: translateX(-50%);
     display: none;
     padding: 8px;
@@ -242,7 +293,6 @@
     <div><span id="turn-label">턴 1</span><span id="env-label"></span></div>
     <div id="crumb-row">
       <span id="crumbs"></span>
-      <button id="chip-ow" class="chip">👁 경계</button>
       <button id="chip-run" class="chip" hidden>▶ 실행</button>
       <button id="chip-undo" class="chip" hidden>✕</button>
     </div>
@@ -263,6 +313,7 @@
   <div id="confirm" class="panel">
     <button id="btn-ok">✓ 확정</button>
   </div>
+  <div id="hand"></div>
 
   <button id="btn-settings">⚙</button>
   <div id="settings">

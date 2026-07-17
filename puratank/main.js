@@ -1777,22 +1777,46 @@ function placeProp(type, gx, gz) {
   if (type === 'tree') group.scale.setScalar(0.82 + rng() * 0.55);
   else if (type === 'bush') group.scale.setScalar(0.85 + rng() * 0.5);
   // 클릭 판정용 히트박스
-  // 경사면 위 건물: 바닥과 기초 사이 틈을 나무 데크로 받친다
+  // 경사면 위 건물: 바닥 아래 빈 공간을 "다진 흙 기단 + 井자 목재 크립"으로
+  // 지면까지 메꾼다 — 기단은 최저 지면보다 더 깊이 파고들어 어느 면에서도
+  // 뜨지 않고, 노출된 옆면은 침목을 어긋나게 쌓은 크립이 감싼다.
   if (foot.length > 1) {
     let minH = Infinity;
     for (const [dx, dz] of foot) minH = Math.min(minH, heightAt(gx + dx, gz + dz));
     const gap = baseY - minH;
     if (gap > 0.14) {
-      const deckMat = new THREE.MeshStandardMaterial({ color: 0x7a5c3a, roughness: 0.95 });
-      const deck = new THREE.Mesh(new THREE.BoxGeometry(3.15, gap + 0.14, 2.35), deckMat);
-      deck.position.y = -(gap + 0.14) / 2 + 0.05;
-      deck.castShadow = true; deck.receiveShadow = true;
-      group.add(deck);
-      // 데크 널빤지 라인
-      for (let pi = 0; pi < 4; pi++) {
-        const plank = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.05, 0.09), new THREE.MeshStandardMaterial({ color: 0x5e452c, roughness: 0.95 }));
-        plank.position.set(0, 0.03, -0.9 + pi * 0.6);
-        group.add(plank);
+      const earthMat = new THREE.MeshStandardMaterial({ color: 0x6b5334, roughness: 1, envMapIntensity: 0 });
+      const timberMat = new THREE.MeshStandardMaterial({ color: 0x6a4c2e, roughness: 0.95 });
+      const H = gap + 0.55; // 밑단이 최저 지면보다 0.4+ 아래 — 틈 없음
+      const plinth = new THREE.Mesh(new THREE.BoxGeometry(3.3, H, 2.5), earthMat);
+      plinth.position.y = -H / 2 + 0.06;
+      plinth.castShadow = true; plinth.receiveShadow = true;
+      group.add(plinth);
+      const skirt = new THREE.Mesh(new THREE.BoxGeometry(3.7, H * 0.45, 2.9), earthMat);
+      skirt.position.y = -H + H * 0.225 + 0.06; // 바닥쪽 더 넓은 단 — 다진 흙 둔덕
+      skirt.castShadow = true; skirt.receiveShadow = true;
+      group.add(skirt);
+      // 井자 침목 크립: 층마다 방향을 어긋 쌓아 노출면을 감싼다
+      const layers = Math.min(9, Math.ceil(gap / 0.19) + 1);
+      for (let li = 0; li < layers; li++) {
+        const y = -0.06 - li * 0.19;
+        if (li % 2 === 0) {
+          for (const s of [-1, 1]) {
+            const beam = new THREE.Mesh(new THREE.BoxGeometry(3.62, 0.15, 0.17), timberMat);
+            beam.position.set(0, y, s * 1.3);
+            beam.rotation.y = (rng() - 0.5) * 0.03;
+            beam.castShadow = true;
+            group.add(beam);
+          }
+        } else {
+          for (const s of [-1, 1]) {
+            const beam = new THREE.Mesh(new THREE.BoxGeometry(0.17, 0.15, 2.82), timberMat);
+            beam.position.set(s * 1.72, y, 0);
+            beam.rotation.y = (rng() - 0.5) * 0.03;
+            beam.castShadow = true;
+            group.add(beam);
+          }
+        }
       }
     }
   }
@@ -2945,7 +2969,8 @@ function spawnUnit(isPlayer, gx, gz, facing) {
   const maxHp = (isPlayer ? 110 : 60) + hullLv * 15;
   const unit = {
     isPlayer, gx, gz, kitKey,
-    gun: KIT_INFO[kitKey].gun,
+    // 카드 모드: 플레이어는 재장전이 없다 — 공격 빈도는 덱의 공격 카드 수가 제한
+    gun: isPlayer ? { ...KIT_INFO[kitKey].gun, reload: 0 } : KIT_INFO[kitKey].gun,
     reloadLeft: 0,
     movedLastTurn: false,
     aimStack: 0,
@@ -3340,7 +3365,10 @@ function groundPitch(unit) {
 }
 // 차체를 양쪽 궤도 접지에 맞춰 지형에 정렬 — 전후 피치 + 좌우 롤.
 // 4점(전좌/전우/후좌/후우) 궤도 접지 높이로 계산한다.
-function alignToGround(unit) {
+// 4점 궤도 접지에서 차체 목표 자세 산출.
+// rotation.order='YXZ'에서 로컬 전방 y성분 = −sin(pitch), 로컬 우측 y성분 =
+// +sin(roll) — 앞이 높으면 pitch<0(기수 들림), 오른쪽이 높으면 roll>0.
+function groundPose(unit) {
   const ry = unit.group.rotation.y;
   const fx = Math.sin(ry), fz = Math.cos(ry);   // 전방
   const rx = Math.cos(ry), rz = -Math.sin(ry);  // 우측
@@ -3350,10 +3378,37 @@ function alignToGround(unit) {
   const hFR = driveHeight(p.x + fx * F + rx * S, p.z + fz * F + rz * S);
   const hBL = driveHeight(p.x - fx * F - rx * S, p.z - fz * F - rz * S);
   const hBR = driveHeight(p.x - fx * F + rx * S, p.z - fz * F + rz * S);
-  const pitch = THREE.MathUtils.clamp(Math.atan2((hBL + hBR) / 2 - (hFL + hFR) / 2, 2 * F), -0.45, 0.45);
-  const roll = THREE.MathUtils.clamp(Math.atan2((hFL + hBL) / 2 - (hFR + hBR) / 2, 2 * S), -0.4, 0.4);
-  unit.group.rotation.x = pitch;
-  unit.group.rotation.z = roll;
+  return {
+    pitch: THREE.MathUtils.clamp(Math.atan2((hBL + hBR) / 2 - (hFL + hFR) / 2, 2 * F), -0.45, 0.45),
+    roll: THREE.MathUtils.clamp(Math.atan2((hFR + hBR) / 2 - (hFL + hBL) / 2, 2 * S), -0.4, 0.4),
+    y: driveHeight(p.x, p.z),
+  };
+}
+function alignToGround(unit) { // 즉시 스냅 (스폰/크레이터 침하 등)
+  const g = groundPose(unit);
+  unit.group.rotation.x = g.pitch;
+  unit.group.rotation.z = g.roll;
+  if (unit._suspVel) { unit._suspVel.p = 0; unit._suspVel.r = 0; }
+}
+// 로드휠 서스펜션: 차체가 지형 자세를 감쇠 스프링으로 따라간다 —
+// 둔덕을 넘을 때 순간 스냅 대신 출렁이며 자세를 잡고(약한 언더댐핑),
+// 크레이터로 발밑이 꺼져도 부드럽게 내려앉는다.
+function updateSuspension(dt) {
+  for (const u of units) {
+    if (!u.alive) continue;
+    const g = groundPose(u);
+    u._suspVel ??= { p: 0, r: 0 };
+    const K = 42, D = 9.5;
+    const rot = u.group.rotation;
+    u._suspVel.p += (g.pitch - rot.x) * K * dt;
+    u._suspVel.r += (g.roll - rot.z) * K * dt;
+    const dmp = Math.exp(-D * dt);
+    u._suspVel.p *= dmp; u._suspVel.r *= dmp;
+    rot.x += u._suspVel.p * dt;
+    rot.z += u._suspVel.r * dt;
+    // 주행 트윈이 y를 직접 굴리는 동안은 높이엔 손대지 않는다
+    if (!u._driving) u.group.position.y += (g.y - u.group.position.y) * Math.min(1, dt * 8);
+  }
 }
 // 조준 방향의 차체 기울기(도) — 포신 부앙각 한계가 차체 자세에 실려 움직인다.
 // 오르막을 등지면 포를 더 들 수 있고, 내리막을 향하면 더 숙일 수 있다.
@@ -3390,6 +3445,7 @@ async function moveUnit(unit, path, finalFacing = null, onStep = null) {
     fallbackRev = path.length <= 5 && turnNeed > Math.PI * 0.6;
   }
   if (path.length) engineOn(); // 주행 중 디젤 럼블
+  unit._driving = true;
   try {
   for (const cell of path) {
     if (!unit.alive) return; // 이동 중 경계 사격에 격파되면 그 자리에서 정지
@@ -3406,7 +3462,7 @@ async function moveUnit(unit, path, finalFacing = null, onStep = null) {
       const x = THREE.MathUtils.lerp(from.x, to.x, e);
       const z = THREE.MathUtils.lerp(from.z, to.z, e);
       unit.group.position.set(x, driveHeight(x, z) + Math.sin(e * Math.PI) * 0.08, z);
-      alignToGround(unit);
+      // 자세는 updateSuspension의 감쇠 스프링이 따라온다 (스냅 없음)
       // 궤도 자국: 지수 평활 점을 따라 그린다 — 8방향 꺾임이 부드러운
       // 곡선으로 뭉개지고, 이따금 끊겨 자연스러운 자국이 된다
       unit._trailSm.x += (x - unit._trailSm.x) * 0.32;
@@ -3434,9 +3490,8 @@ async function moveUnit(unit, path, finalFacing = null, onStep = null) {
     tryPickupItem(unit); // 아이템 위를 지나면 획득
     if (onStep) onStep(unit);
   }
-  } finally { if (path.length) engineOff(); }
-  // 이동이 끝나면 차체는 마지막 진행 방향 그대로 — 추가 제자리 선회 없음
-  alignToGround(unit);
+  } finally { unit._driving = false; if (path.length) engineOff(); }
+  // 이동이 끝나면 차체는 마지막 진행 방향 그대로 — 자세/높이는 서스펜션이 정착
   if (hullDownCells.has(cellKey(unit.gx, unit.gz))) {
     popText(unit.group.position, '🛡 헐다운', '#ffd76e');
   }
@@ -4033,6 +4088,51 @@ function destroyToWreck(unit) {
         spin: new THREE.Vector3(rng() * 12 - 6, rng() * 12 - 6, rng() * 12 - 6),
       });
     }
+    // 하부 파괴 (60%): 폭압이 차체 아래로 빠지면 궤도가 링크 단위로 분해되어
+    // 좌우로 흩어지고 로드휠이 옆으로 굴러 나간다
+    if (rng() < 0.6) {
+      const ry = unit.group.rotation.y;
+      const rxs = Math.cos(ry), rzs = -Math.sin(ry); // 우측
+      const fxs = Math.sin(ry), fzs = Math.cos(ry);  // 전방
+      const linkGeo = new THREE.BoxGeometry(0.34, 0.07, 0.2);
+      const linkMat = new THREE.MeshStandardMaterial({ color: 0x2e333d, roughness: 0.95, metalness: 0.25 });
+      for (let li = 0; li < 14; li++) {
+        const side = li % 2 ? 1 : -1;
+        const t = (li / 14 - 0.5) * 1.7;
+        const mesh = new THREE.Mesh(linkGeo, linkMat);
+        mesh.position.set(
+          wp0.x + rxs * side * 0.62 + fxs * t,
+          wp0.y + 0.22,
+          wp0.z + rzs * side * 0.62 + fzs * t
+        );
+        mesh.rotation.set(rng() * 3, ry, rng() * 3);
+        mesh.castShadow = true;
+        scene.add(mesh);
+        pieces.push({
+          mesh,
+          vel: new THREE.Vector3(
+            rxs * side * (1.2 + rng() * 2.4) + (rng() - 0.5),
+            2.0 + rng() * 2.6,
+            rzs * side * (1.2 + rng() * 2.4) + (rng() - 0.5)
+          ),
+          spin: new THREE.Vector3(rng() * 10 - 5, rng() * 10 - 5, rng() * 10 - 5),
+        });
+      }
+      const wheelMat = new THREE.MeshStandardMaterial({ color: 0x424a58, roughness: 0.85 });
+      for (let wi = 0; wi < 2 + Math.floor(rng() * 2); wi++) {
+        const side = wi % 2 ? 1 : -1;
+        const wheel = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.24, 0.1, 12), wheelMat);
+        wheel.position.set(wp0.x + rxs * side * 0.72, wp0.y + 0.3, wp0.z + rzs * side * 0.72);
+        wheel.rotation.set(0, ry, Math.PI / 2); // 옆으로 선 자세 — 굴러 나간다
+        wheel.castShadow = true;
+        scene.add(wheel);
+        pieces.push({
+          mesh: wheel,
+          vel: new THREE.Vector3(rxs * side * (2.4 + rng() * 2), 1.6 + rng() * 1.4, rzs * side * (2.4 + rng() * 2)),
+          spin: new THREE.Vector3(9 + rng() * 6, 0, 0),
+        });
+      }
+    }
     let trailT = 0;
     const dtOf = kDt(2200);
     tween(2200, (e, k) => {
@@ -4318,7 +4418,8 @@ async function applyUnitDamage(target, rawDmg, fromPos = null) {
     else if (rel >= 120) { aspectMult = 1.5; aspectLabel = '후면 직격'; aspectColor = '#ff6a5e'; }
     else { aspectMult = 1.2; aspectLabel = '측면 관통'; aspectColor = '#ffb454'; }
   }
-  const dmg = Math.round(rawDmg * aspectMult * (1 - 0.07 * target.hullLv)); // 차체 레벨 = 장갑
+  // 차체 레벨 = 장갑, 엄호 태세는 피해 40% 경감
+  const dmg = Math.round(rawDmg * aspectMult * (1 - 0.07 * target.hullLv) * (target._braced ? 0.6 : 1));
   target.hp -= dmg;
   updateHpBar(target);
   if (target.isPlayer) updatePlayerHpUI();
@@ -4555,9 +4656,14 @@ async function fireSequence(attacker, target, shot) {
     recoilGun.position.set(recoilBase.x - rfx * d, recoilBase.y, recoilBase.z - rfz * d);
   }, linear);
 
-  // 명중 굴림
+  // 명중 굴림 — 🎲 라운드 운 보정: 플레이어 +2/점 (+엄호 조준 보너스), 적 −1/점
+  const luckAdj = attacker.isPlayer
+    ? roundLuckMod * 2 + (attacker.braceAim ?? 0)
+    : -roundLuckMod;
+  if (attacker.isPlayer) attacker.braceAim = 0;
+  const effChance = THREE.MathUtils.clamp(shot.chance + luckAdj, 3, 97);
   const roll = Math.random() * 100;
-  const hit = roll < shot.chance;
+  const hit = roll < effChance;
   let impact = aim.clone();
   if (!hit) {
     const a = Math.random() * Math.PI * 2;
@@ -5045,7 +5151,6 @@ function sfx(kind) {
 const turnLabel = document.getElementById('turn-label');
 const hintEl = document.getElementById('hint');
 const crumbsEl = document.getElementById('crumbs');
-const chipOw = document.getElementById('chip-ow');
 const chipRun = document.getElementById('chip-run');
 const chipUndo = document.getElementById('chip-undo');
 document.getElementById('env-label').textContent = ` · ${WX_LABEL} · ${TOD_LABEL}`;
@@ -5245,7 +5350,7 @@ function showGhost(cell, facing, turretYaw = null) {
 }
 
 // 다중 턴 계획: 한 번에 최대 3턴 예약 (아래 예약 고스트 풀이 참조)
-const PLAN_AHEAD = 2;
+const PLAN_AHEAD = 3; // 카드 3장 = 한 라운드 3서브턴
 // 예약 고스트 풀: 예약된 각 이동의 도착 자세를 옅은 홀로그램으로 미리 보여준다
 const queueGhostMat = new THREE.MeshBasicMaterial({
   color: 0x7fd4c8, transparent: true, opacity: 0.26, depthWrite: false,
@@ -5483,11 +5588,131 @@ function withProjectedPlayer(fn) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// 전술 카드 덱 — 완전한 가위바위보: 전술은 정해져 있고, 조합·순서만 고른다.
+// 덱 20장(공격은 5장뿐), 라운드마다 5장 드로 → 최대 3장을 순서대로 사용.
+// 실행 시 주사위 2개(2d6)로 운을 굴린다 — 잘 나오면 명중·전술 보정.
+// ---------------------------------------------------------------------------
+const CARD_DEFS = {
+  adv: { key: 'adv', label: '전진', ico: '⬆️', kind: 'move', arc: 'fwd', typ: '이동', cls: 'move' },
+  side: { key: 'side', label: '횡보', ico: '↔️', kind: 'move', arc: 'side', typ: '이동', cls: 'move' },
+  back: { key: 'back', label: '후퇴', ico: '⬇️', kind: 'move', arc: 'back', typ: '이동', cls: 'move' },
+  direct: { key: 'direct', label: '직격', ico: '🎯', kind: 'fire', lob: false, typ: '공격', cls: 'fire' },
+  lob: { key: 'lob', label: '곡사', ico: '🌕', kind: 'fire', lob: true, typ: '공격', cls: 'fire' },
+  brace: { key: 'brace', label: '엄호', ico: '🛡️', kind: 'brace', typ: '방어', cls: 'guard' },
+  ow: { key: 'ow', label: '경계', ico: '👁️', kind: 'overwatch', typ: '경계', cls: 'guard' },
+};
+const DECK_LIST = [
+  'adv', 'adv', 'adv', 'adv', 'side', 'side', 'side', 'back', 'back', 'back',
+  'direct', 'direct', 'direct', 'lob', 'lob', 'brace', 'brace', 'ow', 'ow', 'ow',
+];
+let drawPile = shuffle(DECK_LIST.slice());
+let discardPile = [];
+let hand = [];          // [{ def, used, slot }]
+let activeCard = null;  // 선택 중인 카드 — 필드가 이 카드 제약으로 좁아진다
+let roundLuckMod = 0;   // 2d6 − 7: 플레이어 명중 +2/점, 적 명중 −1/점, 적 예측 흔들림
+const handEl = document.getElementById('hand');
+function shuffle(a) {
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+function drawHand() {
+  discardPile.push(...hand.map((c) => c.def.key)); // 안 쓴 카드도 버림 (매 라운드 새 패)
+  hand = [];
+  activeCard = null;
+  for (let i = 0; i < 5; i++) {
+    if (!drawPile.length) { drawPile = shuffle(discardPile); discardPile = []; }
+    if (!drawPile.length) break;
+    hand.push({ def: CARD_DEFS[drawPile.pop()], used: false, slot: 0 });
+  }
+  renderHand();
+}
+function renderHand() {
+  if (!handEl) return;
+  handEl.innerHTML = '';
+  const pill = document.createElement('div');
+  pill.id = 'deck-pill';
+  pill.textContent = String(drawPile.length);
+  pill.title = '남은 덱';
+  handEl.appendChild(pill);
+  for (const c of hand) {
+    const el = document.createElement('div');
+    el.className = `card ${c.def.cls}${c.used ? ' used' : ''}${activeCard === c ? ' active' : ''}`;
+    el.innerHTML = `<span class="ico">${c.def.ico}</span>${c.def.label}<span class="typ">${c.def.typ}</span><span class="slot">${c.slot || ''}</span>`;
+    el.addEventListener('click', () => cardClick(c));
+    handEl.appendChild(el);
+  }
+}
+function cardClick(c) {
+  if (phase !== 'plan' || busy || c.used) return;
+  if (c.def.kind === 'brace' || c.def.kind === 'overwatch') {
+    // 목표가 필요 없는 카드 — 탭 즉시 예약
+    activeCard = null;
+    clearPending();
+    enqueuePlan({ type: c.def.kind, _card: c });
+    return;
+  }
+  // 이동/공격 카드: 토글 선택 — 필드가 이 카드의 방향/탄종으로 좁아진다
+  activeCard = activeCard === c ? null : c;
+  clearPending(true);
+  fireMode = activeCard?.def.kind === 'fire';
+  renderHand();
+  refreshPlanUI(fireMode);
+  if (activeCard) {
+    setHint(activeCard.def.kind === 'fire'
+      ? `${activeCard.def.ico} ${activeCard.def.label} — 목표를 탭하세요`
+      : `${activeCard.def.ico} ${activeCard.def.label} — 도착 칸을 탭하세요`);
+  }
+}
+// 셀이 어느 이동 카드 방향인지: 투영 원점·차체 방향 기준 전방 ≤65° / 측면 / ≥115° 후방
+function moveArcOf(o, faceRad, gx, gz) {
+  const rel = Math.abs(normAngle(Math.atan2(gx - o.gx, gz - o.gz) - faceRad)) * (180 / Math.PI);
+  return rel <= 65 ? 'fwd' : rel < 115 ? 'side' : 'back';
+}
+// 방금 만든 플랜에 맞는 미사용 카드 찾기 (드래그 조작의 자동 소비)
+function findCardFor(plan) {
+  if (plan.type === 'move') {
+    const o = projectedOrigin();
+    const last = plan.path[plan.path.length - 1];
+    const arc = moveArcOf(o, dirAngle(o.dir), last.gx, last.gz);
+    return hand.find((c) => !c.used && c.def.kind === 'move' && c.def.arc === arc) ?? null;
+  }
+  if (plan.type === 'fire') {
+    return hand.find((c) => !c.used && c.def.kind === 'fire' && c.def.lob === !!plan.shot.lob) ?? null;
+  }
+  return null;
+}
+
 function refreshPlanUI(fireEmphasis = false) {
   if (phase !== 'plan') return;
   const o = withProjectedPlayer((o) => {
     currentMoveCells = reachableCells(player);
     currentFireCells = o.reload > 0 ? new Map() : computeFireCells(player);
+    // 카드 게이트: 손패의 남은 카드(또는 선택한 카드)가 허용하는
+    // 이동 방향·탄종만 필드에 남긴다 — 카드가 없는 행동은 불가능
+    {
+      const face = dirAngle(o.dir);
+      const moveArcs = new Set(
+        (activeCard ? [activeCard] : hand.filter((c) => !c.used))
+          .filter((c) => c.def.kind === 'move').map((c) => c.def.arc)
+      );
+      const fireLobs = new Set(
+        (activeCard ? [activeCard] : hand.filter((c) => !c.used))
+          .filter((c) => c.def.kind === 'fire').map((c) => c.def.lob)
+      );
+      const mv = new Map();
+      for (const [k, info] of currentMoveCells) {
+        const [gx, gz] = k.split(',').map(Number);
+        if (moveArcs.has(moveArcOf(o, face, gx, gz))) mv.set(k, info);
+      }
+      currentMoveCells = mv;
+      const fr = new Map();
+      for (const [k, f] of currentFireCells) if (fireLobs.has(!!f.shot.lob)) fr.set(k, f);
+      currentFireCells = fr;
+    }
     clearHighlights();
     showMoveField(currentMoveCells, !fireEmphasis);
     showFireField(currentFireCells, fireEmphasis);
@@ -5503,23 +5728,23 @@ function refreshPlanUI(fireEmphasis = false) {
   renderCrumbs();
 }
 
-// 상단 breadcrumb: 예약 슬롯 [① 이동 ▸ ② 사격] + 액션 칩 (경계/실행/취소)
-const PLAN_LABEL = { move: '🚚 이동', fire: '🎯 사격', overwatch: '👁 경계', wait: '⏸ 대기' };
+// 상단 breadcrumb: 카드 슬롯 [① 전진 ▸ ② 직격 ▸ ③ 경계] + 실행/취소 칩
+const PLAN_LABEL = { move: '🚚 이동', fire: '🎯 사격', overwatch: '👁 경계', wait: '⏸ 대기', brace: '🛡 엄호' };
+const planLabelOf = (q) => q._card ? `${q._card.def.ico} ${q._card.def.label}` : PLAN_LABEL[q.type];
 function renderCrumbs() {
   let html = '';
   for (let i = 0; i < PLAN_AHEAD; i++) {
     if (i > 0) html += '<span class="crumb-sep">▸</span>';
     const q = planQueue[i];
-    if (q) html += `<span class="crumb">${i + 1} ${PLAN_LABEL[q.type]}</span>`;
+    if (q) html += `<span class="crumb">${i + 1} ${planLabelOf(q)}</span>`;
     else if (i === planQueue.length && pendingPlan) html += `<span class="crumb pending">${i + 1} ${PLAN_LABEL[pendingPlan.type]}?</span>`;
     else html += `<span class="crumb empty">${i + 1} ·</span>`;
   }
   crumbsEl.innerHTML = html;
   const planning = phase === 'plan' && !busy;
-  chipRun.hidden = !(planning && planQueue.length > 0);
-  chipUndo.hidden = !(planning && (planQueue.length > 0 || pendingPlan || fireMode));
-  chipOw.hidden = !planning;
-  chipOw.textContent = projReload > 0 ? '⏸ 대기' : '👁 경계';
+  chipRun.hidden = !planning;
+  chipRun.textContent = planQueue.length ? `▶ 실행 (${planQueue.length})` : '⏭ 건너뛰기';
+  chipUndo.hidden = !(planning && (planQueue.length > 0 || pendingPlan || fireMode || activeCard));
 }
 
 function startPlanning() {
@@ -5532,6 +5757,7 @@ function startPlanning() {
   ghost.visible = false;
   hideBowUI();
   turnLabel.textContent = `턴 ${turnNo}`;
+  drawHand(); // 새 라운드 — 손패 5장 다시 드로
   refreshPlanUI();
 }
 
@@ -5547,6 +5773,20 @@ async function submitPlan(plan) {
 // 인터랙티브: 플랜을 큐에 예약. 3턴 차거나 이동할 칸이 없으면 자동 실행.
 function enqueuePlan(plan) {
   if (phase !== 'plan' || busy) return;
+  // 카드 소비: 이동/사격은 방향·탄종이 맞는 손패 카드가 있어야 한다.
+  // (_card가 이미 붙은 플랜 = 카드 탭 예약, _test = 테스트 훅 우회)
+  if (!plan._card && !plan._test && (plan.type === 'move' || plan.type === 'fire')) {
+    const card = (activeCard && !activeCard.used) ? activeCard : findCardFor(plan);
+    if (!card) { setHint('사용할 카드가 없습니다'); return; }
+    plan._card = card;
+  }
+  if (plan._card) {
+    plan._card.used = true;
+    plan._card.slot = planQueue.length + 1;
+    if (activeCard === plan._card) activeCard = null;
+    fireMode = false;
+    renderHand();
+  }
   planQueue.push(plan);
   if (planQueue.length >= PLAN_AHEAD) { resolveQueue(); return; }
   ghost.visible = false;
@@ -5558,6 +5798,15 @@ function enqueuePlan(plan) {
 async function resolveQueue() {
   if (phase !== 'plan' || busy || !planQueue.length) return;
   clearPending();
+  // 🎲 운 굴림 (2d6): 라운드 전체에 적용 — 7 초과분만큼 유리해진다.
+  // 플레이어 명중 +2/점, 적 명중 −1/점, 3+ 차이면 적의 리드 예측도 흔들린다.
+  const d1 = 1 + Math.floor(Math.random() * 6);
+  const d2 = 1 + Math.floor(Math.random() * 6);
+  roundLuckMod = d1 + d2 - 7;
+  const lp = player.group.position.clone();
+  lp.y += 2.4;
+  popText(lp, `🎲 ${d1}+${d2}`, roundLuckMod > 0 ? '#8de08a' : roundLuckMod < 0 ? '#ff9a8a' : '#e8e4d8');
+  setHint(`🎲 ${d1}+${d2}=${d1 + d2} ${roundLuckMod > 0 ? `— 행운 +${roundLuckMod}` : roundLuckMod < 0 ? `— 불운 ${roundLuckMod}` : ''}`);
   const queue = planQueue;
   planQueue = [];
   ghost.visible = false;
@@ -5577,6 +5826,8 @@ async function resolveQueue() {
 //  Lv1: 현재 칸 조준 / Lv2: 절반 리드 + 굴착 + 경계 / Lv3: 완전 외삽 리드
 let playerLastMove = null;
 function predictPlayerCell(lvl) {
+  // 🎲 운이 크게 좋으면 적 예측이 한 급 둔해지고, 크게 나쁘면 예리해진다
+  lvl = THREE.MathUtils.clamp(lvl + (roundLuckMod >= 3 ? -1 : roundLuckMod <= -3 ? 1 : 0), 1, 3);
   if (lvl <= 1 || !playerLastMove) return { gx: player.gx, gz: player.gz };
   const f = lvl >= 3 ? 1 : 0.5;
   return {
@@ -5588,6 +5839,7 @@ function planEnemies() {
   for (const enemy of enemies) {
     if (!enemy.alive) continue;
     enemy.plan = null;
+    enemy._plannedCell = { gx: enemy.gx, gz: enemy.gz }; // 이번 턴 도착 예정 칸 (기본: 제자리)
     const lvl = enemy.driverLv;
     // 안개·폭우: 시야 밖 플레이어는 조준 불가 — 소리로 대충 접근만 한다
     const canSee = Math.hypot(enemy.gx - player.gx, enemy.gz - player.gz) <= VIS_LIMIT;
@@ -5627,6 +5879,21 @@ function planEnemies() {
     }
     const cells = reachableCells(enemy);
     let best = null;
+    // 편대 간격: 아군끼리 뭉치면 파편 직격·스플래시 연쇄로 자멸한다 —
+    // 서로 4~7칸 간격을 유지하도록 근접 도착지를 강하게 감점.
+    // 먼저 계획한 아군의 "도착 예정 칸"(_plannedCell)도 피한다.
+    const sepPenalty = (gx, gz) => {
+      let pen = 0;
+      for (const o of enemies) {
+        if (o === enemy || !o.alive) continue;
+        const tx = o._plannedCell?.gx ?? o.gx, tz = o._plannedCell?.gz ?? o.gz;
+        const d = Math.hypot(gx - tx, gz - tz);
+        if (d < 2.5) pen += 90;       // 파편 직격권 — 사실상 금지
+        else if (d < 4.5) pen += 45;  // 폭발 스플래시 겹침
+        else if (d < 7) pen += 14;    // 편대 간격 유지
+      }
+      return pen;
+    };
     // 장갑 방향 관리: 도착 자세가 플레이어에게 측면(×1.2)/후면(×1.5)을
     // 내주면 감점 — 레벨이 높을수록 예민하게 전면을 유지한다 (Lv1은 무시)
     const sidePen = (lvl - 1) * 10, rearPen = (lvl - 1) * 22;
@@ -5643,14 +5910,20 @@ function planEnemies() {
       const distP = Math.hypot(gx - player.gx, gz - player.gz);
       let score = sShot.ok ? 200 + sShot.chance - info.cost * 2 : 100 - distP * 5 - info.cost;
       score -= exposurePenalty(gx, gz, info.endDir);
-      if (!best || score > best.score) best = { score, info };
+      score -= sepPenalty(gx, gz);
+      if (!best || score > best.score) best = { score, info, gx, gz };
     }
     // 제자리 대기도 후보로 평가 — 지금 자세가 이미 노출이면 이동이 이긴다
     const stayScore = 100 - Math.hypot(enemy.gx - player.gx, enemy.gz - player.gz) * 5
-      - exposurePenalty(enemy.gx, enemy.gz, facingDir(enemy));
+      - exposurePenalty(enemy.gx, enemy.gz, facingDir(enemy))
+      - sepPenalty(enemy.gx, enemy.gz);
     if (best && best.info.path.length && best.score > stayScore) {
       enemy.plan = { type: 'move', path: best.info.path.slice(), facing: null };
-    } else enemy.plan = { type: 'wait' };
+      enemy._plannedCell = { gx: best.gx, gz: best.gz };
+    } else {
+      enemy.plan = { type: 'wait' };
+      enemy._plannedCell = { gx: enemy.gx, gz: enemy.gz };
+    }
   }
 }
 
@@ -5785,6 +6058,15 @@ async function resolveOneTurn() {
   // 포탑 사전 추적 없음 — 포탑은 사격 시작 시(aimAt의 선회 애니메이션)와
   // 이동 도착 시(드래그로 지정한 turretYaw 정렬)에만 돈다.
   for (const u of units) u._track = null;
+  // 엄호 카드: 이번 서브턴 받는 피해 ×0.6 + 다음 사격 명중 +10
+  for (const u of units) {
+    u._braced = false;
+    if (u.alive && u.plan?.type === 'brace') {
+      u._braced = true;
+      u.braceAim = 10;
+      popText(u.group.position.clone().add(new THREE.Vector3(0, 1.4, 0)), '🛡 엄호 태세', '#bfe3ff');
+    }
+  }
   // A) 경계망 구성: 이동 스텝마다 상대편 경계자의 사선을 체크,
   //    걸리면 이동 중 "실시간" 스냅 사격 (경계자당 1회, 스냅 페널티)
   const overwatchers = units.filter((u) => u.alive && u.plan?.type === 'overwatch' && u.reloadLeft <= 0);
@@ -5897,16 +6179,12 @@ function checkGameEnd() {
   return false;
 }
 
-// 경계도 이동·사격과 같은 "1턴 액션" — 큐에 쌓인다 (두 턴 연속 경계 가능)
-chipOw.addEventListener('click', () => {
+// ▶ 실행: 고른 카드들을 순서대로 해결. 아무것도 안 골랐으면 라운드 건너뛰기.
+chipRun.addEventListener('click', () => {
   if (phase !== 'plan' || busy) return;
   clearPending();
-  enqueuePlan(projReload > 0 ? { type: 'wait' } : { type: 'overwatch' });
-});
-chipRun.addEventListener('click', () => {
-  if (phase !== 'plan' || busy || !planQueue.length) return;
-  clearPending();
-  resolveQueue();
+  if (planQueue.length) resolveQueue();
+  else submitPlan({ type: 'wait' });
 });
 chipUndo.addEventListener('click', () => cancelAction());
 
@@ -6146,17 +6424,29 @@ renderer.domElement.addEventListener('pointerup', async (e) => {
   const enemyHit = raycaster.intersectObjects(
     enemies.filter((en) => en.alive && !en.hidden).map((en) => en.hitbox)
   )[0];
-  if (enemyHit) setHint('내 전차를 탭하면 🎯 사격 모드');
+  if (enemyHit) {
+    setHint(hand.some((c) => !c.used && c.def.kind === 'fire')
+      ? '공격 카드를 선택하거나 내 전차를 탭하세요'
+      : '이번 라운드엔 공격 카드가 없습니다');
+  }
 });
 
 // 취소 동작 (ESC / 모바일 ✕ 버튼 공용): 진행 중 제스처 → 마지막 예약 순
 function cancelAction() {
   if (fireGesture) { fireGesture = null; hideBowUI(); hoverAim = null; controls.enabled = true; downPos = null; refreshPlanUI(false); setHint('취소'); return; }
   if (ghostGesture) { ghostGesture = null; ghost.visible = false; controls.enabled = true; downPos = null; refreshPlanUI(false); setHint('취소'); return; }
-  if (pendingPlan || fireMode) { clearPending(); refreshPlanUI(false); setHint('취소'); return; }
+  if (pendingPlan || fireMode || activeCard) {
+    activeCard = null;
+    clearPending();
+    renderHand();
+    refreshPlanUI(false);
+    setHint('취소');
+    return;
+  }
   if (phase === 'plan' && !busy && planQueue.length) {
-    planQueue.pop();
-    setHint(`예약 취소 (${planQueue.length}턴 남음)`);
+    const popped = planQueue.pop();
+    if (popped?._card) { popped._card.used = false; popped._card.slot = 0; renderHand(); }
+    setHint(`예약 취소 (${planQueue.length}장 남음)`);
     refreshPlanUI(false);
   }
 }
@@ -6300,6 +6590,7 @@ function animate(now) {
   windUniform.value = now * 0.001 * ENV.windSpeed; // 식생 바람 (날씨별 풍속)
   sparkleTex.offset.set((now * 0.000021) % 1, (now * -0.000013) % 1); // 윤슬 흐름
   updateAntennas(dt); // RC 안테나 대롱대롱
+  updateSuspension(dt); // 로드휠 서스펜션 — 차체가 지형을 출렁이며 따라간다
   updateWreckFires(now); // 격파 잔해 화재/매연
   updateRain(dt); // 비/폭우 빗줄기
   updateLightning(dt); // 폭우 번개
@@ -6354,13 +6645,14 @@ window.__puratank = {
   },
   fireCells: () => [...computeFireCells(player).keys()],
   planMoveTo(gx, gz, facing = null) {
-    const info = currentMoveCells.get(cellKey(gx, gz));
+    // 테스트 훅: 카드 필터를 우회 — 원본 도달 셀에서 직접 찾는다
+    const info = reachableCells(player).get(cellKey(gx, gz));
     if (!info || phase !== 'plan' || busy) return false;
     submitPlan({ type: 'move', path: info.path.slice(), facing: facing ?? dirAngle(info.endDir) });
     return true;
   },
   planFireAt(gx, gz) {
-    const f = currentFireCells.get(cellKey(gx, gz));
+    const f = computeFireCells(player).get(cellKey(gx, gz));
     if (!f || phase !== 'plan' || busy) return false;
     submitPlan({ type: 'fire', cell: { gx, gz }, shot: f.shot });
     return true;
@@ -6377,9 +6669,9 @@ window.__puratank = {
   },
   // 다중 턴 예약 테스트용
   queueMoveTo(gx, gz) {
-    const info = currentMoveCells.get(cellKey(gx, gz));
+    const info = withProjectedPlayer(() => reachableCells(player)).get(cellKey(gx, gz));
     if (!info || phase !== 'plan' || busy) return false;
-    enqueuePlan({ type: 'move', path: info.path.slice(), facing: null, turretYaw: dirAngle(info.endDir), endDir: info.endDir });
+    enqueuePlan({ type: 'move', path: info.path.slice(), facing: null, turretYaw: dirAngle(info.endDir), endDir: info.endDir, _test: true });
     return true;
   },
   itemCells: () => [...items.keys()].map((k) => k.split(',').map(Number)),
@@ -6400,11 +6692,20 @@ window.__puratank = {
   curFireKeys: () => [...currentFireCells.keys()],
   fireOriginCell: () => { const o = fireOrigin(); return { gx: o.gx, gz: o.gz, ghost: o.ghost }; },
   queueFireAt(gx, gz) {
-    const f = currentFireCells.get(cellKey(gx, gz));
+    const f = withProjectedPlayer((o) => (o.reload > 0 ? new Map() : computeFireCells(player))).get(cellKey(gx, gz));
     if (!f || phase !== 'plan' || busy) return false;
-    enqueuePlan({ type: 'fire', cell: { gx, gz }, shot: f.shot });
+    enqueuePlan({ type: 'fire', cell: { gx, gz }, shot: f.shot, _test: true });
     return true;
   },
+  // 카드 시스템 훅
+  cards: () => ({
+    hand: hand.map((c) => ({ key: c.def.key, used: c.used, slot: c.slot })),
+    active: activeCard?.def.key ?? null,
+    deck: drawPile.length,
+    discard: discardPile.length,
+    luck: roundLuckMod,
+  }),
+  playCard(i) { if (!hand[i]) return false; cardClick(hand[i]); return true; },
   runQueue: () => resolveQueue(),
   shotAt: (gx, gz) => {
     const enemy = enemies.find((e) => e.alive && e.gx === gx && e.gz === gz);
