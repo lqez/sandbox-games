@@ -4088,32 +4088,35 @@ function destroyToWreck(unit) {
         spin: new THREE.Vector3(rng() * 12 - 6, rng() * 12 - 6, rng() * 12 - 6),
       });
     }
-    // 하부 파괴 (60%): 폭압이 차체 아래로 빠지면 궤도가 링크 단위로 분해되어
-    // 좌우로 흩어지고 로드휠이 옆으로 굴러 나간다
-    if (rng() < 0.6) {
+    // 하부 파괴 (60%): 폭압이 차체 아래로 빠지면 병합된 트랙 밴드를 끄고
+    // 실제 킷 궤도 피스(렝스/링크 — 슈·페그·스터드 포함)가 낱개로 흩어진다.
+    // 로드휠 몇 개도 옆으로 굴러 나간다.
+    if (rng() < 0.6 && unit.trackPieces?.length) {
       const ry = unit.group.rotation.y;
       const rxs = Math.cos(ry), rzs = -Math.sin(ry); // 우측
-      const fxs = Math.sin(ry), fzs = Math.cos(ry);  // 전방
-      const linkGeo = new THREE.BoxGeometry(0.34, 0.07, 0.2);
-      const linkMat = new THREE.MeshStandardMaterial({ color: 0x2e333d, roughness: 0.95, metalness: 0.25 });
-      for (let li = 0; li < 14; li++) {
-        const side = li % 2 ? 1 : -1;
-        const t = (li / 14 - 0.5) * 1.7;
-        const mesh = new THREE.Mesh(linkGeo, linkMat);
-        mesh.position.set(
-          wp0.x + rxs * side * 0.62 + fxs * t,
-          wp0.y + 0.22,
-          wp0.z + rzs * side * 0.62 + fzs * t
-        );
-        mesh.rotation.set(rng() * 3, ry, rng() * 3);
-        mesh.castShadow = true;
-        scene.add(mesh);
+      for (const band of unit.trackBands ?? []) band.visible = false;
+      unit.group.updateMatrixWorld(true);
+      const M = new THREE.Matrix4();
+      for (const tp of unit.trackPieces) {
+        const g = new THREE.Group();
+        for (const sub of tp.meshes) {
+          const m = new THREE.Mesh(sub.geo, sub.mat);
+          sub.rel.decompose(m.position, m.quaternion, m.scale);
+          m.castShadow = true;
+          g.add(m);
+        }
+        M.multiplyMatrices(unit.group.matrixWorld, tp.m);
+        M.decompose(g.position, g.quaternion, g.scale);
+        scene.add(g);
+        // 자기 쪽 궤도 방향으로 튕겨 나간다
+        const ox = g.position.x - wp0.x, oz = g.position.z - wp0.z;
+        const on = Math.hypot(ox, oz) || 1;
         pieces.push({
-          mesh,
+          mesh: g,
           vel: new THREE.Vector3(
-            rxs * side * (1.2 + rng() * 2.4) + (rng() - 0.5),
-            2.0 + rng() * 2.6,
-            rzs * side * (1.2 + rng() * 2.4) + (rng() - 0.5)
+            (ox / on) * (1.3 + rng() * 2.4) + (rng() - 0.5),
+            1.9 + rng() * 2.7,
+            (oz / on) * (1.3 + rng() * 2.4) + (rng() - 0.5)
           ),
           spin: new THREE.Vector3(rng() * 10 - 5, rng() * 10 - 5, rng() * 10 - 5),
         });

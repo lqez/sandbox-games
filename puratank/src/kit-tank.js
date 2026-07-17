@@ -195,23 +195,72 @@ export function buildKitTank(key) {
       holder.position.sub(turretInTank);
       turret.add(holder);
     } else {
+      // 트랙 피스(렝스/링크)는 링크별 처리를 위해 태깅 — 처짐 베이크와
+      // 격파 시 낱개 분해의 대상이 된다 ('트랙 프레임' 같은 구조물은 제외)
+      if (part.name.includes('렝스') || part.name.includes('링크')) {
+        holder.userData.trackName = part.name;
+      }
       hull.add(holder);
     }
   }
+
+  // ── 궤도 링크별 처리 ──
+  // 1) 처짐(sag): 실차처럼 궤도에 유격이 있어 상부 런이 아래로 살짝 늘어진다.
+  //    조립 시 상부 링크들을 현수선 가중치로 내리고 미세하게 들썩여 베이크
+  //    — 개체마다 처짐량이 달라 런타임 비용 없이 유격감이 생긴다.
+  // 2) 좌/우 트랙 밴드 분리: 차체 병합에 섞지 않고 밴드별로 병합해
+  //    격파 시 밴드를 숨기고 실제 킷 링크들이 낱개로 흩어질 수 있게 한다.
+  const trackHolders = hull.children.filter((h) => h.userData.trackName);
+  const sagAmp = 0.18 + Math.random() * 0.16; // 킷 유닛 — 개체별 유격 변주
+  for (const side of [-1, 1]) {
+    const run = trackHolders.filter((h) => (h.position.x < 0 ? -1 : 1) === side);
+    if (!run.length) continue;
+    let yMin = Infinity, yMax = -Infinity, zMin = Infinity, zMax = -Infinity;
+    for (const h of run) {
+      yMin = Math.min(yMin, h.position.y); yMax = Math.max(yMax, h.position.y);
+      zMin = Math.min(zMin, h.position.z); zMax = Math.max(zMax, h.position.z);
+    }
+    const yMid = (yMin + yMax) / 2;
+    for (const h of run) {
+      if (h.position.y <= yMid + 0.05) continue; // 지면에 닿는 하부 런은 그대로
+      const t = Math.min(1, Math.max(0, (h.position.z - zMin) / Math.max(0.001, zMax - zMin)));
+      const w = Math.sin(Math.PI * t); // 바퀴 사이 중앙이 가장 처진다
+      h.position.y -= sagAmp * w;
+      h.rotateX((Math.random() - 0.5) * 0.12 * w); // 낱장이 살짝 들썩인 유격
+    }
+  }
+  const trackL = new THREE.Group();
+  const trackR = new THREE.Group();
+  hull.add(trackL, trackR);
+  for (const h of trackHolders) (h.position.x < 0 ? trackL : trackR).add(h);
+  // 분해용 레지스트리: 피스별 서브메시(슈·페그·스터드)와 탱크 로컬 행렬을
+  // 병합 전에 기록 — 격파 시 이 정보로 실제 링크를 다시 세워 흩뿌린다
+  const trackPieces = trackHolders.map((h) => {
+    const meshes = [];
+    h.traverse((m) => {
+      if (m.isMesh && m.material?.visible !== false) {
+        meshes.push({ geo: m.geometry, mat: m.material, rel: relMatrix(m, h) });
+      }
+    });
+    return { meshes, m: relMatrix(h, outer), name: h.userData.trackName };
+  });
 
   const muzzle = new THREE.Object3D();
   muzzle.position.set(...spec.muzzle);
   cannon.add(muzzle);
 
   // 드로콜 절감: 회전 단위(차체/포탑/포)별로 정적 메시 병합.
+  // 트랙 밴드는 좌/우 각각 병합(+2 드로) — 격파 분해 시 통째로 끌 수 있다.
   // 스폰슨포는 각 포가 독립 선회하므로 개별 병합하고 hull에서 제외.
+  mergeStatic(trackL);
+  mergeStatic(trackR);
   if (sponsons.length) {
     for (const s of sponsons) mergeStatic(s.group);
-    mergeStatic(hull, [turret, ...sponsons.map((s) => s.group)]);
+    mergeStatic(hull, [turret, trackL, trackR, ...sponsons.map((s) => s.group)]);
   } else {
     mergeStatic(cannon);
     mergeStatic(turret, [cannon]);
-    mergeStatic(hull, [turret]);
+    mergeStatic(hull, [turret, trackL, trackR]);
   }
 
   const hitbox = new THREE.Mesh(
@@ -229,5 +278,8 @@ export function buildKitTank(key) {
   const twin = sponsons.length
     ? { sponsonTwin: true, sponsons, cannon: sponsons[0].group, muzzle: sponsons[0].muzzle }
     : { sponsonTwin: false };
-  return { group: outer, turret, cannon, muzzle, hitbox, hasTurret: !!spec.turretPivot, ...twin };
+  return {
+    group: outer, turret, cannon, muzzle, hitbox, hasTurret: !!spec.turretPivot,
+    trackPieces, trackBands: [trackL, trackR], ...twin,
+  };
 }
