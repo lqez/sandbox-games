@@ -72,6 +72,78 @@ for (let ei = 0; ei < N_ENEMY; ei++) {
 // 강: 82% 확률로 존재, 폭도 구간별로 변한다 (아예 없을 수도)
 const hasRiver = rng() < 0.82;
 
+// ---------------------------------------------------------------------------
+// 시간대·날씨 — 지형 rng와 분리된 시드 분기 (같은 시드 = 같은 지형 유지).
+// ?tod=dawn|day|dusk|night, ?wx=clear|overcast|fog|rain|storm 으로 고정 가능.
+// 안개·폭우에서는 VIS_LIMIT칸 밖의 적이 아예 보이지 않는다 —
+// 풀 튕김·나무 흔들림·궤도 자국·엔진 소리로만 낌새를 챈다.
+// ---------------------------------------------------------------------------
+const envRng = mulberry32((seed ^ 0x9e3779b9) >>> 0);
+const _urlp = new URLSearchParams(location.search);
+const TOD_POOL = ['day', 'day', 'day', 'dawn', 'dusk', 'night'];
+const WX_POOL = ['clear', 'clear', 'clear', 'overcast', 'fog', 'rain', 'storm'];
+const TOD = ['dawn', 'day', 'dusk', 'night'].includes(_urlp.get('tod'))
+  ? _urlp.get('tod') : TOD_POOL[Math.floor(envRng() * TOD_POOL.length)];
+const WEATHER = ['clear', 'overcast', 'fog', 'rain', 'storm'].includes(_urlp.get('wx'))
+  ? _urlp.get('wx') : WX_POOL[Math.floor(envRng() * WX_POOL.length)];
+const VIS_LIMIT = WEATHER === 'fog' ? 9 : WEATHER === 'storm' ? 13 : Infinity;
+const TOD_LABEL = { dawn: '🌅 새벽', day: '☀️ 낮', dusk: '🌇 석양', night: '🌙 밤' }[TOD];
+const WX_LABEL = { clear: '맑음', overcast: '☁️ 흐림', fog: '🌫 짙은 안개', rain: '🌧 비', storm: '⛈ 폭우' }[WEATHER];
+
+// 시간대 기본 조명/하늘 프리셋 → 날씨가 그 위에 감쇠·색·안개를 얹는다
+const ENV = (() => {
+  const base = {
+    dawn: {
+      sunPos: [34, 11, -26], sunCol: 0xffc9a0, sunInt: 1.5,
+      hemiSky: 0xc9b8d8, hemiGnd: 0x4a4438, hemiInt: 0.42,
+      fogCol: 0xd8c0b8, exposure: 0.9, warm: [1.06, 0.98, 0.94], saturation: 0.88,
+      sky: { top: '#31418f', mid: '#7f6fa8', low: '#e8a06c', bot: '#f4d2a0', halo: [180, 300], haloCol: '255,205,150' },
+      envGround: 0x77935e,
+    },
+    day: {
+      sunPos: [24, 34, 16], sunCol: 0xffe9c8, sunInt: 1.95,
+      hemiSky: 0xbcd4f0, hemiGnd: 0x5f5a45, hemiInt: 0.38,
+      fogCol: 0xaecbe8, exposure: 0.92, warm: [1.035, 1.0, 0.95], saturation: 0.9,
+      sky: { top: '#2764c4', mid: '#4b8ede', low: '#8ab8e8', bot: '#d8d2bd', halo: [700, 150], haloCol: '255,248,225' },
+      envGround: 0x8aa86a,
+    },
+    dusk: {
+      sunPos: [-32, 9, 20], sunCol: 0xff9a55, sunInt: 1.4,
+      hemiSky: 0xd8a8b8, hemiGnd: 0x51443a, hemiInt: 0.42,
+      fogCol: 0xdca888, exposure: 0.9, warm: [1.12, 0.97, 0.86], saturation: 0.92,
+      sky: { top: '#3a3f77', mid: '#8d6a96', low: '#ef9a58', bot: '#f6c98e', halo: [260, 330], haloCol: '255,175,115' },
+      envGround: 0x7d7a52,
+    },
+    night: {
+      sunPos: [18, 30, -14], sunCol: 0xa8c4e8, sunInt: 0.55,
+      hemiSky: 0x2c3a58, hemiGnd: 0x1c2028, hemiInt: 0.55,
+      fogCol: 0x1a2332, exposure: 0.86, warm: [0.9, 0.96, 1.12], saturation: 0.78,
+      sky: { top: '#060a18', mid: '#0c1630', low: '#1a2a48', bot: '#243248', halo: [760, 120], haloCol: '225,232,255', stars: true },
+      envGround: 0x28321f,
+    },
+  }[TOD];
+  const e = { ...base, fogNear: 95 * MSCALE, fogFar: 230 * MSCALE, windAmp: 1, windSpeed: 1, rainCount: 0, lightning: false, cloudy: false };
+  const gray = (hex, t, dark = 0) => new THREE.Color(hex).lerp(new THREE.Color(0x9aa4ae), t).multiplyScalar(1 - dark).getHex();
+  if (WEATHER === 'overcast') {
+    e.sunInt *= 0.4; e.hemiInt += 0.3; e.saturation -= 0.1; e.windAmp = 1.25;
+    e.fogCol = gray(e.fogCol, 0.75); e.cloudy = true;
+    e.sky = { ...e.sky, top: null }; // 스카이 텍스처에서 흐린 그라데이션으로 대체
+  } else if (WEATHER === 'fog') {
+    e.sunInt *= 0.28; e.hemiInt += 0.42; e.saturation -= 0.18; e.windAmp = 0.85;
+    e.fogCol = gray(e.fogCol, 0.9); e.fogNear = 5; e.fogFar = 26 + 10 * MSCALE;
+    e.cloudy = true; e.sky = { ...e.sky, top: null };
+  } else if (WEATHER === 'rain') {
+    e.sunInt *= 0.35; e.hemiInt += 0.28; e.saturation -= 0.14; e.windAmp = 1.55; e.windSpeed = 1.4;
+    e.fogCol = gray(e.fogCol, 0.8, 0.25); e.fogNear = 40 * MSCALE; e.fogFar = 150 * MSCALE;
+    e.rainCount = 1300; e.cloudy = true; e.sky = { ...e.sky, top: null };
+  } else if (WEATHER === 'storm') {
+    e.sunInt *= 0.2; e.hemiInt += 0.24; e.saturation -= 0.2; e.windAmp = 2.4; e.windSpeed = 1.9;
+    e.fogCol = gray(e.fogCol, 0.85, 0.45); e.fogNear = 14; e.fogFar = 46 + 14 * MSCALE;
+    e.rainCount = 3000; e.lightning = true; e.cloudy = true; e.sky = { ...e.sky, top: null };
+  }
+  return e;
+})();
+
 // 2옥타브 밸류 노이즈
 function makeNoise(cell) {
   const size = Math.ceil(GRID / cell) + 3;
@@ -103,11 +175,11 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 0.92;
+renderer.toneMappingExposure = ENV.exposure;
 app.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
-scene.fog = new THREE.Fog(0xaecbe8, 95 * MSCALE, 230 * MSCALE);
+scene.fog = new THREE.Fog(ENV.fogCol, ENV.fogNear, ENV.fogFar);
 
 const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 400);
 camera.position.set(32 * MSCALE, 37 * MSCALE, 44 * MSCALE);
@@ -122,9 +194,10 @@ controls.maxPolarAngle = Math.PI * 0.46;
 controls.enablePan = true;
 controls.panSpeed = 0.6;
 
-scene.add(new THREE.HemisphereLight(0xbcd4f0, 0x5f5a45, 0.38));
-const sun = new THREE.DirectionalLight(0xffe9c8, 1.95);
-sun.position.set(24, 34, 16);
+const hemiLight = new THREE.HemisphereLight(ENV.hemiSky, ENV.hemiGnd, ENV.hemiInt);
+scene.add(hemiLight);
+const sun = new THREE.DirectionalLight(ENV.sunCol, ENV.sunInt);
+sun.position.set(...ENV.sunPos);
 sun.castShadow = true;
 sun.shadow.mapSize.set(4096, 4096);
 sun.shadow.camera.left = -40 * MSCALE;
@@ -144,23 +217,56 @@ function makeSkyTexture() {
   const c = document.createElement('canvas');
   c.width = 1024; c.height = 512;
   const ctx = c.getContext('2d');
+  const S = ENV.sky;
   const g = ctx.createLinearGradient(0, 0, 0, 512);
-  g.addColorStop(0.0, '#2764c4');
-  g.addColorStop(0.35, '#4b8ede');
-  g.addColorStop(0.62, '#8ab8e8');
-  g.addColorStop(0.78, '#c3daee');
-  g.addColorStop(1.0, '#d8d2bd');
+  if (ENV.cloudy) {
+    // 흐림·안개·비·폭우: 잿빛 덮개 — 밤/폭우일수록 어둡게
+    const lum = TOD === 'night' ? 0.16 : WEATHER === 'storm' ? 0.42 : WEATHER === 'fog' ? 0.86 : 0.66;
+    const tone = (l) => {
+      const v = Math.round(255 * l);
+      return `rgb(${v},${Math.round(v * 1.02)},${Math.round(v * 1.06)})`;
+    };
+    g.addColorStop(0.0, tone(lum * 0.55));
+    g.addColorStop(0.45, tone(lum * 0.8));
+    g.addColorStop(0.75, tone(lum));
+    g.addColorStop(1.0, tone(lum * 1.08));
+  } else {
+    g.addColorStop(0.0, S.top);
+    g.addColorStop(0.35, S.mid);
+    g.addColorStop(0.62, S.low);
+    g.addColorStop(1.0, S.bot);
+  }
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, 1024, 512);
-  // 태양 헤일로 (sun 방향과 비슷한 쪽)
-  const halo = ctx.createRadialGradient(700, 150, 0, 700, 150, 220);
-  halo.addColorStop(0, 'rgba(255,248,225,0.95)');
-  halo.addColorStop(0.25, 'rgba(255,244,214,0.4)');
-  halo.addColorStop(1, 'rgba(255,244,214,0)');
-  ctx.fillStyle = halo;
-  ctx.fillRect(0, 0, 1024, 512);
+  // 별 (맑은 밤에만)
+  if (S.stars && !ENV.cloudy) {
+    for (let i = 0; i < 340; i++) {
+      const a = 0.25 + Math.random() * 0.75;
+      ctx.fillStyle = `rgba(255,255,255,${(a * (1 - (i % 7) * 0.08)).toFixed(2)})`;
+      const y = Math.random() * 300;
+      ctx.fillRect(Math.random() * 1024, y, Math.random() < 0.12 ? 2 : 1, 1);
+    }
+  }
+  // 태양(또는 달) 헤일로 — 구름 덮개에선 생략
+  if (!ENV.cloudy) {
+    const [hx, hy] = S.halo;
+    const haloR = S.stars ? 120 : 220;
+    const halo = ctx.createRadialGradient(hx, hy, 0, hx, hy, haloR);
+    halo.addColorStop(0, `rgba(${S.haloCol},0.95)`);
+    halo.addColorStop(0.25, `rgba(${S.haloCol},0.4)`);
+    halo.addColorStop(1, `rgba(${S.haloCol},0)`);
+    ctx.fillStyle = halo;
+    ctx.fillRect(0, 0, 1024, 512);
+    if (S.stars) { // 달 원반
+      ctx.fillStyle = 'rgba(235,240,252,0.9)';
+      ctx.beginPath(); ctx.arc(hx, hy, 26, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = 'rgba(180,192,215,0.5)';
+      ctx.beginPath(); ctx.arc(hx - 8, hy - 5, 7, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(hx + 9, hy + 8, 5, 0, Math.PI * 2); ctx.fill();
+    }
+  }
   // 뭉게구름: 겹친 소프트 원 클러스터
-  const cloud = (cx, cy, s, alpha) => {
+  const cloud = (cx, cy, s, alpha, col = '255,255,255') => {
     for (let i = 0; i < 14; i++) {
       const a = Math.random() * Math.PI * 2;
       const r = Math.random() * s;
@@ -168,20 +274,29 @@ function makeSkyTexture() {
       const py = cy + Math.sin(a) * r * 0.55;
       const pr = s * (0.35 + Math.random() * 0.4);
       const cg = ctx.createRadialGradient(px, py, 0, px, py, pr);
-      cg.addColorStop(0, `rgba(255,255,255,${alpha})`);
-      cg.addColorStop(0.7, `rgba(250,252,255,${alpha * 0.55})`);
-      cg.addColorStop(1, 'rgba(250,252,255,0)');
+      cg.addColorStop(0, `rgba(${col},${alpha})`);
+      cg.addColorStop(0.7, `rgba(${col},${alpha * 0.55})`);
+      cg.addColorStop(1, `rgba(${col},0)`);
       ctx.fillStyle = cg;
       ctx.beginPath();
       ctx.arc(px, py, pr, 0, Math.PI * 2);
       ctx.fill();
     }
   };
-  cloud(160, 190, 55, 0.5);
-  cloud(430, 130, 70, 0.42);
-  cloud(840, 230, 48, 0.45);
-  cloud(620, 300, 60, 0.3);
-  cloud(80, 330, 42, 0.28);
+  if (ENV.cloudy && WEATHER !== 'fog') {
+    // 낮게 깔린 먹구름 띠 — 폭우일수록 검고 조밀하게
+    const dark = WEATHER === 'storm' ? '38,42,52' : '112,118,128';
+    for (let i = 0; i < 11; i++) {
+      cloud(50 + Math.random() * 924, 90 + Math.random() * 190,
+        55 + Math.random() * 45, 0.3 + Math.random() * 0.25, dark);
+    }
+  } else if (!ENV.cloudy && TOD !== 'night') {
+    cloud(160, 190, 55, 0.5);
+    cloud(430, 130, 70, 0.42);
+    cloud(840, 230, 48, 0.45);
+    cloud(620, 300, 60, 0.3);
+    cloud(80, 330, 42, 0.28);
+  }
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.mapping = THREE.EquirectangularReflectionMapping;
@@ -196,7 +311,7 @@ scene.background = skyTex;
   envScene.background = skyTex;
   const groundDisc = new THREE.Mesh(
     new THREE.CircleGeometry(80, 24),
-    new THREE.MeshBasicMaterial({ color: 0x8aa86a })
+    new THREE.MeshBasicMaterial({ color: ENV.envGround })
   );
   groundDisc.rotation.x = -Math.PI / 2;
   groundDisc.position.y = -6;
@@ -241,6 +356,8 @@ const GradeShader = {
   `,
 };
 const gradePass = new ShaderPass(GradeShader);
+gradePass.uniforms.saturation.value = ENV.saturation;
+gradePass.uniforms.warm.value.set(...ENV.warm);
 composer.addPass(gradePass);
 // AO 제외 레이어: 컷아웃 풀·수면·오버레이가 SSAO 노멀 패스에서
 // 통짜 사각형으로 렌더되어 검은 헤일로를 만드는 것을 방지
@@ -250,10 +367,12 @@ const noAO = (obj) => obj.traverse((o) => o.layers.set(NO_AO_LAYER));
 
 // ── 바람: 식생 버텍스 셰이더에 살랑임 주입 (공유 시간 유니폼) ──
 const windUniform = { value: 0 };
+const windAmpUniform = { value: ENV.windAmp }; // 날씨별 흔들림 배율 (폭우 돌풍 등)
 function addWind(mat, strength = 0.06, freq = 1.4) {
   mat.onBeforeCompile = (shader) => {
     shader.uniforms.uWindT = windUniform;
-    shader.vertexShader = ('uniform float uWindT;\n' + shader.vertexShader).replace(
+    shader.uniforms.uWindA = windAmpUniform;
+    shader.vertexShader = ('uniform float uWindT;\nuniform float uWindA;\n' + shader.vertexShader).replace(
       '#include <begin_vertex>',
       `#include <begin_vertex>
       {
@@ -263,8 +382,8 @@ function addWind(mat, strength = 0.06, freq = 1.4) {
         #endif
         // 높이(uv.y)에 비례해 끝만 크게 흔들린다 + 느린 큰 물결 + 빠른 잔떨림
         float wAmp = uv.y * uv.y;
-        float sway = sin(uWindT * ${freq.toFixed(2)} + wPhase) * ${strength.toFixed(3)}
-                   + sin(uWindT * ${(freq * 2.7).toFixed(2)} + wPhase * 1.7) * ${(strength * 0.35).toFixed(3)};
+        float sway = (sin(uWindT * ${freq.toFixed(2)} + wPhase) * ${strength.toFixed(3)}
+                   + sin(uWindT * ${(freq * 2.7).toFixed(2)} + wPhase * 1.7) * ${(strength * 0.35).toFixed(3)}) * uWindA;
         transformed.x += sway * wAmp;
         transformed.z += sway * 0.6 * wAmp;
       }`
@@ -278,6 +397,77 @@ function addWind(mat, strength = 0.06, freq = 1.4) {
     orig(r, w, rd, dt, mask);
     camera.layers.enable(NO_AO_LAYER);
   };
+}
+
+// ── 비/폭우: 카메라 주위를 따라다니는 빗줄기 라인 파티클 + (폭우) 번개 ──
+let rainGeo = null, rainGroup = null;
+const RAIN_R = 44, RAIN_H = 34;
+if (ENV.rainCount > 0) {
+  const N = ENV.rainCount;
+  const pos = new Float32Array(N * 6);
+  const slantX = WEATHER === 'storm' ? 0.4 : 0.16;
+  const len = WEATHER === 'storm' ? 1.15 : 0.7;
+  for (let i = 0; i < N; i++) {
+    const x = (Math.random() * 2 - 1) * RAIN_R;
+    const y = Math.random() * RAIN_H;
+    const z = (Math.random() * 2 - 1) * RAIN_R;
+    pos.set([x, y, z, x + slantX * len, y - len, z + 0.08 * len], i * 6);
+  }
+  rainGeo = new THREE.BufferGeometry();
+  rainGeo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  const rainMat = new THREE.LineBasicMaterial({
+    color: TOD === 'night' ? 0x6f88a8 : 0xbdd2e4,
+    transparent: true, opacity: WEATHER === 'storm' ? 0.4 : 0.28,
+    depthWrite: false,
+  });
+  const lines = new THREE.LineSegments(rainGeo, rainMat);
+  lines.frustumCulled = false;
+  rainGroup = new THREE.Group();
+  rainGroup.add(lines);
+  noAO(rainGroup);
+  scene.add(rainGroup);
+}
+function updateRain(dt) {
+  if (!rainGroup) return;
+  rainGroup.position.set(controls.target.x, Math.max(-1, controls.target.y - 6), controls.target.z);
+  const attr = rainGeo.attributes.position;
+  const arr = attr.array;
+  const fall = (WEATHER === 'storm' ? 30 : 21) * dt;
+  const drift = (WEATHER === 'storm' ? 9 : 3.5) * dt;
+  for (let i = 0; i < arr.length; i += 6) {
+    arr[i + 1] -= fall; arr[i + 4] -= fall;
+    arr[i] += drift; arr[i + 3] += drift;
+    if (arr[i + 1] < 0) {
+      const dx = arr[i + 3] - arr[i], dy = arr[i + 4] - arr[i + 1], dz = arr[i + 5] - arr[i + 2];
+      const x = (Math.random() * 2 - 1) * RAIN_R;
+      const z = (Math.random() * 2 - 1) * RAIN_R;
+      arr[i] = x; arr[i + 1] = RAIN_H - Math.random() * 3; arr[i + 2] = z;
+      arr[i + 3] = x + dx; arr[i + 4] = arr[i + 1] + dy; arr[i + 5] = z + dz;
+    } else if (arr[i] > RAIN_R) {
+      arr[i] -= RAIN_R * 2; arr[i + 3] -= RAIN_R * 2;
+    }
+  }
+  attr.needsUpdate = true;
+}
+// 번개: 하늘 전체가 두세 번 깜빡 — 천둥은 거리감 있게 늦게 굴러온다
+let lightningWait = ENV.lightning ? 4 + Math.random() * 9 : Infinity;
+let flashLeft = 0;
+function updateLightning(dt) {
+  if (!ENV.lightning) return;
+  if (flashLeft > 0) {
+    flashLeft -= dt;
+    const on = flashLeft > 0 && Math.sin(flashLeft * 55) > -0.35;
+    hemiLight.intensity = ENV.hemiInt + (on ? 2.4 : 0);
+    sun.intensity = ENV.sunInt + (on ? 1.2 : 0);
+    if (flashLeft <= 0) { hemiLight.intensity = ENV.hemiInt; sun.intensity = ENV.sunInt; }
+    return;
+  }
+  lightningWait -= dt;
+  if (lightningWait <= 0) {
+    lightningWait = 7 + Math.random() * 14;
+    flashLeft = 0.2 + Math.random() * 0.2;
+    setTimeout(() => sfx('thunder'), 500 + Math.random() * 1800);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -1503,8 +1693,9 @@ function spawnChunkDebris(prop, chunks, impact) {
     });
   }
   const floorY = sampleHeight(prop.group.position.x, prop.group.position.z);
+  const dtOf = kDt(1500);
   tween(1500, (e, rawK) => {
-    const dt = 0.016;
+    const dt = dtOf(rawK);
     for (const p of pieces) {
       p.vel.y -= 15 * dt;
       p.mesh.position.addScaledVector(p.vel, dt);
@@ -1514,7 +1705,7 @@ function spawnChunkDebris(prop, chunks, impact) {
       }
       p.mesh.rotation.x += p.spin.x * dt;
       p.mesh.rotation.z += p.spin.z * dt;
-      if (rawK > 0.78) p.mesh.scale.multiplyScalar(0.92);
+      if (rawK > 0.78) p.mesh.scale.multiplyScalar(Math.pow(0.92, dt / 0.016));
     }
   }, linear).then(() => pieces.forEach((p) => { scene.remove(p.mesh); p.mesh.geometry.dispose(); }));
 }
@@ -3107,6 +3298,17 @@ function tween(dur, onUpdate, ease = easeInOut) {
     activeTweens.push({ start: performance.now(), dur, onUpdate, ease, resolve });
   });
 }
+// 파편 물리용 프레임레이트 독립 dt: 진행률 k 증가분 × 총 시간(초).
+// 고정 0.016/프레임은 저FPS(모바일)에서 시뮬 시간이 트윈보다 짧아
+// 낙하가 끝나기 전에 트윈이 끝나 파편이 공중에 얼어붙는다.
+function kDt(durMs) {
+  let prev = 0;
+  return (k) => {
+    const d = Math.min(0.12, Math.max(0, (k - prev) * durMs / 1000));
+    prev = k;
+    return d;
+  };
+}
 const delay = (ms) => tween(ms, () => {}, linear);
 function updateTweens(now) {
   for (let i = activeTweens.length - 1; i >= 0; i--) {
@@ -3216,6 +3418,12 @@ async function moveUnit(unit, path, finalFacing = null, onStep = null) {
         else addTrackRibbon(unit, tl.x, tl.z, smx, smz);
         // 지나가며 풀/잎을 튕겨 날린다 (풀밭 위에서만)
         kickFoliage(x, z);
+        if (unit.hidden) {
+          // 시야 밖 적: 식생 교란을 증폭해 "저기 뭔가 있다"는 단서를 남긴다
+          kickFoliage(x + (rng() - 0.5) * 0.8, z + (rng() - 0.5) * 0.8);
+          kickFoliage(x, z);
+          rustleNearProps(x, z);
+        }
         tl.x = smx;
         tl.z = smz;
       }
@@ -3452,8 +3660,10 @@ function kickFoliage(x, z) {
     });
   }
   // 조금씩 날리다가 서서히 사라진다 (~1.6s)
-  tween(1400 + rng() * 500, (e, k) => {
-    const dt = 0.016;
+  const kickDur = 1400 + rng() * 500;
+  const dtOf = kDt(kickDur);
+  tween(kickDur, (e, k) => {
+    const dt = dtOf(k);
     for (const p of pieces) {
       p.vel.y -= 5 * dt;                       // 약한 중력 — 오래 떠 있게
       p.vel.addScaledVector(p.drift, dt);       // 바람에 실려 표류
@@ -3485,8 +3695,9 @@ function spawnDebris(center, colors, count, power) {
     });
   }
   const floorY = center.y - 1;
+  const dtOf = kDt(1100);
   tween(1100, (e, rawK) => {
-    const dt = 0.016;
+    const dt = dtOf(rawK);
     for (const p of pieces) {
       p.vel.y -= 14 * dt;
       p.mesh.position.addScaledVector(p.vel, dt);
@@ -3496,7 +3707,7 @@ function spawnDebris(center, colors, count, power) {
       }
       p.mesh.rotation.x += p.spin.x * dt;
       p.mesh.rotation.y += p.spin.y * dt;
-      if (rawK > 0.7) p.mesh.scale.multiplyScalar(0.94);
+      if (rawK > 0.7) p.mesh.scale.multiplyScalar(Math.pow(0.94, dt / 0.016));
     }
   }, linear).then(() => pieces.forEach((p) => scene.remove(p.mesh)));
 }
@@ -3528,8 +3739,9 @@ function breakApartGroup(group, power = 8) {
   }
   const floorY = group.position.y;
   scene.remove(group);
+  const dtOf = kDt(1500);
   tween(1500, (e, rawK) => {
-    const dt = 0.016;
+    const dt = dtOf(rawK);
     for (const p of pieces) {
       p.vel.y -= 15 * dt;
       p.mesh.position.addScaledVector(p.vel, dt);
@@ -3539,7 +3751,7 @@ function breakApartGroup(group, power = 8) {
       }
       p.mesh.rotation.x += p.spin.x * dt;
       p.mesh.rotation.z += p.spin.z * dt;
-      if (rawK > 0.75) p.mesh.scale.multiplyScalar(0.93);
+      if (rawK > 0.75) p.mesh.scale.multiplyScalar(Math.pow(0.93, dt / 0.016));
     }
   }, linear).then(() => pieces.forEach((p) => scene.remove(p.mesh)));
 }
@@ -3743,8 +3955,9 @@ async function explosionFx(pos, big = false, debrisCols = null) {
   spawnDebris(pos, debrisCols ?? [0xffb347, 0x8b95a8, 0x6f5a3e], big ? 26 : 15, big ? 8 : 5.5);
   const fireCol = new THREE.Color();
   const dur = big ? 1500 : 1050;
+  const fxDtOf = kDt(dur);
   const fxDone = tween(dur, (e, k) => {
-    const dt = 0.016;
+    const dt = fxDtOf(k);
     flash.scale.setScalar(1 + Math.min(k * 5, 1) * (big ? 2.4 : 1.5));
     flash.material.opacity = Math.max(0, 1 - k * 4);
     ring.scale.setScalar(1 + Math.min(k * 3, 1) * 4.5);
@@ -3821,8 +4034,9 @@ function destroyToWreck(unit) {
       });
     }
     let trailT = 0;
+    const dtOf = kDt(2200);
     tween(2200, (e, k) => {
-      const dt = 0.016;
+      const dt = dtOf(k);
       trailT += dt;
       for (const p of pieces) {
         p.vel.y -= 13 * dt;
@@ -3849,6 +4063,11 @@ function destroyToWreck(unit) {
         }
       }
     }, linear).then(() => {
+      // 안전망: 아직 공중이면 지면에 내려놓는다 — 파편이 떠서 멈추는 일 방지
+      for (const p of pieces) {
+        const fy = sampleHeight(p.mesh.position.x, p.mesh.position.z) + 0.12;
+        if (p.mesh.position.y > fy) p.mesh.position.y = fy;
+      }
       // 가장 큰 부품(포탑) 착지점에 잔불 — 부서진 부품이 떨어져 불탄다
       const big = pieces[0];
       if (big) wreckFires.push({ x: big.mesh.position.x, y: big.mesh.position.y + 0.2, z: big.mesh.position.z, t0: performance.now(), last: 0, dur: 12 });
@@ -4757,6 +4976,27 @@ function engineOn() {
     engineNodes = { src, hum, lfo, g };
   } catch { /* ignore */ }
 }
+// 빗소리 앰비언스: 첫 입력 제스처에서 시작 (오토플레이 제한 회피)
+let rainAudioNodes = null;
+function rainAmbienceOn() {
+  if (ENV.rainCount === 0 || rainAudioNodes) return;
+  try {
+    actx ??= new (window.AudioContext || window.webkitAudioContext)();
+    if (actx.state === 'suspended') actx.resume();
+    const src = actx.createBufferSource();
+    src.buffer = noiseBuffer(3.0); src.loop = true;
+    const f = actx.createBiquadFilter();
+    f.type = 'bandpass'; f.frequency.value = WEATHER === 'storm' ? 850 : 1500; f.Q.value = 0.35;
+    const g = actx.createGain();
+    g.gain.setValueAtTime(0.0001, actx.currentTime);
+    g.gain.exponentialRampToValueAtTime(WEATHER === 'storm' ? 0.07 : 0.035, actx.currentTime + 1.5);
+    src.connect(f).connect(g).connect(actx.destination);
+    src.start();
+    rainAudioNodes = { src, g };
+  } catch { /* ignore */ }
+}
+window.addEventListener('pointerdown', rainAmbienceOn, { once: true });
+
 function engineOff() {
   engineUsers = Math.max(0, engineUsers - 1);
   if (engineUsers > 0 || !engineNodes) return;
@@ -4786,6 +5026,10 @@ function sfx(kind) {
     } else if (kind === 'hit') {
       playNoise({ dur: 0.22, filterType: 'lowpass', freq0: 1400, freq1: 200, gain0: 0.2, atk: 0.003 });
       playSub({ f0: 90, f1: 40, dur: 0.18, gain0: 0.2 });
+    } else if (kind === 'thunder') {
+      // 천둥: 서브 드롭 + 오래 구르는 저역 럼블
+      playSub({ f0: 58, f1: 20, dur: 2.4, gain0: 0.4 });
+      playNoise({ dur: 3.0, filterType: 'lowpass', freq0: 320, freq1: 45, gain0: 0.3, atk: 0.03 });
     } else if (kind === 'splash') {
       playNoise({ dur: 0.4, filterType: 'bandpass', freq0: 700, q: 1.4, gain0: 0.16, atk: 0.02 });
     } else if (kind === 'step') {
@@ -4800,7 +5044,11 @@ function sfx(kind) {
 // ---------------------------------------------------------------------------
 const turnLabel = document.getElementById('turn-label');
 const hintEl = document.getElementById('hint');
-const btnGo = document.getElementById('btn-go');
+const crumbsEl = document.getElementById('crumbs');
+const chipOw = document.getElementById('chip-ow');
+const chipRun = document.getElementById('chip-run');
+const chipUndo = document.getElementById('chip-undo');
+document.getElementById('env-label').textContent = ` · ${WX_LABEL} · ${TOD_LABEL}`;
 const btnRestart = document.getElementById('btn-restart');
 const overlay = document.getElementById('overlay');
 const overlayTitle = document.getElementById('overlay-title');
@@ -4869,6 +5117,7 @@ function focusCamera(u) {
     div.className = 'thumb';
     makeThumb(div, e, portraits[enemyKit], KIT_INFO[enemyKit].label);
     div.addEventListener('click', () => {
+      if (e.hidden && e.alive) { setHint('🌫 시야 밖 — 위치를 알 수 없다'); return; }
       focusCamera(e);
       if (detailFor === i) { detailFor = null; thumbDetail.classList.remove('show'); return; }
       detailFor = i;
@@ -4893,6 +5142,7 @@ function updateThumbs() {
     const bar = el.querySelector('.hpbar i');
     if (bar) bar.style.width = `${Math.max(0, (u.hp / u.maxHp) * 100)}%`;
     el.classList.toggle('dead', !u.alive);
+    el.classList.toggle('hid', !!u.hidden && u.alive);
   };
   setHp(thumbPlayerEl, player);
   for (const e of enemies) if (e._thumbEl) setHp(e._thumbEl, e);
@@ -4911,6 +5161,13 @@ btnRestart.addEventListener('click', () => location.reload());
 const btnGarage = document.getElementById('btn-garage');
 if (btnGarage) btnGarage.addEventListener('click', () => { location.href = './index.html'; });
 btnAgain.addEventListener('click', () => location.reload());
+
+// ⚙ 설정 다이얼로그: 재시작/게임 종료(차고)를 구석으로 몰아넣음
+const settingsEl = document.getElementById('settings');
+document.getElementById('btn-settings').addEventListener('click', () => settingsEl.classList.add('show'));
+document.getElementById('btn-close-settings').addEventListener('click', () => settingsEl.classList.remove('show'));
+settingsEl.addEventListener('click', (ev) => { if (ev.target === settingsEl) settingsEl.classList.remove('show'); });
+document.getElementById('settings-env').textContent = `${WX_LABEL} · ${TOD_LABEL} · 시드 ${seed}`;
 
 // 성능 표시: 기본 FPS만, 클릭하면 프레임타임/드로콜/트라이앵글 펼침
 const perfEl = document.getElementById('perf');
@@ -5236,18 +5493,33 @@ function refreshPlanUI(fireEmphasis = false) {
     showFireField(currentFireCells, fireEmphasis);
     showTargets(
       enemies
-        .filter((e) => e.alive && currentFireCells.has(cellKey(e.gx, e.gz)))
+        .filter((e) => e.alive && !e.hidden && currentFireCells.has(cellKey(e.gx, e.gz)))
         .map((e) => ({ unit: e, shot: currentFireCells.get(cellKey(e.gx, e.gz)).shot }))
     );
     return o;
   });
   projReload = o.reload;
   drawQueueGhosts();
-  if (planQueue.length) {
-    btnGo.textContent = `▶ 실행 (${planQueue.length}턴)`;
-  } else {
-    btnGo.textContent = player.reloadLeft > 0 ? `⏸ 대기 (재장전 ${player.reloadLeft})` : '👁 경계';
+  renderCrumbs();
+}
+
+// 상단 breadcrumb: 예약 슬롯 [① 이동 ▸ ② 사격] + 액션 칩 (경계/실행/취소)
+const PLAN_LABEL = { move: '🚚 이동', fire: '🎯 사격', overwatch: '👁 경계', wait: '⏸ 대기' };
+function renderCrumbs() {
+  let html = '';
+  for (let i = 0; i < PLAN_AHEAD; i++) {
+    if (i > 0) html += '<span class="crumb-sep">▸</span>';
+    const q = planQueue[i];
+    if (q) html += `<span class="crumb">${i + 1} ${PLAN_LABEL[q.type]}</span>`;
+    else if (i === planQueue.length && pendingPlan) html += `<span class="crumb pending">${i + 1} ${PLAN_LABEL[pendingPlan.type]}?</span>`;
+    else html += `<span class="crumb empty">${i + 1} ·</span>`;
   }
+  crumbsEl.innerHTML = html;
+  const planning = phase === 'plan' && !busy;
+  chipRun.hidden = !(planning && planQueue.length > 0);
+  chipUndo.hidden = !(planning && (planQueue.length > 0 || pendingPlan || fireMode));
+  chipOw.hidden = !planning;
+  chipOw.textContent = projReload > 0 ? '⏸ 대기' : '👁 경계';
 }
 
 function startPlanning() {
@@ -5317,7 +5589,9 @@ function planEnemies() {
     if (!enemy.alive) continue;
     enemy.plan = null;
     const lvl = enemy.driverLv;
-    if (enemy.reloadLeft <= 0) {
+    // 안개·폭우: 시야 밖 플레이어는 조준 불가 — 소리로 대충 접근만 한다
+    const canSee = Math.hypot(enemy.gx - player.gx, enemy.gz - player.gz) <= VIS_LIMIT;
+    if (enemy.reloadLeft <= 0 && canSee) {
       const aim = predictPlayerCell(lvl);
       const aimIsPlayer = aim.gx === player.gx && aim.gz === player.gz;
       const shot = computeShot(enemy, aimIsPlayer ? { unit: player } : aim);
@@ -5341,7 +5615,10 @@ function planEnemies() {
           continue;
         }
       }
-      // 경계 (Lv2+): 사격은 안 되지만 플레이어가 근처를 지나갈 만하면 매복
+    }
+    // 경계 (Lv2+): 사격은 안 되지만 플레이어가 근처를 지나갈 만하면 매복.
+    // 시야 밖(안개·폭우)이어도 소리 나는 방향으로 매복은 가능하다.
+    if (enemy.reloadLeft <= 0 && !enemy.plan) {
       const distP = Math.hypot(enemy.gx - player.gx, enemy.gz - player.gz);
       if (lvl >= 2 && distP <= enemy.fireRange + 3 && Math.random() < 0.5) {
         enemy.plan = { type: 'overwatch' };
@@ -5362,7 +5639,7 @@ function planEnemies() {
     };
     for (const [key, info] of cells) {
       const [gx, gz] = key.split(',').map(Number);
-      const sShot = computeShot(enemy, { unit: player }, { gx, gz });
+      const sShot = canSee ? computeShot(enemy, { unit: player }, { gx, gz }) : { ok: false };
       const distP = Math.hypot(gx - player.gx, gz - player.gz);
       let score = sShot.ok ? 200 + sShot.chance - info.cost * 2 : 100 - distP * 5 - info.cost;
       score -= exposurePenalty(gx, gz, info.endDir);
@@ -5518,6 +5795,11 @@ async function resolveOneTurn() {
     for (const ow of overwatchers) {
       if (ow._snapped || !ow.alive || !mover.alive) continue;
       if (ow.isPlayer === mover.isPlayer) continue;
+      // 안개·폭우: 시야 밖 이동은 경계로도 못 잡는다 (양측 동일)
+      if (Math.hypot(
+        mover.group.position.x - ow.group.position.x,
+        mover.group.position.z - ow.group.position.z
+      ) / TILE > VIS_LIMIT) continue;
       const bearing = Math.atan2(
         mover.group.position.x - ow.group.position.x,
         mover.group.position.z - ow.group.position.z
@@ -5615,12 +5897,18 @@ function checkGameEnd() {
   return false;
 }
 
-btnGo.addEventListener('click', () => {
+// 경계도 이동·사격과 같은 "1턴 액션" — 큐에 쌓인다 (두 턴 연속 경계 가능)
+chipOw.addEventListener('click', () => {
   if (phase !== 'plan' || busy) return;
-  // 예약된 플랜이 있으면 실행, 없으면 이번 턴을 경계/대기로 종료
-  if (planQueue.length) { resolveQueue(); return; }
-  submitPlan(player.reloadLeft > 0 ? { type: 'wait' } : { type: 'overwatch' });
+  clearPending();
+  enqueuePlan(projReload > 0 ? { type: 'wait' } : { type: 'overwatch' });
 });
+chipRun.addEventListener('click', () => {
+  if (phase !== 'plan' || busy || !planQueue.length) return;
+  clearPending();
+  resolveQueue();
+});
+chipUndo.addEventListener('click', () => cancelAction());
 
 // ---------------------------------------------------------------------------
 // 입력
@@ -5642,13 +5930,14 @@ const btnOk = document.getElementById('btn-ok');
 function setConfirm(show, label = '✓ 확정') {
   btnOk.textContent = label;
   confirmEl.classList.toggle('show', !!show);
+  renderCrumbs(); // 미리보기 상태를 breadcrumb에도 반영
 }
 function clearPending(keepMode = false) {
   pendingPlan = null;
+  if (!keepMode) fireMode = false;
   setConfirm(false);
   ghost.visible = false;
   hideBowUI();
-  if (!keepMode) fireMode = false;
 }
 btnOk.addEventListener('click', () => {
   if (!pendingPlan || phase !== 'plan' || busy) return;
@@ -5714,7 +6003,7 @@ renderer.domElement.addEventListener('pointermove', (e) => {
     // 목표를 향해 드래그 — 커서 아래 셀이 조준점
     let cell = null;
     const enemyHit = raycaster.intersectObjects(
-      enemies.filter((en) => en.alive).map((en) => en.hitbox)
+      enemies.filter((en) => en.alive && !en.hidden).map((en) => en.hitbox)
     )[0];
     if (enemyHit) {
       const u = enemyHit.object.userData.unit;
@@ -5828,7 +6117,7 @@ renderer.domElement.addEventListener('pointerup', async (e) => {
   if (fireMode) {
     let cell = null;
     const enemyHit = raycaster.intersectObjects(
-      enemies.filter((en) => en.alive).map((en) => en.hitbox)
+      enemies.filter((en) => en.alive && !en.hidden).map((en) => en.hitbox)
     )[0];
     if (enemyHit) {
       const u = enemyHit.object.userData.unit;
@@ -5855,7 +6144,7 @@ renderer.domElement.addEventListener('pointerup', async (e) => {
   }
   // 탭 안내: 적을 탭하면 조작법 힌트
   const enemyHit = raycaster.intersectObjects(
-    enemies.filter((en) => en.alive).map((en) => en.hitbox)
+    enemies.filter((en) => en.alive && !en.hidden).map((en) => en.hitbox)
   )[0];
   if (enemyHit) setHint('내 전차를 탭하면 🎯 사격 모드');
 });
@@ -5872,9 +6161,11 @@ function cancelAction() {
   }
 }
 window.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') cancelAction();
+  if (e.key === 'Escape') {
+    if (settingsEl.classList.contains('show')) { settingsEl.classList.remove('show'); return; }
+    cancelAction();
+  }
 });
-document.getElementById('btn-cancel')?.addEventListener('click', cancelAction);
 
 renderer.domElement.addEventListener('pointercancel', () => {
   if (fireGesture) { fireGesture = null; hideBowUI(); refreshPlanUI(false); }
@@ -5932,6 +6223,55 @@ window.addEventListener('resize', () => {
   composer.setSize(window.innerWidth, window.innerHeight);
 });
 let lastNow = 0;
+// ── 안개·폭우 시야: VIS_LIMIT칸 밖의 적은 렌더링 자체를 끈다.
+// 풀 튕김·나무 흔들림·궤도 자국·엔진음 같은 간접 신호만 남는다.
+function updateVisibility() {
+  if (VIS_LIMIT === Infinity) return;
+  for (const e of enemies) {
+    if (!e.alive) {
+      // 격파 순간 은폐 해제 — 잔해·화염은 안개 속에서도 빛나 보인다
+      if (e.hidden) { e.hidden = false; e.group.visible = true; if (thumbsReady) updateThumbs(); }
+      continue;
+    }
+    const d = Math.hypot(
+      e.group.position.x - player.group.position.x,
+      e.group.position.z - player.group.position.z
+    ) / TILE;
+    const hid = d > VIS_LIMIT;
+    if (hid !== !!e.hidden) {
+      e.hidden = hid;
+      e.group.visible = !hid;
+      if (thumbsReady) updateThumbs();
+    }
+  }
+}
+
+// 시야 밖 전차가 지나가면 주변 나무·수풀이 눈에 띄게 술렁인다 (탐지 단서)
+function rustleNearProps(x, z) {
+  const c = worldToCell({ x, z });
+  const seen = new Set();
+  for (let dz = -2; dz <= 2; dz++) {
+    for (let dx = -2; dx <= 2; dx++) {
+      const p = props.get(cellKey(c.gx + dx, c.gz + dz));
+      if (!p || seen.has(p) || (p.type !== 'tree' && p.type !== 'bush')) continue;
+      seen.add(p);
+      if (p._rustling || !p.group) continue;
+      if (Math.hypot(p.group.position.x - x, p.group.position.z - z) > 2.4) continue;
+      p._rustling = true;
+      const g = p.group;
+      const rx0 = g.rotation.x, rz0 = g.rotation.z;
+      const ax = (rng() - 0.5) * 0.13, az = (rng() - 0.5) * 0.13;
+      tween(950, (e, k) => {
+        const s = Math.sin(k * Math.PI * 3.5) * (1 - k);
+        g.rotation.x = rx0 + ax * s;
+        g.rotation.z = rz0 + az * s;
+      }, linear).then(() => {
+        g.rotation.x = rx0; g.rotation.z = rz0; p._rustling = false;
+      });
+    }
+  }
+}
+
 function animate(now) {
   requestAnimationFrame(animate);
   const dt = Math.min(0.05, (now - lastNow) / 1000 || 0.016);
@@ -5957,10 +6297,13 @@ function animate(now) {
     haltRing.material.opacity = 0.5 + Math.sin(now * 0.004) * 0.2;
   }
   rippleTex.offset.set((now * 0.0000121) % 1, (now * -0.0000324) % 1);
-  windUniform.value = now * 0.001; // 식생 바람
+  windUniform.value = now * 0.001 * ENV.windSpeed; // 식생 바람 (날씨별 풍속)
   sparkleTex.offset.set((now * 0.000021) % 1, (now * -0.000013) % 1); // 윤슬 흐름
   updateAntennas(dt); // RC 안테나 대롱대롱
   updateWreckFires(now); // 격파 잔해 화재/매연
+  updateRain(dt); // 비/폭우 빗줄기
+  updateLightning(dt); // 폭우 번개
+  updateVisibility(); // 안개·폭우 시야 제한
   for (const it of items.values()) { // 아이템 부유/회전
     it.group.rotation.y = now * 0.0012;
     it.group.position.y += Math.sin(now * 0.0028 + it.group.position.x) * 0.0007;
@@ -5979,6 +6322,7 @@ requestAnimationFrame(animate);
 // ---------------------------------------------------------------------------
 window.__puratank = {
   seed,
+  env: { tod: TOD, wx: WEATHER, visLimit: VIS_LIMIT, rain: ENV.rainCount, windAmp: ENV.windAmp },
   ssaoPass,
   composer,
   camera,
@@ -5997,7 +6341,7 @@ window.__puratank = {
       aimStack: player.aimStack,
       movedLastTurn: player.movedLastTurn,
       player: { gx: player.gx, gz: player.gz, hp: player.hp, alive: player.alive, hullLv: player.hullLv, driverLv: player.driverLv },
-      enemies: enemies.map((e) => ({ gx: e.gx, gz: e.gz, hp: e.hp, alive: e.alive, hullLv: e.hullLv, driverLv: e.driverLv, reload: e.reloadLeft, rotY: e.group.rotation.y })),
+      enemies: enemies.map((e) => ({ gx: e.gx, gz: e.gz, hp: e.hp, alive: e.alive, hidden: !!e.hidden, hullLv: e.hullLv, driverLv: e.driverLv, reload: e.reloadLeft, rotY: e.group.rotation.y })),
       props: props.size,
     };
   },

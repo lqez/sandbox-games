@@ -27,16 +27,44 @@
     padding: 12px 16px;
     color: #2b3445;
   }
-  /* 상단 중앙: 턴/힌트만 — 최소 스트립 */
+  /* 상단 중앙: 턴 + 계획 breadcrumb + 힌트 */
   #hud {
     top: 10px; left: 50%;
     transform: translateX(-50%);
-    padding: 5px 14px;
+    padding: 6px 12px 7px;
     pointer-events: none;
     text-align: center;
   }
-  #turn-label { font-size: 13px; font-weight: 800; color: #1d4ed8; }
-  #hint { font-size: 11px; font-weight: 600; color: #b0452c; min-height: 13px; max-width: 46vw; }
+  #turn-label { font-size: 12px; font-weight: 800; color: #1d4ed8; }
+  #env-label { font-size: 12px; font-weight: 700; color: #55607a; margin-left: 6px; }
+  #hint { font-size: 11px; font-weight: 600; color: #b0452c; min-height: 13px; max-width: 60vw; }
+  /* 계획 breadcrumb: ① 이동 ▸ ② 사격 — 예약/미리보기/빈 슬롯 */
+  #crumb-row {
+    display: flex; align-items: center; justify-content: center;
+    gap: 5px; margin: 4px 0 3px;
+  }
+  .crumb {
+    font-size: 12px; font-weight: 800; color: #2b3445;
+    background: #e8ecf3; border: 2px solid #2b3445; border-radius: 8px;
+    padding: 3px 9px; white-space: nowrap;
+  }
+  .crumb.empty { color: #9aa3b5; background: transparent; border-style: dashed; border-color: #9aa3b5; }
+  .crumb.pending { color: #2ea04f; border-color: #2ea04f; background: #eaf7ee; }
+  .crumb-sep { font-size: 12px; font-weight: 900; color: #8b95a8; }
+  .chip {
+    pointer-events: auto;
+    font-size: 12px; font-weight: 800;
+    padding: 4px 10px;
+    border-radius: 8px;
+    border-width: 2px;
+    box-shadow: 0 2px 0 #2b3445;
+    margin-left: 3px;
+  }
+  .chip:active { transform: translateY(2px); box-shadow: 0 0 0 #2b3445; }
+  #chip-ow { background: #6b7f5a; }
+  #chip-run { background: #2ea04f; }
+  #chip-undo { background: #8b95a8; padding: 4px 8px; }
+  .chip[hidden] { display: none; }
 
   /* 탱크 섬네일 (좌: 플레이어 / 우: 적 세로 스택) */
   .thumb {
@@ -73,6 +101,16 @@
   }
   .thumb.player .hpbar i { background: linear-gradient(#7cc4ff, #2f7ee0); }
   .thumb.dead { filter: grayscale(1) brightness(0.6); }
+  /* 안개·폭우 시야 밖: 실루엣만 — 위치·체력 미상 */
+  .thumb.hid img { filter: blur(3px) grayscale(1) brightness(0.5); }
+  .thumb.hid::after {
+    content: '?';
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 26px; font-weight: 900; color: #fff;
+    text-shadow: 0 1px 4px #000;
+  }
+  .thumb.hid .hpbar { visibility: hidden; }
   #thumb-player { position: fixed; top: 10px; left: 10px; z-index: 10; }
   #thumb-enemies {
     position: fixed; top: 10px; right: 10px; z-index: 10;
@@ -89,15 +127,9 @@
   #thumb-detail.show { display: block; }
   #thumb-detail b { color: #1d4ed8; }
 
-  #controls {
-    bottom: 16px; left: 50%;
-    transform: translateX(-50%);
-    display: flex; gap: 10px;
-    padding: 10px;
-  }
   /* 확정 바: 계획 미리보기 상태에서만 표시 — 탭 2단계 조작(모바일) */
   #confirm {
-    bottom: 88px; left: 50%;
+    bottom: 24px; left: 50%;
     transform: translateX(-50%);
     display: none;
     padding: 8px;
@@ -141,14 +173,40 @@
   }
   #perf .row { color: #55607a; margin-top: 2px; display: none; }
   #perf.open .row { display: block; }
-  /* 좁은 화면: 하단 중앙 컨트롤과 겹치지 않게 위로 + 축소 */
+  /* 좁은 화면: 축소 */
   @media (max-width: 640px) {
     #perf {
-      bottom: 84px; left: 8px;
       font-size: 10px; padding: 4px 7px; min-width: 0;
       border-width: 2px; border-radius: 8px;
     }
   }
+
+  /* 구석 ⚙ 설정 버튼 + 다이얼로그 (게임 종료/재시작) */
+  #btn-settings {
+    position: fixed; bottom: 16px; right: 12px; z-index: 14;
+    font-size: 17px; padding: 8px 12px;
+    background: #8b95a8;
+  }
+  #settings {
+    position: fixed; inset: 0;
+    display: none;
+    align-items: center; justify-content: center;
+    background: rgba(20, 26, 38, 0.55);
+    z-index: 25;
+  }
+  #settings.show { display: flex; }
+  #settings .box {
+    background: #fff;
+    border: 4px solid #2b3445;
+    border-radius: 18px;
+    box-shadow: 0 10px 0 rgba(43, 52, 69, 0.5);
+    padding: 26px 34px;
+    text-align: center;
+    display: flex; flex-direction: column; gap: 12px;
+    min-width: 230px;
+  }
+  #settings h3 { font-size: 18px; color: #2b3445; margin-bottom: 4px; }
+  #settings .env-info { font-size: 12px; font-weight: 600; color: #55607a; margin-bottom: 2px; }
 
   #overlay {
     position: fixed; inset: 0;
@@ -181,7 +239,13 @@
   <div id="app"></div>
 
   <div id="hud" class="panel">
-    <div id="turn-label">턴 1</div>
+    <div><span id="turn-label">턴 1</span><span id="env-label"></span></div>
+    <div id="crumb-row">
+      <span id="crumbs"></span>
+      <button id="chip-ow" class="chip">👁 경계</button>
+      <button id="chip-run" class="chip" hidden>▶ 실행</button>
+      <button id="chip-undo" class="chip" hidden>✕</button>
+    </div>
     <div id="hint"></div>
   </div>
 
@@ -199,11 +263,16 @@
   <div id="confirm" class="panel">
     <button id="btn-ok">✓ 확정</button>
   </div>
-  <div id="controls" class="panel">
-    <button id="btn-go">👁 경계</button>
-    <button id="btn-cancel" class="secondary">✕ 취소</button>
-    <button id="btn-restart" class="secondary">↻</button>
-    <button id="btn-garage" class="secondary">🛠</button>
+
+  <button id="btn-settings">⚙</button>
+  <div id="settings">
+    <div class="box">
+      <h3>⚙ 설정</h3>
+      <div class="env-info" id="settings-env"></div>
+      <button id="btn-restart" class="secondary">↻ 다시 시작</button>
+      <button id="btn-garage">🏁 게임 종료 — 차고로</button>
+      <button id="btn-close-settings" class="secondary">닫기</button>
+    </div>
   </div>
 
   <div id="overlay">
