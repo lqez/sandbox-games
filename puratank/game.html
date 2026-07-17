@@ -143,6 +143,14 @@
     display: flex; align-items: center; justify-content: center;
     text-shadow: 0 1px 2px #000;
     flex-shrink: 0;
+    position: relative; overflow: hidden;
+  }
+  /* 카드 리필 진행 바 — 3초마다 1장 */
+  #refill-bar {
+    position: absolute; left: 0; bottom: 0;
+    height: 5px; width: 0%;
+    background: #8de08a;
+    transition: width 0.15s linear;
   }
   .card {
     width: 64px; height: 88px;
@@ -160,16 +168,27 @@
   .card.move { border-color: #2f7ee0; }
   .card.fire { border-color: #d0342c; }
   .card.guard { border-color: #2e8b57; }
-  .card.active { transform: translateY(-10px); box-shadow: 0 0 0 3px #ffd24d, 0 6px 0 rgba(43,52,69,0.4); }
-  .card.used { opacity: 0.4; transform: translateY(5px); pointer-events: none; }
-  .card .slot {
-    position: absolute; top: -9px; right: -9px;
-    width: 22px; height: 22px; border-radius: 50%;
-    background: #2ea04f; color: #fff; border: 2px solid #2b3445;
-    font-size: 12px; font-weight: 800;
-    display: none; align-items: center; justify-content: center;
+  .card { transform-origin: 50% 100%; transition: transform 0.15s; touch-action: none; }
+  /* 선택: 확대 + 들어올림 — 재탭/위로 밀면 사용 */
+  .card.sel {
+    transform: translateY(-16px) scale(1.18) !important;
+    box-shadow: 0 0 0 3px #ffd24d, 0 8px 0 rgba(43,52,69,0.4);
+    z-index: 3;
   }
-  .card.used .slot { display: flex; }
+  /* 덱에서 뒤집히며 날아드는 새 카드 */
+  @keyframes card-deal {
+    0% { opacity: 0; transform: translateX(-64px) rotateY(90deg) scale(0.8); }
+    60% { opacity: 1; transform: translateX(-8px) rotateY(-14deg); }
+    100% { opacity: 1; }
+  }
+  .card.deal { animation: card-deal 0.45s ease-out; }
+  /* 사용: 카드가 탱크 머리 위로 날아가 사라진다 */
+  .card.fly {
+    position: fixed; z-index: 30; pointer-events: none; margin: 0;
+    transition: left 0.55s ease-in, top 0.55s ease-in, transform 0.55s ease-in, opacity 0.55s ease-in;
+  }
+  /* 재장전 중인 공격/엄호 카드 — 내면 제자리에서 장전을 기다린다 */
+  .card.cool { filter: grayscale(0.65) brightness(0.72); }
   @media (max-width: 640px) {
     #hand { gap: 5px; bottom: 8px; }
     .card { width: 54px; height: 74px; border-width: 2px; }
