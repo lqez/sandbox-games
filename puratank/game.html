@@ -41,29 +41,29 @@
   /* 탱크 섬네일 (좌: 플레이어 / 우: 적 세로 스택) */
   .thumb {
     position: relative;
-    width: 84px; height: 84px;
+    width: 56px; height: 56px;
     background: rgba(255,255,255,0.9);
-    border: 3px solid #2b3445;
-    border-radius: 12px;
-    box-shadow: 0 4px 0 rgba(43,52,69,0.35);
+    border: 2px solid #2b3445;
+    border-radius: 9px;
+    box-shadow: 0 3px 0 rgba(43,52,69,0.35);
     overflow: hidden;
     cursor: pointer;
     flex-shrink: 0;
   }
   .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
   .thumb .tag {
-    position: absolute; top: 2px; left: 4px;
-    font-size: 10px; font-weight: 800; color: #2b3445;
+    position: absolute; top: 1px; left: 3px;
+    font-size: 8px; font-weight: 800; color: #2b3445;
     text-shadow: 0 1px 0 #fff;
   }
   .thumb .lv {
-    position: absolute; top: 2px; right: 4px;
-    font-size: 10px; font-weight: 800; color: #6b3fa0;
+    position: absolute; top: 1px; right: 3px;
+    font-size: 8px; font-weight: 800; color: #6b3fa0;
     text-shadow: 0 1px 0 #fff;
   }
   .thumb .hpbar {
-    position: absolute; left: 4px; right: 4px; bottom: 4px;
-    height: 7px; border: 1.5px solid #2b3445; border-radius: 4px;
+    position: absolute; left: 3px; right: 3px; bottom: 3px;
+    height: 5px; border: 1px solid #2b3445; border-radius: 3px;
     background: #d5dae3; overflow: hidden;
   }
   .thumb .hpbar i {
@@ -76,16 +76,16 @@
   #thumb-player { position: fixed; top: 10px; left: 10px; z-index: 10; }
   #thumb-enemies {
     position: fixed; top: 10px; right: 10px; z-index: 10;
-    display: flex; flex-direction: column; gap: 8px;
+    display: flex; flex-direction: column; gap: 6px;
   }
   /* 섬네일 확대 상세 */
   #thumb-detail {
-    position: fixed; top: 104px; left: 10px; z-index: 12;
+    position: fixed; top: 74px; left: 10px; z-index: 12;
     display: none;
     max-width: 280px;
     font-size: 12px; font-weight: 600; line-height: 1.55;
   }
-  #thumb-detail.right { left: auto; right: 102px; top: 10px; }
+  #thumb-detail.right { left: auto; right: 74px; top: 10px; }
   #thumb-detail.show { display: block; }
   #thumb-detail b { color: #1d4ed8; }
 
@@ -110,6 +110,7 @@
   }
   button {
     font-family: inherit;
+    white-space: nowrap;
     font-size: 14px;
     font-weight: 800;
     color: #fff;
@@ -129,7 +130,7 @@
   #btn-fire-mode.on { background: #d0342c; }
 
   #perf {
-    top: 14px; right: 14px;
+    bottom: 16px; left: 12px;
     font-family: 'Consolas', 'Menlo', monospace;
     font-size: 12px;
     font-weight: 700;
@@ -140,6 +141,14 @@
   }
   #perf .row { color: #55607a; margin-top: 2px; display: none; }
   #perf.open .row { display: block; }
+  /* 좁은 화면: 하단 중앙 컨트롤과 겹치지 않게 위로 + 축소 */
+  @media (max-width: 640px) {
+    #perf {
+      bottom: 84px; left: 8px;
+      font-size: 10px; padding: 4px 7px; min-width: 0;
+      border-width: 2px; border-radius: 8px;
+    }
+  }
 
   #overlay {
     position: fixed; inset: 0;
