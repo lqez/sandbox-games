@@ -192,29 +192,37 @@
   /* 재장전 중인 공격/엄호 카드 — 내면 제자리에서 장전을 기다린다 */
   .card.cool { filter: grayscale(0.65) brightness(0.72); }
 
-  /* 실행 중 카드 배지: 탱크 머리 위를 따라다닌다 — 단계명 + 진행 바 */
+  /* 실행 중 카드: 상단 중앙에 카드째로 — 그래픽 + 단계명 + 남은 시간 */
   #active-cards {
-    position: fixed; z-index: 12; pointer-events: none;
-    display: flex; gap: 6px;
-    transform: translate(-50%, -100%);
+    position: fixed; top: 88px; left: 50%;
+    transform: translateX(-50%);
+    display: none; gap: 10px;
+    z-index: 12; pointer-events: none;
   }
   .acard {
-    background: rgba(253, 250, 243, 0.95);
-    border: 2px solid #2f7ee0; border-radius: 9px;
-    padding: 3px 9px 6px;
-    font-size: 11px; font-weight: 800; color: #2b3445;
-    display: flex; align-items: center; gap: 5px;
+    min-width: 76px; height: 104px;
+    padding: 6px 10px 12px;
+    background: #fdfaf3;
+    border: 3px solid #2f7ee0; border-radius: 12px;
+    box-shadow: 0 4px 0 rgba(43, 52, 69, 0.35);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 2px; font-size: 12.5px; font-weight: 800; color: #2b3445;
     position: relative; white-space: nowrap;
-    box-shadow: 0 2px 0 rgba(43, 52, 69, 0.3);
   }
-  .acard svg { width: 16px; height: 16px; display: block; }
+  .acard svg { width: 34px; height: 34px; display: block; }
+  .acard .t { font-size: 11px; font-weight: 800; color: #55607a; font-variant-numeric: tabular-nums; }
   .acard.fire { border-color: #d0342c; }
   .acard .bar {
-    position: absolute; left: 3px; right: 3px; bottom: 1.5px;
-    height: 3px; background: #e3e7ee; border-radius: 2px; overflow: hidden;
+    position: absolute; left: 5px; right: 5px; bottom: 4px;
+    height: 5px; background: #e3e7ee; border-radius: 3px; overflow: hidden;
   }
   .acard .bar i { display: block; height: 100%; background: #2ea04f; width: 0%; }
   .acard.fire .bar i { background: #e8834f; }
+  @media (max-width: 640px) {
+    #active-cards { top: 96px; gap: 7px; }
+    .acard { min-width: 64px; height: 90px; font-size: 11px; }
+    .acard svg { width: 27px; height: 27px; }
+  }
   @media (max-width: 640px) {
     #hand { gap: 5px; bottom: 30px; }
     .card { width: 54px; height: 74px; border-width: 2px; }

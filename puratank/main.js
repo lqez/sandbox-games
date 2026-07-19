@@ -6924,11 +6924,9 @@ function rustleNearProps(x, z) {
   }
 }
 
-// 실행 중 카드 배지: 지금 탱크가 무슨 카드를 수행 중인지 (단계명 + 진행 바)
-// 탱크 머리 위 화면 좌표를 따라다닌다.
+// 실행 중 카드: 상단 중앙에 카드째로 표시 — 그래픽 + 단계명 + 남은 시간 + 진행 바
 const activeCardsEl = document.getElementById('active-cards');
 let activeCardsSig = '';
-const _acV = new THREE.Vector3();
 function updateActiveCardsHUD(now) {
   if (!activeCardsEl) return;
   const parts = [];
@@ -6938,7 +6936,8 @@ function updateActiveCardsHUD(now) {
       parts.push({
         key: curMoveDef.key, cls: '',
         name: MOVE_NAMES[curMoveDef.key][am.level - 1],
-        pct: Math.min(96, ((now - am.t0) / am.dur) * 100),
+        left: Math.max(0, am.dur - (now - am.t0)),
+        pct: Math.min(97, ((now - am.t0) / am.dur) * 100),
       });
     }
     if (fireStage) {
@@ -6946,8 +6945,9 @@ function updateActiveCardsHUD(now) {
       const dur = isReload ? fireStage.waitDur : 600 + fireStage.extendMs;
       parts.push({
         key: 'atk', cls: ' fire',
-        name: fireStage.fired ? '발사!' : isReload ? '재장전…' : FIRE_NAMES[fireStage.level - 1],
-        pct: fireStage.fired ? 100 : Math.min(96, ((now - fireStage.t0) / Math.max(1, dur)) * 100),
+        name: fireStage.fired ? '발사!' : isReload ? '재장전' : FIRE_NAMES[fireStage.level - 1],
+        left: fireStage.fired ? 0 : Math.max(0, dur - (now - fireStage.t0)),
+        pct: fireStage.fired ? 100 : Math.min(97, ((now - fireStage.t0) / Math.max(1, dur)) * 100),
       });
     }
   }
@@ -6960,17 +6960,18 @@ function updateActiveCardsHUD(now) {
     activeCardsSig = sig;
     activeCardsEl.style.display = 'flex';
     activeCardsEl.innerHTML = parts.map((p) =>
-      `<div class="acard${p.cls}">${CARD_ICONS[p.key] ?? ''}<span>${p.name}</span><span class="bar"><i></i></span></div>`
+      `<div class="acard${p.cls}">${CARD_ICONS[p.key] ?? ''}<span>${p.name}</span><span class="t"></span><span class="bar"><i></i></span></div>`
     ).join('');
   }
-  const bars = activeCardsEl.querySelectorAll('.bar i');
-  parts.forEach((p, i) => { if (bars[i]) bars[i].style.width = `${p.pct.toFixed(0)}%`; });
-  _acV.copy(player.group.position);
-  _acV.y += 2.3;
-  _acV.project(camera);
-  if (_acV.z > 1) { activeCardsEl.style.display = 'none'; activeCardsSig = ''; return; }
-  activeCardsEl.style.left = `${((_acV.x * 0.5 + 0.5) * window.innerWidth).toFixed(0)}px`;
-  activeCardsEl.style.top = `${((-_acV.y * 0.5 + 0.5) * window.innerHeight).toFixed(0)}px`;
+  const cards = activeCardsEl.querySelectorAll('.acard');
+  parts.forEach((p, i) => {
+    const el = cards[i];
+    if (!el) return;
+    const t = el.querySelector('.t');
+    if (t) t.textContent = p.left > 0 ? `${(p.left / 1000).toFixed(1)}s` : '·';
+    const bar = el.querySelector('.bar i');
+    if (bar) bar.style.width = `${p.pct.toFixed(0)}%`;
+  });
 }
 
 function animate(now) {
