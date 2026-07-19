@@ -3460,7 +3460,7 @@ async function moveUnit(unit, path, finalFacing = null, onStep = null) {
     sfx(terrainAt(cell.gx, cell.gz) === T.WATER ? 'splash' : 'step');
     unit._trailLast ??= { x: from.x, z: from.z };
     unit._trailSm ??= { x: from.x, z: from.z };
-    await tween((reverse ? 290 : 210) / (unit._dash ? 1.6 : 1), (e) => { // 절반 템포 (가속 합성 시 1.6배)
+    await tween((reverse ? 290 : 210) / (unit._dash ? (unit._dashMul ?? 1.6) : 1), (e) => { // 절반 템포 (돌격 1.6×/돌파 1.9×)
       const x = THREE.MathUtils.lerp(from.x, to.x, e);
       const z = THREE.MathUtils.lerp(from.z, to.z, e);
       unit.group.position.set(x, driveHeight(x, z) + Math.sin(e * Math.PI) * 0.08, z);
@@ -4595,7 +4595,9 @@ async function resolveImpact(impact, attacker, directUnit = null) {
   }
   for (const [prop, dmg] of hitProps) damageProp(prop, dmg, impact);
   if (directUnit) {
-    await applyUnitDamage(directUnit, attacker.damage, attacker.group.position);
+    // 정밀사격(공격×3)은 약점 조준 — 피해 1.25배
+    const mul = attacker.plan?._dmgMul ?? 1;
+    await applyUnitDamage(directUnit, attacker.damage * mul, attacker.group.position);
   }
   // 스플래시 (직격 대상 제외)
   for (const u of units) {
@@ -4703,10 +4705,13 @@ async function fireSequence(attacker, target, shot) {
     recoilGun.position.set(recoilBase.x - rfx * d, recoilBase.y, recoilBase.z - rfz * d);
   }, linear);
 
-  // 명중 굴림 — 기동 사격 −8, 정조준(경계→공격 합성) +15, 제압당한 적 −15
+  // 명중 굴림 — 이동·조준·노출의 상충:
+  //  기동 사격 −8 (돌격/돌파 중엔 −12), 조준/정밀 보너스(정지 시 +15/+30, 이동 시 절반),
+  //  움직이는 표적은 맞히기 어렵다 −12, 제압당한 적 −15
   let adj = 0;
-  if (attacker.isPlayer && attacker.plan?._moved) adj -= 8;
-  if (attacker.isPlayer && attacker.plan?._aimed) adj += 15;
+  if (attacker.isPlayer && attacker.plan?._moved) adj -= attacker._dash ? 12 : 8;
+  if (attacker.isPlayer && attacker.plan?._aimBonus) adj += attacker.plan._aimBonus;
+  if (target?.unit && target.unit._driving) adj -= 12; // 기동 ▶ 사격 (이동 회피)
   if (!attacker.isPlayer && attacker._suppressed) { adj -= 15; attacker._suppressed = false; }
   const effChance = THREE.MathUtils.clamp(shot.chance + adj, 3, 97);
   const roll = Math.random() * 100;
@@ -5653,23 +5658,35 @@ function withProjectedPlayer(fn) {
 // 이동은 "적 기준" — 돌격(간격 좁힘)/회피(옆으로 틀며 간격 유지)/후퇴(간격 벌림).
 // 공격은 직사·곡사를 가리지 않는 통합 카드, 엄호는 표적이 없어도 허공에 제압사격.
 // 이동 카드와 공격/엄호 카드를 연달아 내면 한 서브턴에 "이동하며 사격"한다.
-// durMs: 카드 수행 시간 — 이동은 이 시간만큼 기동 락, 사격은 발사 연출 후
-// 차종별 재장전(초)이 따로 붙는다. 미리 생각해서 내는 것이 중요해진다.
+// ── 기본 5장 (차체 기준) — 전차전 교리 리팩토링 ──
+// 전진/후진/좌/우/공격. 같은 카드를 실행 중에 얹으면 "단계"가 오른다:
+//  전진: 전진 → 돌격 → 전속돌파 (속도↑, 명중↓, 노출↑)
+//  후진: 후진 → 급후진 → 긴급이탈 (전면을 문 채 이탈)
+//  좌/우: 선회 전진 → 측면전개(제동→선회→새 방향 전진) → 우회(측후면 진입)
+//  공격: 즉응사격 → 조준 → 정밀사격 (연사가 아니라 사격 "품질" 강화)
+// durMs = 그 전술이 점유하는 명령 슬롯 시간 (애니메이션 길이가 아님)
 const CARD_DEFS = {
-  charge: { key: 'charge', label: '돌격', ico: '⚔️', kind: 'move', mv: 'charge', typ: '이동', cls: 'move', durMs: 5000 },
-  evade: { key: 'evade', label: '회피', ico: '💨', kind: 'move', mv: 'evade', typ: '이동', cls: 'move', durMs: 3500 },
-  retreat: { key: 'retreat', label: '후퇴', ico: '↩️', kind: 'move', mv: 'retreat', typ: '이동', cls: 'move', durMs: 4500 },
+  fwd: { key: 'fwd', label: '전진', ico: '⬆️', kind: 'move', mv: 'fwd', typ: '이동', cls: 'move', durMs: 4000 },
+  back: { key: 'back', label: '후진', ico: '⬇️', kind: 'move', mv: 'back', typ: '이동', cls: 'move', durMs: 4000 },
+  left: { key: 'left', label: '좌', ico: '↰', kind: 'move', mv: 'left', typ: '이동', cls: 'move', durMs: 3500 },
+  right: { key: 'right', label: '우', ico: '↱', kind: 'move', mv: 'right', typ: '이동', cls: 'move', durMs: 3500 },
   atk: { key: 'atk', label: '공격', ico: '🎯', kind: 'atk', typ: '공격', cls: 'fire', durMs: 2000 },
-  sup: { key: 'sup', label: '엄호', ico: '🔥', kind: 'sup', typ: '제압', cls: 'fire', durMs: 2500 },
-  ow: { key: 'ow', label: '경계', ico: '👁️', kind: 'overwatch', typ: '경계', cls: 'guard', durMs: 800 },
 };
+// 이동 카드 단계별 표시명
+const MOVE_NAMES = {
+  fwd: ['전진', '돌격', '전속돌파'],
+  back: ['후진', '급후진', '긴급이탈'],
+  left: ['좌선회 전진', '좌측전개', '좌측우회'],
+  right: ['우선회 전진', '우측전개', '우측우회'],
+};
+const FIRE_NAMES = ['즉응사격', '조준사격', '정밀사격'];
 // 재장전: 차종 reload(턴) × 3초 — 공격 카드를 재장전 중에 내면 제자리에서
 // 장전을 기다렸다 쏜다 (그동안 새 기동 불가 — 성급한 공격의 대가)
 const RELOAD_MS_PER = 3000;
 const DECK_LIST = [
-  'charge', 'charge', 'charge', 'charge', 'evade', 'evade', 'evade',
-  'retreat', 'retreat', 'retreat', 'atk', 'atk', 'atk', 'atk',
-  'sup', 'sup', 'sup', 'ow', 'ow', 'ow',
+  'fwd', 'fwd', 'fwd', 'fwd', 'back', 'back', 'back', 'back',
+  'left', 'left', 'left', 'left', 'right', 'right', 'right', 'right',
+  'atk', 'atk', 'atk', 'atk',
 ];
 let drawPile = shuffle(DECK_LIST.slice());
 let discardPile = [];
@@ -5717,7 +5734,9 @@ function updateHandRefill(now) {
 }
 let selectedCard = null;   // 1탭 선택(확대) → 재탭/위로 드래그 = 사용
 let lastDealt = null;      // 방금 덱에서 온 카드 — 딜 애니메이션용
-let curMoveDef = null;     // 실행 중인 이동 카드 (합성 판정용)
+let curMoveDef = null;     // 실행 중인 이동 카드 (얹기 판정용)
+let curMoveLevel = 1;      // 이동 단계: 1 기본 / 2 돌격·전개 / 3 돌파·우회
+let fireStage = null;      // 공격 조준 단계: { level, extendMs, fired }
 function renderHand() {
   if (!handEl) return;
   handEl.innerHTML = '';
@@ -5787,10 +5806,23 @@ function cardFlyFx(el, def) {
 function playCardFromHand(c, el) {
   if (phase === 'gameover' || !player.alive || !hand.includes(c)) return;
   const def = c.def;
-  // 합성 판정: 실행 중 이동에 이동 카드를 얹는 경우
-  const combo = def.kind === 'move' && playerMoveBusy && curMoveDef ? comboOf(curMoveDef, def) : null;
-  if (def.kind === 'move' && playerMoveBusy && !combo) { setHint('기동 중 — 겹칠 수 없는 카드'); return; }
-  if ((def.kind === 'atk' || def.kind === 'sup') && playerFireBusy) { setHint('사격 중 — 잠시 후'); return; }
+  // 얹기 판정: 실행 중인 행동 위에 카드를 겹치면 단계가 오르거나 동사가 바뀐다
+  let action = null;
+  if (def.kind === 'move' && playerMoveBusy && curMoveDef) {
+    if (curMoveDef.key === def.key) action = curMoveLevel >= 3 ? null : 'level-move';
+    else if ((curMoveDef.key === 'fwd' && def.key === 'back') || (curMoveDef.key === 'back' && def.key === 'fwd')) action = 'brake';
+    else action = 'reroute';
+    if (!action) { setHint('이미 최고 단계'); return; }
+  } else if (def.kind === 'move' && playerMoveBusy) {
+    setHint('기동 중'); return;
+  } else if (def.kind === 'atk' && fireStage && !fireStage.fired) {
+    action = fireStage.level >= 3 ? null : 'level-fire';
+    if (!action) { setHint('이미 정밀 조준'); return; }
+  } else if (def.kind === 'atk' && playerFireBusy) {
+    setHint('사격 중 — 잠시 후'); return;
+  } else {
+    action = 'exec';
+  }
   hand.splice(hand.indexOf(c), 1);
   discardPile.push(def.key);
   selectedCard = null;
@@ -5798,76 +5830,84 @@ function playCardFromHand(c, el) {
   cardFlyFx(el, def);
   fieldsDirty = true;
   turnNo++; // 통계: 사용한 카드 수
-  if (combo) execCombo(combo, def);
-  else execCard(def);
-}
-// ── 카드 합성: 실행 중 카드 위에 얹으면 다른 동사가 된다 ──
-// 반대 이동 = 급제동(상쇄) / 같은 이동 = 전속(1.6배) / +회피 = 경로 변경
-function comboOf(cur, next) {
-  if ((cur.mv === 'charge' && next.mv === 'retreat') || (cur.mv === 'retreat' && next.mv === 'charge')) return 'cancel';
-  if (cur.mv === next.mv) return 'dash';
-  if (next.mv === 'evade') return 'reroute';
-  if (next.mv === 'charge' || next.mv === 'retreat') return 'reroute'; // 회피 중 방향 전환도 경로 변경
-  return null;
-}
-function execCombo(kind, def) {
-  const curIco = curMoveDef?.ico ?? '';
-  if (kind === 'cancel') {
+  if (action === 'level-move') levelUpMove();
+  else if (action === 'brake') {
+    // 전진↔후진 = 급제동: 즉시 정지, 두 카드 상쇄
     player._abortMove = true;
-    cardPop({ ico: `${curIco}✕${def.ico}`, label: '급제동!' }, '', '#ffd76e');
-    return;
-  }
-  if (kind === 'dash') {
-    player._dash = true;
-    cardPop({ ico: `${def.ico}${def.ico}`, label: '전속!' }, '', '#8de08a');
-    return;
-  }
-  // reroute: 현재 기동을 끊고 새 카드로 즉시 재기동
-  player._abortMove = true;
-  cardPop({ ico: `${curIco}➜${def.ico}`, label: `${def.label} 전환!` }, '', '#9fd8ff');
-  (async () => {
-    let guard = 0;
-    while (playerMoveBusy && guard++ < 100) await delay(100);
+    cardPop({ ico: '⛔', label: '급제동!' }, '', '#ffd76e');
+  } else if (action === 'reroute') {
+    // 다른 이동 카드 = 진로 변경: 제동 후 새 방향으로 재기동
+    player._abortMove = true;
+    cardPop({ ico: `➜${def.ico}`, label: `${MOVE_NAMES[def.key][0]} 전환` }, '', '#9fd8ff');
+    (async () => { let g = 0; while (playerMoveBusy && g++ < 100) await delay(100); execCard(def); })();
+  } else if (action === 'level-fire') {
+    levelUpFire();
+  } else {
     execCard(def);
-  })();
+  }
+}
+// 같은 이동 카드 얹기 = 단계 상승. 전차는 옆으로 미끄러지지 않는다 —
+// 좌/우 강화도 "제동 → 선회 → 새 방향 전진"(전개), 3단은 측후면 우회.
+// 돌격 계열은 빨라지는 대신 사격이 흔들리고(-4) 크게 노출된다.
+function levelUpMove() {
+  curMoveLevel = Math.min(3, curMoveLevel + 1);
+  player._dash = true;
+  player._dashMul = curMoveLevel >= 3 ? 1.9 : 1.6;
+  player._extendMove = true; // 현 구간이 끝나면 같은 방향으로 한 구간 더
+  const name = MOVE_NAMES[curMoveDef.key][curMoveLevel - 1];
+  cardPop({ ico: curMoveDef.ico.repeat(Math.min(2, curMoveLevel)), label: `${name}!` }, '', curMoveLevel >= 3 ? '#ffb46e' : '#8de08a');
+}
+// 같은 공격 카드 얹기 = 연사가 아니라 "조준" — 발사를 늦추는 대신
+// 명중이 오르고(3단은 약점 피해 1.25배), 그만큼 오래 자리에 묶인다.
+function levelUpFire() {
+  fireStage.level = Math.min(3, fireStage.level + 1);
+  fireStage.extendMs += fireStage.level === 2 ? 1700 : 1600;
+  cardPop({ ico: '🔭', label: `${FIRE_NAMES[fireStage.level - 1]} 준비` }, '', '#ffe9a8');
 }
 async function execCard(def) {
-  if (def.kind === 'overwatch') {
-    player._owPosture = true;
-    cardPop(def, ' 자세', '#ffe9a8');
-    return;
-  }
   if (def.kind === 'move') {
     playerMoveBusy = true;
     curMoveDef = def;
-    player._owPosture = false;
+    curMoveLevel = 1;
     const t0 = performance.now();
     try {
-      const plan = materializeMove({ _card: { def } });
-      if (plan.type !== 'move') return;
-      cardPop(def);
-      const from = { gx: player.gx, gz: player.gz };
-      await moveUnit(player, plan.path, null);
-      playerLastMove = { dx: player.gx - from.gx, dz: player.gz - from.gz }; // 적 리드 예측용
-      // 이동 후 포탑: 최근접 적 지향
-      if (player.alive && plan.turretYaw != null && player.hasTurret && !player._abortMove) {
-        const rel = normAngle(plan.turretYaw - player.group.rotation.y);
-        const diff = normAngle(rel - player.turret.rotation.y);
-        if (Math.abs(diff) > 0.02) {
-          const from2 = player.turret.rotation.y;
-          await tween((Math.abs(diff) / TURRET_TRACK_RATE) * 1000, (e2) => { player.turret.rotation.y = from2 + diff * e2; });
+      let hop = 0;
+      do {
+        player._extendMove = false;
+        const plan = materializeMove(def, curMoveLevel);
+        if (plan.type !== 'move') { if (hop === 0) { cardPop(def, ' — 길 없음', '#c8c2b4'); } break; }
+        if (hop === 0) cardPop({ ico: def.ico, label: MOVE_NAMES[def.key][0] });
+        const from = { gx: player.gx, gz: player.gz };
+        await moveUnit(player, plan.path, null);
+        playerLastMove = { dx: player.gx - from.gx, dz: player.gz - from.gz }; // 적 리드 예측용
+        // 이동 후 포탑: 최근접 적 지향 (연장 이동이 남았으면 생략)
+        if (player.alive && plan.turretYaw != null && player.hasTurret && !player._extendMove) {
+          const rel = normAngle(plan.turretYaw - player.group.rotation.y);
+          const diff = normAngle(rel - player.turret.rotation.y);
+          if (Math.abs(diff) > 0.02) {
+            const from2 = player.turret.rotation.y;
+            await tween((Math.abs(diff) / TURRET_TRACK_RATE) * 1000, (e2) => { player.turret.rotation.y = from2 + diff * e2; });
+          }
         }
-      }
-      // 카드 수행 시간을 채운다 — 짧게 끝난 기동도 durMs만큼 정비 시간
+        hop++;
+      } while (player._extendMove && player.alive && hop < 4);
+      // 카드 수행 시간을 채운다 — 명령 슬롯 점유 (짧은 기동도 durMs만큼)
       const left = def.durMs - (performance.now() - t0);
       if (left > 0 && player.alive) await delay(left);
-    } finally { playerMoveBusy = false; curMoveDef = null; fieldsDirty = true; }
+    } finally {
+      playerMoveBusy = false;
+      curMoveDef = null;
+      curMoveLevel = 1;
+      player._dashMul = 1;
+      fieldsDirty = true;
+    }
     return;
   }
-  // 공격/엄호 — 이동 중이어도 즉시 발사 (기동 사격 -8).
-  // 재장전이 안 끝났으면 제자리에서 장전을 기다렸다 쏜다 (성급한 공격의 대가)
+  // ── 공격: 즉응사격 → (얹으면) 조준 → 정밀사격 ──
+  // 재장전이 안 끝났으면 제자리에서 장전을 기다렸다 쏜다 (성급한 공격의 대가).
+  // 이동 중 발사는 기동사격(-8), 조준 보너스도 이동 중엔 절반 — 이동·조준·노출의 상충.
   playerFireBusy = true;
-  const aimed = !!player._owPosture; // 경계 자세에서 쏘면 정조준 (+15)
+  fireStage = { level: 1, extendMs: 0, fired: false };
   try {
     const now0 = performance.now();
     if ((player.reloadReadyAt ?? 0) > now0) {
@@ -5878,23 +5918,34 @@ async function execCard(def) {
       try { await delay(wait); } finally { if (lockMove) playerMoveBusy = false; }
       if (!player.alive || phase === 'gameover') return;
     }
+    // 조준 창: 즉응 0.6초 — 이 사이 공격 카드를 얹으면 조준/정밀로 승급
+    let waited = 0;
+    while (waited < 600 + fireStage.extendMs) {
+      await delay(150);
+      waited += 150;
+      if (!player.alive || phase === 'gameover') return;
+    }
+    fireStage.fired = true;
+    const lvl = fireStage.level;
+    const moving = playerMoveBusy;
+    const aimBonus = lvl === 1 ? 0 : lvl === 2 ? (moving ? 8 : 15) : (moving ? 15 : 30);
     const fp = materializeFire(def);
     if (!fp) { cardPop(def, ' — 사격 불가', '#c8c2b4'); return; }
-    cardPop(def, aimed ? ' (정조준)' : '');
-    player._owPosture = false;
-    player.plan = { type: 'fire', cell: fp.cell, shot: fp.shot, sup: fp.sup, _moved: playerMoveBusy, _aimed: aimed };
+    const label = moving && curMoveDef
+      ? `${MOVE_NAMES[curMoveDef.key][Math.min(curMoveLevel, 3) - 1]}사격`
+      : FIRE_NAMES[lvl - 1];
+    cardPop({ ico: '🎯', label });
+    player.plan = {
+      type: 'fire', cell: fp.cell, shot: fp.shot,
+      _moved: moving, _aimBonus: aimBonus, _dmgMul: lvl === 3 ? 1.25 : 1,
+    };
     await resolvePlannedShot(player);
-    if (fp.sup) {
-      for (const e of enemies) {
-        if (!e.alive || e._suppressed) continue;
-        if (Math.hypot(e.gx - fp.cell.gx, e.gz - fp.cell.gz) <= 3) {
-          e._suppressed = true;
-          popText(e.group.position.clone().add(new THREE.Vector3(0, 1.5, 0)), '🔥 제압됨', '#ffb46e');
-        }
-      }
-    }
     player.plan = null;
-  } finally { playerFireBusy = false; fieldsDirty = true; }
+  } finally {
+    playerFireBusy = false;
+    fireStage = null;
+    fieldsDirty = true;
+  }
 }
 // 가장 가까운 적 (안개 속에서도 엔진 소리로 대략적 위치는 안다)
 function nearestEnemy() {
@@ -5906,88 +5957,87 @@ function nearestEnemy() {
   }
   return best;
 }
-// 셀이 어떤 이동 카드인지 — "적 기준" 거리 변화로 분류:
-// 1.2칸 이상 좁히면 돌격 / 1.2칸 이상 벌리면 후퇴 / 그 사이는 회피(측면 기동)
-function moveKindOfCell(near, gx, gz) {
-  if (!near) return 'charge'; // 표적이 없으면 수색 전진으로 취급
-  const dNow = Math.hypot(player.gx - near.gx, player.gz - near.gz);
-  const dNew = Math.hypot(gx - near.gx, gz - near.gz);
-  const delta = dNow - dNew;
-  return delta > 1.2 ? 'charge' : delta < -1.2 ? 'retreat' : 'evade';
+// 차체 기준 상대각(도): 0 전방, ±180 후방, +우 / −좌
+function hullRelDeg(gx, gz) {
+  return normAngle(Math.atan2(gx - player.gx, gz - player.gz) - player.group.rotation.y) * (180 / Math.PI);
+}
+// 셀이 어느 이동 카드 방향인지 — 전방 ≤50° / 후방 ≥132° / 그 사이 좌·우
+function arcOfRel(rel) {
+  const a = Math.abs(rel);
+  if (a <= 50) return 'fwd';
+  if (a >= 132) return 'back';
+  return rel > 0 ? 'right' : 'left';
 }
 const cardPop = (def, extra = '', col = '#e8e4d8') => {
   const p = player.group.position.clone();
   p.y += 1.9;
   popText(p, `${def.ico} ${def.label}${extra}`, col);
 };
-// 이동 카드 구체화: 적 기준 후보 셀을 채점 — 사격각·아이템·헐다운·엄폐를
-// 알뜰하게 챙기는 "똑똑한 조종수"
-function materializeMove(q) {
-  const def = q._card.def;
+// 이동 카드 구체화 (차체 기준 호 + 단계) — 사격각·아이템·헐다운을 챙기고,
+// 좌/우 3단(우회)은 적의 측후면 각도가 서는 위치에 큰 가산.
+function materializeMove(def, level = 1) {
   const near = nearestEnemy();
   const cand = [];
   for (const [k, info] of reachableCells(player)) {
     const [gx, gz] = k.split(',').map(Number);
-    if (moveKindOfCell(near, gx, gz) !== def.mv) continue;
+    if (arcOfRel(hullRelDeg(gx, gz)) !== def.mv) continue;
     let score = -info.cost;
-    // 아이템 줍기: 경로가 아이템 위를 지나면 크게 가산 (후퇴 중엔 덜 무리)
     for (const step of info.path) {
-      if (items.has(cellKey(step.gx, step.gz))) score += def.mv === 'retreat' ? 22 : 48;
+      if (items.has(cellKey(step.gx, step.gz))) score += def.mv === 'back' ? 22 : 48;
     }
-    if (hullDownCells.has(k)) score += 25;
+    if (hullDownCells.has(k)) score += 25; // 헐다운 = 지형이 주는 방어
+    const distMoved = Math.hypot(gx - player.gx, gz - player.gz);
+    if (level >= 2) score += distMoved * 6; // 돌격/전개: 크게 움직인다
     if (near) {
       const dNow = Math.hypot(player.gx - near.gx, player.gz - near.gz);
       const dNew = Math.hypot(gx - near.gx, gz - near.gz);
-      if (def.mv === 'charge') {
-        // 돌격: 간격을 좁히며 사격각이 서는 위치로
-        const s = !near.hidden ? computeShot(player, { unit: near }, { gx, gz }) : { ok: false };
-        score += (s.ok ? 150 + s.chance : 0) + (dNow - dNew) * 6;
-      } else if (def.mv === 'evade') {
-        // 회피: 적 조준선에서 옆으로 크게 벗어난다 — 변위 클수록, 간격 유지
-        const bearing = Math.atan2(near.gx - player.gx, near.gz - player.gz);
-        const mvAng = Math.atan2(gx - player.gx, gz - player.gz);
-        const lat = Math.abs(Math.sin(normAngle(mvAng - bearing)));
-        score += Math.hypot(gx - player.gx, gz - player.gz) * (4 + lat * 7) - Math.abs(dNew - dNow) * 2;
-      } else {
-        // 후퇴: 전면을 문 채(후진 기어) 간격을 벌린다
+      if (def.mv === 'fwd') {
+        // 전진: 접근 + 사격각이 서는 위치
+        const sh = !near.hidden ? computeShot(player, { unit: near }, { gx, gz }) : { ok: false };
+        score += (sh.ok ? 120 + sh.chance : 0) + (dNow - dNew) * 5;
+      } else if (def.mv === 'back') {
+        // 후진: 전면을 문 채 간격 회복
         score += (dNew - dNow) * 10;
+      } else {
+        // 좌/우: 새 사격각 + 진로 변경, 3단 우회는 적 측후면 진입에 큰 가산
+        const sh = !near.hidden ? computeShot(player, { unit: near }, { gx, gz }) : { ok: false };
+        score += (sh.ok ? 40 + sh.chance * 0.5 : 0) + distMoved * 3;
+        if (level >= 3 && !near.hidden) {
+          const relE = Math.abs(normAngle(
+            Math.atan2(gx - near.gx, gz - near.gz) - near.group.rotation.y
+          )) * (180 / Math.PI);
+          if (relE >= 120) score += 60;      // 적 후면 각
+          else if (relE > 60) score += 32;   // 적 측면 각
+        }
       }
     } else {
-      score += Math.hypot(gx - player.gx, gz - player.gz);
+      score += distMoved;
     }
     cand.push({ score, info, gx, gz });
   }
-  if (!cand.length) {
-    cardPop(def, ' — 길 없음', '#c8c2b4');
-    return { type: 'wait', _card: q._card };
-  }
+  if (!cand.length) return { type: 'wait' };
   cand.sort((a, b) => b.score - a.score);
   const pick = cand[0];
   const turretYaw = near ? Math.atan2(near.gx - pick.gx, near.gz - pick.gz) : null;
   return {
     type: 'move', path: pick.info.path.slice(), facing: null,
-    turretYaw, endDir: pick.info.endDir, _card: q._card,
+    turretYaw, endDir: pick.info.endDir,
   };
 }
-// 공격/엄호 구체화 (현재 위치 기준 — 이동과 결합 시 이동 후 다시 부른다):
-// 공격 = 보이는 적 중 최고 명중 표적 (직사·곡사 자동). 표적이 없으면 엄호처럼.
-// 엄호 = 표적이 없어도 최근접 적의 대략 위치(숨었으면 크게 흔들림)나
-// 전방 허공에 제압사격 — 착탄 주변 적은 다음 사격이 흔들린다(제압).
+// 공격 구체화: 보이는 적 중 최고 명중 표적 (직사·곡사 자동).
+// 표적이 없으면 최근접 적의 대략 위치나 전방 허공에 맹목 사격.
 function materializeFire(def) {
   const cells = computeFireCells(player);
   if (!cells.size) return null;
-  if (def.kind === 'atk') {
-    let best = null;
-    for (const e of enemies) {
-      if (!e.alive || e.hidden) continue;
-      const f = cells.get(cellKey(e.gx, e.gz));
-      if (f && (!best || f.shot.chance > best.shot.chance)) {
-        best = { cell: { gx: e.gx, gz: e.gz }, shot: f.shot, sup: false };
-      }
+  let best = null;
+  for (const e of enemies) {
+    if (!e.alive || e.hidden) continue;
+    const f = cells.get(cellKey(e.gx, e.gz));
+    if (f && (!best || f.shot.chance > best.shot.chance)) {
+      best = { cell: { gx: e.gx, gz: e.gz }, shot: f.shot };
     }
-    if (best) return best;
   }
-  // 제압/맹목 사격 지점: 최근접 적 대략 위치 → 없으면 차체 전방 허공
+  if (best) return best;
   const near = nearestEnemy();
   let tx, tz;
   if (near) {
@@ -6003,7 +6053,7 @@ function materializeFire(def) {
   for (const [k, f] of cells) {
     const [gx, gz] = k.split(',').map(Number);
     const d = (gx - tx) * (gx - tx) + (gz - tz) * (gz - tz);
-    if (d < bd) { bd = d; bestCell = { cell: { gx, gz }, shot: f.shot, sup: def.kind === 'sup' }; }
+    if (d < bd) { bd = d; bestCell = { cell: { gx, gz }, shot: f.shot }; }
   }
   return bestCell;
 }
@@ -6015,15 +6065,14 @@ function refreshPlanUI(fireEmphasis = false) {
     // 카드 게이트: 손패의 남은 이동 카드 종류(돌격/회피/후퇴)가 닿을 수 있는
     // 셀만 필드에 남긴다 — 공격/엄호 카드가 없으면 사격 필드도 꺼진다
     {
-      const near = nearestEnemy();
       const kinds = new Set(hand.filter((c) => !c.used && c.def.kind === 'move').map((c) => c.def.mv));
       const mv = new Map();
       for (const [k, info] of currentMoveCells) {
         const [gx, gz] = k.split(',').map(Number);
-        if (kinds.has(moveKindOfCell(near, gx, gz))) mv.set(k, info);
+        if (kinds.has(arcOfRel(hullRelDeg(gx, gz)))) mv.set(k, info);
       }
       currentMoveCells = mv;
-      if (!hand.some((c) => !c.used && (c.def.kind === 'atk' || c.def.kind === 'sup'))) {
+      if (!hand.some((c) => !c.used && c.def.kind === 'atk')) {
         currentFireCells = new Map();
       }
     }
@@ -6858,7 +6907,7 @@ function animate(now) {
   {
     const reloading = (player.reloadReadyAt ?? 0) > performance.now();
     for (const c of hand) {
-      if (c._el && (c.def.kind === 'atk' || c.def.kind === 'sup')) c._el.classList.toggle('cool', reloading);
+      if (c._el && c.def.kind === 'atk') c._el.classList.toggle('cool', reloading);
     }
   }
   updateAntennas(dt); // RC 안테나 대롱대롱
