@@ -7,7 +7,7 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🛠</text></svg>">
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  html, body { width: 100%; height: 100%; overflow: hidden; }
+  html, body { width: 100%; height: 100%; overflow: hidden; overscroll-behavior: none; }
   body {
     font-family: 'Segoe UI', 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif;
     background: #9cc8ee;
@@ -128,8 +128,9 @@
   #thumb-detail b { color: #1d4ed8; }
 
   /* 전술 카드 핸드: 덱 20장 → 5장 드로 → 최대 3장 순서 선택 */
+  /* iOS 하단 시스템 제스처(홈 인디케이터)와 겹치지 않게 위로 띄운다 */
   #hand {
-    position: fixed; bottom: 12px; left: 50%;
+    position: fixed; bottom: 34px; left: 50%;
     transform: translateX(-50%);
     display: flex; align-items: flex-end; gap: 8px;
     z-index: 11;
@@ -191,12 +192,12 @@
   /* 재장전 중인 공격/엄호 카드 — 내면 제자리에서 장전을 기다린다 */
   .card.cool { filter: grayscale(0.65) brightness(0.72); }
   @media (max-width: 640px) {
-    #hand { gap: 5px; bottom: 8px; }
+    #hand { gap: 5px; bottom: 30px; }
     .card { width: 54px; height: 74px; border-width: 2px; }
     .card .ico { font-size: 18px; }
     .card .ico svg { width: 27px; height: 27px; }
     #deck-pill { width: 32px; height: 46px; font-size: 11px; }
-    #btn-settings { bottom: 96px; } /* 카드 핸드와 겹치지 않게 */
+    #btn-settings { bottom: 122px; } /* 카드 핸드와 겹치지 않게 */
   }
 
   /* 확정 바: 계획 미리보기 상태에서만 표시 — 카드 핸드 위에 뜬다 */

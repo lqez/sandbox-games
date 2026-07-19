@@ -5735,11 +5735,15 @@ function updateHandRefill(now) {
 }
 let selectedCard = null;   // 1탭 선택(확대) → 재탭/위로 드래그 = 사용
 let lastDealt = null;      // 방금 덱에서 온 카드 — 딜 애니메이션용
+let handGestureActive = false; // 스와이프 중 리필이 DOM을 갈아치우지 않게
+let handRenderPending = false;
 let curMoveDef = null;     // 실행 중인 이동 카드 (얹기 판정용)
 let curMoveLevel = 1;      // 이동 단계: 1 기본 / 2 돌격·전개 / 3 돌파·우회
 let fireStage = null;      // 공격 조준 단계: { level, extendMs, fired }
 function renderHand() {
   if (!handEl) return;
+  if (handGestureActive) { handRenderPending = true; return; } // 제스처 끝나면 갱신
+  handRenderPending = false;
   handEl.innerHTML = '';
   const pill = document.createElement('div');
   pill.id = 'deck-pill';
@@ -5752,22 +5756,78 @@ function renderHand() {
     const mid = (n - 1) / 2;
     el.className = `card ${c.def.cls}${selectedCard === c ? ' sel' : ''}${c === lastDealt ? ' deal' : ''}`;
     // 부채꼴: 중앙 기준 살짝 회전 + 바깥일수록 내려간다
-    if (selectedCard !== c) {
-      el.style.transform = `rotate(${((i - mid) * 4).toFixed(1)}deg) translateY(${(Math.abs(i - mid) * 5).toFixed(0)}px)`;
-    }
+    const baseT = selectedCard === c
+      ? '' // .sel CSS가 담당
+      : `rotate(${((i - mid) * 4).toFixed(1)}deg) translateY(${(Math.abs(i - mid) * 5).toFixed(0)}px)`;
+    if (baseT) el.style.transform = baseT;
     el.innerHTML = `<span class="ico">${CARD_ICONS[c.def.key] ?? c.def.ico}</span>${c.def.label}<span class="typ">${c.def.typ}·${(c.def.durMs / 1000).toFixed(0)}s</span>`;
-    el.addEventListener('click', () => cardClick(c));
-    // 위로 드래그해서 사용
+    // 제스처: 위로 밀면 사용, 아래로 당기면 버리기, 짧은 탭 = 선택/사용.
+    // 포인터 캡처로 카드 밖으로 나가도 끝까지 추적 — iOS 스크롤 제스처와 안 섞인다.
     let sy = null;
-    el.addEventListener('pointerdown', (ev) => { sy = ev.clientY; });
-    el.addEventListener('pointermove', (ev) => {
-      if (sy !== null && sy - ev.clientY > 42) { sy = null; playCardFromHand(c, el); }
+    const endGesture = () => {
+      handGestureActive = false;
+      if (handRenderPending) renderHand();
+    };
+    el.addEventListener('pointerdown', (ev) => {
+      sy = ev.clientY;
+      handGestureActive = true;
+      try { el.setPointerCapture(ev.pointerId); } catch { /* ignore */ }
+      ev.preventDefault();
     });
-    el.addEventListener('pointerup', () => { sy = null; });
+    el.addEventListener('pointermove', (ev) => {
+      if (sy === null) return;
+      const dy = sy - ev.clientY; // +위 / −아래
+      // 임계값을 넘는 "순간" 발동 — 릴리즈를 기다리면 손가락이 화면 밖
+      // (iOS 하단 제스처 영역)까지 나가버린다
+      if (dy > 36) { sy = null; endGesture(); playCardFromHand(c, el); return; }   // 위로 밀어 사용
+      if (dy < -28) { sy = null; endGesture(); discardCard(c, el); return; }       // 아래로 당겨 버리기
+      const clamped = Math.max(-30, Math.min(38, dy));
+      el.style.transition = 'none';
+      el.style.transform = `${baseT} translateY(${(-clamped).toFixed(0)}px)`;
+      el.style.opacity = dy < -12 ? String(Math.max(0.55, 1 + dy / 70)) : '1';
+    });
+    el.addEventListener('pointerup', (ev) => {
+      if (sy === null) return;
+      const dy = sy - ev.clientY;
+      sy = null;
+      endGesture();
+      if (Math.abs(dy) <= 10) { cardClick(c); return; }        // 탭 = 선택/사용
+      el.style.transition = ''; el.style.transform = baseT; el.style.opacity = '1'; // 복귀
+    });
+    el.addEventListener('pointercancel', () => {
+      sy = null;
+      endGesture();
+      el.style.transition = ''; el.style.transform = baseT; el.style.opacity = '1';
+    });
     c._el = el;
     handEl.appendChild(el);
   });
   lastDealt = null;
+}
+// 아래로 당겨 버리기 — 손패 회전용 (덱 순환이 빨라진다)
+function discardCard(c, el) {
+  if (!hand.includes(c)) return;
+  hand.splice(hand.indexOf(c), 1);
+  discardPile.push(c.def.key);
+  if (selectedCard === c) selectedCard = null;
+  try {
+    const r = el.getBoundingClientRect();
+    const fly = document.createElement('div');
+    fly.className = `card ${c.def.cls} fly`;
+    fly.innerHTML = `<span class="ico">${CARD_ICONS[c.def.key] ?? c.def.ico}</span>${c.def.label}`;
+    fly.style.left = `${r.left}px`;
+    fly.style.top = `${r.top}px`;
+    document.body.appendChild(fly);
+    requestAnimationFrame(() => {
+      fly.style.top = `${r.top + 80}px`;
+      fly.style.transform = 'rotate(9deg) scale(0.82)';
+      fly.style.opacity = '0';
+    });
+    setTimeout(() => fly.remove(), 650);
+  } catch { /* ignore */ }
+  renderHand();
+  fieldsDirty = true;
+  setHint('카드 버림');
 }
 // 1탭 = 선택(확대), 같은 카드 재탭 = 사용. 위로 드래그해도 사용.
 function cardClick(c) {
