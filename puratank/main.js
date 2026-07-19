@@ -5867,23 +5867,6 @@ function cardFlyFx(el, def) {
 function playCardFromHand(c, el) {
   if (phase === 'gameover' || !player.alive || !hand.includes(c)) return;
   const def = c.def;
-  // 얹기 판정: 실행 중인 행동 위에 카드를 겹치면 단계가 오르거나 동사가 바뀐다
-  let action = null;
-  if (def.kind === 'move' && playerMoveBusy && curMoveDef) {
-    if (curMoveDef.key === def.key) action = curMoveLevel >= 3 ? null : 'level-move';
-    else if ((curMoveDef.key === 'fwd' && def.key === 'back') || (curMoveDef.key === 'back' && def.key === 'fwd')) action = 'brake';
-    else action = 'reroute';
-    if (!action) { setHint('이미 최고 단계'); return; }
-  } else if (def.kind === 'move' && playerMoveBusy) {
-    setHint('기동 중'); return;
-  } else if (def.kind === 'atk' && fireStage && !fireStage.fired) {
-    action = fireStage.level >= 3 ? null : 'level-fire';
-    if (!action) { setHint('이미 정밀 조준'); return; }
-  } else if (def.kind === 'atk' && playerFireBusy) {
-    setHint('사격 중 — 잠시 후'); return;
-  } else {
-    action = 'exec';
-  }
   hand.splice(hand.indexOf(c), 1);
   discardPile.push(def.key);
   selectedCard = null;
@@ -5891,63 +5874,102 @@ function playCardFromHand(c, el) {
   cardFlyFx(el, def);
   fieldsDirty = true;
   turnNo++; // 통계: 사용한 카드 수
-  if (action === 'level-move') levelUpMove();
-  else if (action === 'brake') {
-    // 전진↔후진 = 급제동: 즉시 정지, 두 카드 상쇄
-    player._abortMove = true;
-    cardPop({ ico: '⛔', label: '급제동!' }, '', '#ffd76e');
-  } else if (action === 'reroute') {
-    // 다른 이동 카드 = 진로 변경: 제동 후 새 방향으로 재기동
-    player._abortMove = true;
-    cardPop({ ico: `➜${def.ico}`, label: `${MOVE_NAMES[def.key][0]} 전환` }, '', '#9fd8ff');
-    (async () => { let g = 0; while (playerMoveBusy && g++ < 100) await delay(100); execCard(def); })();
-  } else if (action === 'level-fire') {
-    levelUpFire();
-  } else {
-    execCard(def);
-  }
+  routeCard(def);
 }
-// 같은 이동 카드 얹기 = 단계 상승. 전차는 옆으로 미끄러지지 않는다 —
-// 좌/우 강화도 "제동 → 선회 → 새 방향 전진"(전개), 3단은 측후면 우회.
-// 돌격 계열은 빨라지는 대신 사격이 흔들리고(-4) 크게 노출된다.
-function levelUpMove() {
-  curMoveLevel = Math.min(3, curMoveLevel + 1);
-  player._dash = true;
-  player._dashMul = curMoveLevel >= 3 ? 1.9 : 1.6;
-  player._extendMove = true; // 현 구간이 끝나면 같은 방향으로 한 구간 더
-  if (player._activeMove) {
-    player._activeMove.level = curMoveLevel;
-    player._activeMove.dur += curMoveDef.durMs * 0.6; // 연장 구간만큼 진행 바도 늘린다
+// ── 합성 = 이전 행동 취소 ──
+// 실행 중 행동 위에 카드를 얹으면 이전 행동은 그 자리에서 취소되고,
+// 합성 동사가 "새 행동"으로 시작된다. 항상 행동은 하나뿐이다.
+//  같은 이동 = 한 단계 위 이동을 새로 / 반대 이동 = 급제동(상쇄, 무행동) /
+//  다른 이동 = 새 방향 이동 / 이동+공격(어느 순서든) = 기동사격 합성
+let lastRoute = ''; // 디버그/테스트: 마지막 라우팅 결정
+async function routeCard(def) {
+  const moveActive = playerMoveBusy && curMoveDef;
+  const fireActive = fireStage && !fireStage.fired && !fireStage.cancelled;
+  if (def.kind === 'move') {
+    if (moveActive) {
+      const cur = curMoveDef;
+      const lvl = curMoveLevel;
+      const keepFire = fireActive ? fireStage.level : 0;
+      if ((cur.key === 'fwd' && def.key === 'back') || (cur.key === 'back' && def.key === 'fwd')) {
+        lastRoute = 'brake';
+        cardPop({ ico: '⛔', label: '급제동!' }, '', '#ffd76e');
+        await cancelAction2();
+        return; // 상쇄 — 두 카드 모두 소멸, 무행동
+      }
+      const same = cur.key === def.key;
+      const nlvl = same ? Math.min(3, lvl + 1) : 1;
+      const ndef = same ? cur : def;
+      lastRoute = `restart:${ndef.key}:${nlvl}${keepFire ? '+fire' : ''}`;
+      const name = MOVE_NAMES[ndef.key][nlvl - 1];
+      cardPop({ ico: ndef.ico, label: `${name}!${keepFire ? ' (사격 유지)' : ''}` }, '', same ? (nlvl >= 3 ? '#ffb46e' : '#8de08a') : '#9fd8ff');
+      await cancelAction2();
+      runAction(ndef, nlvl, keepFire);
+      return;
+    }
+    if (fireActive) {
+      // 조준 중 이동 = 기동사격 합성: 조준을 접고 이동하며 다시 겨눈다
+      const fl = fireStage.level;
+      lastRoute = `compose:${def.key}:1+fire`;
+      cardPop({ ico: def.ico, label: `${MOVE_NAMES[def.key][0]}사격!` }, '', '#c9a6e8');
+      await cancelAction2();
+      runAction(def, 1, fl);
+      return;
+    }
+    lastRoute = `move:${def.key}`;
+    runAction(def, 1, 0);
+    return;
   }
-  const name = MOVE_NAMES[curMoveDef.key][curMoveLevel - 1];
-  cardPop({ ico: curMoveDef.ico.repeat(Math.min(2, curMoveLevel)), label: `${name}!` }, '', curMoveLevel >= 3 ? '#ffb46e' : '#8de08a');
+  // 공격 카드
+  if (fireActive) { lastRoute = `aimup:${Math.min(3, fireStage.level + 1)}`; levelUpFire(); return; } // 조준 단계 상승
+  if (moveActive) {
+    // 이동 중 공격 = 기동사격 합성: 이전 이동을 접고 같은 기동을 새로 시작하며 사격
+    const cur = curMoveDef;
+    const lvl = curMoveLevel;
+    lastRoute = `compose:${cur.key}:${lvl}+fire`;
+    cardPop({ ico: '🎯', label: `${MOVE_NAMES[cur.key][lvl - 1]}사격!` }, '', '#c9a6e8');
+    await cancelAction2();
+    runAction(cur, lvl, 1);
+    return;
+  }
+  lastRoute = 'fire';
+  runAction(null, 0, 1); // 단독 사격
 }
-// 같은 공격 카드 얹기 = 연사가 아니라 "조준" — 발사를 늦추는 대신
+// 이전 행동 취소: 이동 중단 + 조준 취소, 러너들이 정리될 때까지 대기
+async function cancelAction2() {
+  player._abortMove = true;
+  if (fireStage) fireStage.cancelled = true;
+  let g = 0;
+  while ((playerMoveBusy || playerFireBusy) && g++ < 120) await delay(50);
+  player._abortMove = false; // 다음 행동이 깨끗하게 시작하도록 신호 회수
+}
+// 같은 공격 카드 얹기 = 연사가 아니라 조준 강화 — 발사를 늦추는 대신
 // 명중이 오르고(3단은 약점 피해 1.25배), 그만큼 오래 자리에 묶인다.
 function levelUpFire() {
   fireStage.level = Math.min(3, fireStage.level + 1);
   fireStage.extendMs += fireStage.level === 2 ? 1700 : 1600;
   cardPop({ ico: '🔭', label: `${FIRE_NAMES[fireStage.level - 1]} 준비` }, '', '#ffe9a8');
 }
-async function execCard(def) {
-  if (def.kind === 'move') {
+// 단일 행동 러너: 이동 / 사격 / 기동사격(합성) — 이전 행동이 정리된 뒤 호출된다.
+async function runAction(moveDef, moveLevel, fireLevel) {
+  const firePart = fireLevel > 0 ? runFire(fireLevel, moveDef !== null) : null;
+  if (moveDef) {
     playerMoveBusy = true;
-    curMoveDef = def;
-    curMoveLevel = 1;
+    curMoveDef = moveDef;
+    curMoveLevel = moveLevel;
+    player._dash = moveLevel >= 2;
+    player._dashMul = moveLevel >= 3 ? 1.9 : 1.6;
+    player._owPosture = false;
     const t0 = performance.now();
-    player._activeMove = { level: 1, t0, dur: def.durMs }; // 실행 중 카드 배지용
+    player._activeMove = { level: moveLevel, t0, dur: moveDef.durMs };
     try {
-      let hop = 0;
-      do {
-        player._extendMove = false;
-        const plan = materializeMove(def, curMoveLevel);
-        if (plan.type !== 'move') { if (hop === 0) { cardPop(def, ' — 길 없음', '#c8c2b4'); } break; }
-        if (hop === 0) cardPop({ ico: def.ico, label: MOVE_NAMES[def.key][0] });
+      const plan = materializeMove(moveDef, moveLevel);
+      if (plan.type === 'move') {
+        if (moveLevel === 1 && !fireLevel) cardPop({ ico: moveDef.ico, label: MOVE_NAMES[moveDef.key][0] });
         const from = { gx: player.gx, gz: player.gz };
         await moveUnit(player, plan.path, null);
         playerLastMove = { dx: player.gx - from.gx, dz: player.gz - from.gz }; // 적 리드 예측용
-        // 이동 후 포탑: 최근접 적 지향 (연장 이동이 남았으면 생략)
-        if (player.alive && plan.turretYaw != null && player.hasTurret && !player._extendMove) {
+        // 이동 후 포탑: 최근접 적 지향
+        if (player.alive && plan.turretYaw != null && player.hasTurret && !player._abortMove) {
           const rel = normAngle(plan.turretYaw - player.group.rotation.y);
           const diff = normAngle(rel - player.turret.rotation.y);
           if (Math.abs(diff) > 0.02) {
@@ -5955,26 +5977,32 @@ async function execCard(def) {
             await tween((Math.abs(diff) / TURRET_TRACK_RATE) * 1000, (e2) => { player.turret.rotation.y = from2 + diff * e2; });
           }
         }
-        hop++;
-      } while (player._extendMove && player.alive && hop < 4);
-      // 카드 수행 시간을 채운다 — 명령 슬롯 점유 (짧은 기동도 durMs만큼)
-      const left = def.durMs - (performance.now() - t0);
-      if (left > 0 && player.alive) await delay(left);
+        // 카드 수행 시간을 채운다 — 명령 슬롯 점유 (취소되면 즉시 반환)
+        const left = moveDef.durMs - (performance.now() - t0);
+        if (left > 0 && player.alive && !player._abortMove) {
+          let w = 0;
+          while (w < left && !player._abortMove && player.alive) { await delay(100); w += 100; }
+        }
+      } else if (!fireLevel) {
+        cardPop(moveDef, ' — 길 없음', '#c8c2b4');
+      }
     } finally {
       playerMoveBusy = false;
       curMoveDef = null;
       curMoveLevel = 1;
+      player._dash = false;
       player._dashMul = 1;
       player._activeMove = null;
       fieldsDirty = true;
     }
-    return;
   }
-  // ── 공격: 즉응사격 → (얹으면) 조준 → 정밀사격 ──
-  // 재장전이 안 끝났으면 제자리에서 장전을 기다렸다 쏜다 (성급한 공격의 대가).
-  // 이동 중 발사는 기동사격(-8), 조준 보너스도 이동 중엔 절반 — 이동·조준·노출의 상충.
+  if (firePart) await firePart;
+}
+// 사격 러너: 재장전 대기 → 조준 창(얹으면 승급) → 발사.
+// asPartOfMove = 기동사격 합성의 일부 (재장전 대기 중에도 이동은 계속)
+async function runFire(initLevel, asPartOfMove) {
   playerFireBusy = true;
-  fireStage = { level: 1, extendMs: 0, fired: false, phase: 'aim', t0: performance.now(), waitDur: 0 };
+  fireStage = { level: initLevel, extendMs: initLevel === 2 ? 1700 : initLevel === 3 ? 3300 : 0, fired: false, cancelled: false, phase: 'aim', t0: performance.now(), waitDur: 0 };
   try {
     const now0 = performance.now();
     if ((player.reloadReadyAt ?? 0) > now0) {
@@ -5982,31 +6010,35 @@ async function execCard(def) {
       fireStage.phase = 'reload';
       fireStage.t0 = now0;
       fireStage.waitDur = wait;
-      cardPop(def, ` — 재장전 ${(wait / 1000).toFixed(1)}s`, '#ffd76e');
-      const lockMove = !playerMoveBusy;
-      if (lockMove) playerMoveBusy = true; // 장전 대기 중 제자리
-      try { await delay(wait); } finally { if (lockMove) playerMoveBusy = false; }
-      if (!player.alive || phase === 'gameover') return;
+      if (!asPartOfMove) cardPop({ ico: '🎯', label: `재장전 ${(wait / 1000).toFixed(1)}s` }, '', '#ffd76e');
+      const lockMove = !asPartOfMove && !playerMoveBusy;
+      if (lockMove) playerMoveBusy = true; // 단독 사격의 성급한 장전 대기 = 제자리
+      try {
+        let w = 0;
+        while (w < wait && !fireStage.cancelled && player.alive) { await delay(100); w += 100; }
+      } finally { if (lockMove) playerMoveBusy = false; }
+      if (fireStage.cancelled || !player.alive || phase === 'gameover') return;
       fireStage.phase = 'aim';
       fireStage.t0 = performance.now();
     }
-    // 조준 창: 즉응 0.6초 — 이 사이 공격 카드를 얹으면 조준/정밀로 승급
+    // 조준 창: 즉응 0.6초 + 승급 연장 — 이 사이 공격 카드를 얹으면 조준/정밀
     let waited = 0;
     while (waited < 600 + fireStage.extendMs) {
-      await delay(150);
-      waited += 150;
-      if (!player.alive || phase === 'gameover') return;
+      await delay(120);
+      waited += 120;
+      if (fireStage.cancelled || !player.alive || phase === 'gameover') return;
     }
     fireStage.fired = true;
     const lvl = fireStage.level;
     const moving = playerMoveBusy;
     const aimBonus = lvl === 1 ? 0 : lvl === 2 ? (moving ? 8 : 15) : (moving ? 15 : 30);
-    const fp = materializeFire(def);
-    if (!fp) { cardPop(def, ' — 사격 불가', '#c8c2b4'); return; }
+    const fp = materializeFire(CARD_DEFS.atk);
+    if (!fp) { cardPop({ ico: '🎯', label: '사격 불가' }, '', '#c8c2b4'); return; }
     const label = moving && curMoveDef
       ? `${MOVE_NAMES[curMoveDef.key][Math.min(curMoveLevel, 3) - 1]}사격`
       : FIRE_NAMES[lvl - 1];
     cardPop({ ico: '🎯', label });
+    player._owPosture = false;
     player.plan = {
       type: 'fire', cell: fp.cell, shot: fp.shot,
       _moved: moving, _aimBonus: aimBonus, _dmgMul: lvl === 3 ? 1.25 : 1,
@@ -7137,7 +7169,15 @@ window.__puratank = {
   },
   planOverwatch() { player._owPosture = true; return true; },
   planWait() { return true; },
-  acting: () => ({ move: playerMoveBusy, fire: playerFireBusy, ow: !!player._owPosture }),
+  acting: () => ({
+    move: playerMoveBusy, fire: playerFireBusy, ow: !!player._owPosture,
+    curMove: curMoveDef?.key ?? null, curLevel: curMoveDef ? curMoveLevel : 0,
+    fireLevel: fireStage && !fireStage.cancelled ? fireStage.level : 0,
+    firePhase: fireStage?.phase ?? null,
+    lastRoute,
+    pos: { gx: player.gx, gz: player.gz },
+  }),
+  routeKey(k) { routeCard(CARD_DEFS[k]); return true; }, // 테스트: 핸드 무시하고 카드 라우팅 직접 호출
   queueMoveTo(gx, gz) { return window.__puratank.planMoveTo(gx, gz); },
   itemCells: () => [...items.keys()].map((k) => k.split(',').map(Number)),
   debugPickup(gx, gz) { player.gx = gx; player.gz = gz; tryPickupItem(player); return { hp: player.hp, boost: player.boostTurns }; },
