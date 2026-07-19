@@ -6924,54 +6924,69 @@ function rustleNearProps(x, z) {
   }
 }
 
-// 실행 중 카드: 상단 중앙에 카드째로 표시 — 그래픽 + 단계명 + 남은 시간 + 진행 바
+// 실행 중 카드: 상단 중앙에 "한 장"만 — 합성 룰을 따른다.
+// 이동+공격이 겹치면 별개 두 장이 아니라 합성 동사(돌격사격/후퇴사격/전개사격)
+// 카드 하나로 표시된다 (이동 아이콘 + 조준 미니 뱃지, 남은 시간은 긴 쪽).
 const activeCardsEl = document.getElementById('active-cards');
 let activeCardsSig = '';
 function updateActiveCardsHUD(now) {
   if (!activeCardsEl) return;
-  const parts = [];
+  let card = null;
   if (player.alive && phase !== 'gameover') {
-    if (curMoveDef && player._activeMove) {
-      const am = player._activeMove;
-      parts.push({
-        key: curMoveDef.key, cls: '',
-        name: MOVE_NAMES[curMoveDef.key][am.level - 1],
-        left: Math.max(0, am.dur - (now - am.t0)),
-        pct: Math.min(97, ((now - am.t0) / am.dur) * 100),
-      });
+    const am = curMoveDef && player._activeMove ? player._activeMove : null;
+    const fs = fireStage;
+    const moveLeft = am ? Math.max(0, am.dur - (now - am.t0)) : 0;
+    const movePct = am ? Math.min(97, ((now - am.t0) / am.dur) * 100) : 0;
+    let fireLeft = 0, firePct = 0, fireName = '';
+    if (fs) {
+      const isReload = fs.phase === 'reload';
+      const dur = isReload ? fs.waitDur : 600 + fs.extendMs;
+      fireLeft = fs.fired ? 0 : Math.max(0, dur - (now - fs.t0));
+      firePct = fs.fired ? 100 : Math.min(97, ((now - fs.t0) / Math.max(1, dur)) * 100);
+      fireName = fs.fired ? '발사!' : isReload ? '재장전' : FIRE_NAMES[fs.level - 1];
     }
-    if (fireStage) {
-      const isReload = fireStage.phase === 'reload';
-      const dur = isReload ? fireStage.waitDur : 600 + fireStage.extendMs;
-      parts.push({
-        key: 'atk', cls: ' fire',
-        name: fireStage.fired ? '발사!' : isReload ? '재장전' : FIRE_NAMES[fireStage.level - 1],
-        left: fireStage.fired ? 0 : Math.max(0, dur - (now - fireStage.t0)),
-        pct: fireStage.fired ? 100 : Math.min(97, ((now - fireStage.t0) / Math.max(1, dur)) * 100),
-      });
+    if (am && fs) {
+      // 합성: 기동사격 — 이동 단계명 + 사격 (예: 돌격사격, 좌측전개사격)
+      const mvName = MOVE_NAMES[curMoveDef.key][am.level - 1];
+      const name = fs.phase === 'reload' ? `${mvName} · 재장전` : `${mvName}사격`;
+      const useFire = fireLeft >= moveLeft;
+      card = {
+        sig: `combo${curMoveDef.key}${am.level}${fireName}`,
+        cls: ' combo', key: curMoveDef.key, sub: 'atk', name,
+        left: Math.max(moveLeft, fireLeft),
+        pct: useFire ? firePct : movePct,
+      };
+    } else if (am) {
+      card = {
+        sig: `mv${curMoveDef.key}${am.level}`,
+        cls: '', key: curMoveDef.key, sub: null,
+        name: MOVE_NAMES[curMoveDef.key][am.level - 1],
+        left: moveLeft, pct: movePct,
+      };
+    } else if (fs) {
+      card = {
+        sig: `fire${fireName}`,
+        cls: ' fire', key: 'atk', sub: null,
+        name: fireName, left: fireLeft, pct: firePct,
+      };
     }
   }
-  if (!parts.length) {
+  if (!card) {
     if (activeCardsSig) { activeCardsEl.style.display = 'none'; activeCardsSig = ''; }
     return;
   }
-  const sig = parts.map((p) => p.key + p.name).join('|');
-  if (sig !== activeCardsSig) {
-    activeCardsSig = sig;
+  if (card.sig !== activeCardsSig) {
+    activeCardsSig = card.sig;
     activeCardsEl.style.display = 'flex';
-    activeCardsEl.innerHTML = parts.map((p) =>
-      `<div class="acard${p.cls}">${CARD_ICONS[p.key] ?? ''}<span>${p.name}</span><span class="t"></span><span class="bar"><i></i></span></div>`
-    ).join('');
+    activeCardsEl.innerHTML =
+      `<div class="acard${card.cls}">${CARD_ICONS[card.key] ?? ''}` +
+      (card.sub ? `<span class="sub">${CARD_ICONS[card.sub] ?? ''}</span>` : '') +
+      `<span>${card.name}</span><span class="t"></span><span class="bar"><i></i></span></div>`;
   }
-  const cards = activeCardsEl.querySelectorAll('.acard');
-  parts.forEach((p, i) => {
-    const el = cards[i];
-    if (!el) return;
-    const t = el.querySelector('.t');
-    if (t) t.textContent = p.left > 0 ? `${(p.left / 1000).toFixed(1)}s` : '·';
-    const bar = el.querySelector('.bar i');
-    if (bar) bar.style.width = `${p.pct.toFixed(0)}%`;
-  });
+  const t = activeCardsEl.querySelector('.t');
+  if (t) t.textContent = card.left > 0 ? `${(card.left / 1000).toFixed(1)}s` : '·';
+  const bar = activeCardsEl.querySelector('.bar i');
+  if (bar) bar.style.width = `${card.pct.toFixed(0)}%`;
 }
 
 function animate(now) {
