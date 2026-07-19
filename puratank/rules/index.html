@@ -47,6 +47,9 @@
     position: relative;
   }
   .gcard .ico { font-size: 30px; line-height: 1; }
+  .gcard .ico svg { width: 46px; height: 46px; display: block; }
+  .mini { display: inline-block; vertical-align: -5px; margin-right: 4px; }
+  .mini svg { width: 20px; height: 20px; display: block; }
   .gcard .typ { font-size: 11px; font-weight: 700; color: #8b95a8; }
   .gcard .cnt {
     position: absolute; top: -9px; right: -9px;
@@ -112,11 +115,11 @@
   <section class="panel">
     <h2>기본 카드 5종 (덱 20장 = 각 4장)</h2>
     <div class="cards">
-      <div class="gcard move"><span class="cnt">×4</span><span class="ico">⬆️</span>전진<span class="typ">이동 · 4s</span></div>
-      <div class="gcard move"><span class="cnt">×4</span><span class="ico">⬇️</span>후진<span class="typ">이동 · 4s</span></div>
-      <div class="gcard move"><span class="cnt">×4</span><span class="ico">↰</span>좌<span class="typ">이동 · 3.5s</span></div>
-      <div class="gcard move"><span class="cnt">×4</span><span class="ico">↱</span>우<span class="typ">이동 · 3.5s</span></div>
-      <div class="gcard fire"><span class="cnt">×4</span><span class="ico">🎯</span>공격<span class="typ">공격 · 2s</span></div>
+      <div class="gcard move"><span class="cnt">×4</span><span class="ico" data-icon="fwd"></span>전진<span class="typ">이동 · 4s</span></div>
+      <div class="gcard move"><span class="cnt">×4</span><span class="ico" data-icon="back"></span>후진<span class="typ">이동 · 4s</span></div>
+      <div class="gcard move"><span class="cnt">×4</span><span class="ico" data-icon="left"></span>좌<span class="typ">이동 · 3.5s</span></div>
+      <div class="gcard move"><span class="cnt">×4</span><span class="ico" data-icon="right"></span>우<span class="typ">이동 · 3.5s</span></div>
+      <div class="gcard fire"><span class="cnt">×4</span><span class="ico" data-icon="atk"></span>공격<span class="typ">공격 · 2s</span></div>
     </div>
     <p>이동은 <b>차체 기준</b>이다 — 전방 ≤50° = 전진, 후방 ≥132° = 후진(후진 기어, 전면 유지), 그 사이가 좌/우. 좌·우는 옆으로 미끄러지는 것이 아니라 <b>제동 → 선회 → 새 차체 방향으로 전진</b>이다. 세부 목적지는 조종수가 알아서 고른다 (사격각·아이템·헐다운을 챙기는 자동 판단).</p>
     <ul style="margin-left: 18px;">
@@ -132,17 +135,17 @@
     <h3>이동 카드</h3>
     <table>
       <tr><th>카드</th><th>1장</th><th>2장</th><th>3장</th></tr>
-      <tr><td class="combo">⬆️ 전진</td><td>일반 전진</td><td><b>돌격</b> — 1.6배 가속·연장, 사격 흔들림 <span class="tag live">구현됨</span></td><td><b>전속돌파</b> — 1.9배, 기동사격 −12 <span class="tag live">구현됨</span></td></tr>
-      <tr><td class="combo">⬇️ 후진</td><td>전면 유지 후진</td><td><b>급후진</b> — 빠른 이탈 <span class="tag live">구현됨</span></td><td><b>긴급이탈</b> — 최고 후진 <span class="tag live">구현됨</span></td></tr>
-      <tr><td class="combo">↰ 좌</td><td>좌선회 전진</td><td><b>좌측전개</b> — 제동·선회 후 크게 전개 <span class="tag live">구현됨</span></td><td><b>좌측우회</b> — 적 <b>측후면 각</b>으로 파고든다 <span class="tag live">구현됨</span></td></tr>
-      <tr><td class="combo">↱ 우</td><td>우선회 전진</td><td><b>우측전개</b> <span class="tag live">구현됨</span></td><td><b>우측우회</b> <span class="tag live">구현됨</span></td></tr>
+      <tr><td class="combo"><i class="mini" data-icon="fwd"></i>전진</td><td>일반 전진</td><td><b>돌격</b> — 1.6배 가속·연장, 사격 흔들림 <span class="tag live">구현됨</span></td><td><b>전속돌파</b> — 1.9배, 기동사격 −12 <span class="tag live">구현됨</span></td></tr>
+      <tr><td class="combo"><i class="mini" data-icon="back"></i>후진</td><td>전면 유지 후진</td><td><b>급후진</b> — 빠른 이탈 <span class="tag live">구현됨</span></td><td><b>긴급이탈</b> — 최고 후진 <span class="tag live">구현됨</span></td></tr>
+      <tr><td class="combo"><i class="mini" data-icon="left"></i>좌</td><td>좌선회 전진</td><td><b>좌측전개</b> — 제동·선회 후 크게 전개 <span class="tag live">구현됨</span></td><td><b>좌측우회</b> — 적 <b>측후면 각</b>으로 파고든다 <span class="tag live">구현됨</span></td></tr>
+      <tr><td class="combo"><i class="mini" data-icon="right"></i>우</td><td>우선회 전진</td><td><b>우측전개</b> <span class="tag live">구현됨</span></td><td><b>우측우회</b> <span class="tag live">구현됨</span></td></tr>
     </table>
     <h3>공격 카드 — 연사가 아니라 조준</h3>
     <table>
       <tr><th>장수</th><th>결과</th><th>효과</th></tr>
-      <tr><td class="combo">🎯 ×1</td><td class="combo">즉응사격 <span class="tag live">구현됨</span></td><td>0.6초 조준 후 즉시 1발 — 빠르지만 보너스 없음</td></tr>
-      <tr><td class="combo">🎯 ×2</td><td class="combo">조준사격 <span class="tag live">구현됨</span></td><td>발사를 ~1.7초 늦추고 명중 <b>+15</b> (이동 중엔 +8)</td></tr>
-      <tr><td class="combo">🎯 ×3</td><td class="combo">정밀사격 <span class="tag live">구현됨</span></td><td>~3.3초 조준, 명중 <b>+30</b> + <b>약점 피해 1.25배</b> (이동 중엔 +15) — 긴 노출이 대가</td></tr>
+      <tr><td class="combo"><i class="mini" data-icon="atk"></i>×1</td><td class="combo">즉응사격 <span class="tag live">구현됨</span></td><td>0.6초 조준 후 즉시 1발 — 빠르지만 보너스 없음</td></tr>
+      <tr><td class="combo"><i class="mini" data-icon="atk"></i>×2</td><td class="combo">조준사격 <span class="tag live">구현됨</span></td><td>발사를 ~1.7초 늦추고 명중 <b>+15</b> (이동 중엔 +8)</td></tr>
+      <tr><td class="combo"><i class="mini" data-icon="atk"></i>×3</td><td class="combo">정밀사격 <span class="tag live">구현됨</span></td><td>~3.3초 조준, 명중 <b>+30</b> + <b>약점 피해 1.25배</b> (이동 중엔 +15) — 긴 노출이 대가</td></tr>
     </table>
     <p class="muted">발사 횟수는 항상 1회 — 서둘러 쏠지, 시간을 투자해 확실히 맞힐지의 선택이다.</p>
   </section>
@@ -232,5 +235,12 @@
     <span class="tag live">구현됨</span> = 현재 게임에서 동작 — 관측/피탐지 시스템(발사 시 위치 노출, 속도 비례 피탐지)은 다음 단계
   </p>
 </main>
+<script type="module">
+  // 게임과 같은 카드 아이콘 아트를 공유한다 (단일 소스)
+  import { CARD_ICONS } from '../src/card-icons.js';
+  for (const el of document.querySelectorAll('[data-icon]')) {
+    el.innerHTML = CARD_ICONS[el.dataset.icon] ?? '';
+  }
+</script>
 </body>
 </html>

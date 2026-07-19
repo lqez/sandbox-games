@@ -8,6 +8,7 @@ import { SSAOPass } from './vendor/postprocessing/SSAOPass.js';
 import { OutputPass } from './vendor/postprocessing/OutputPass.js';
 import { ShaderPass } from './vendor/postprocessing/ShaderPass.js';
 import { buildKitTank, KIT_INFO, KIT_KEYS, mergeStatic } from './src/kit-tank.js';
+import { CARD_ICONS } from './src/card-icons.js';
 
 // 차고에서 선택한 기체 (?tank=ft|mk4|t34|tiger)
 const kitParam = new URLSearchParams(location.search).get('tank');
@@ -5754,7 +5755,7 @@ function renderHand() {
     if (selectedCard !== c) {
       el.style.transform = `rotate(${((i - mid) * 4).toFixed(1)}deg) translateY(${(Math.abs(i - mid) * 5).toFixed(0)}px)`;
     }
-    el.innerHTML = `<span class="ico">${c.def.ico}</span>${c.def.label}<span class="typ">${c.def.typ}·${(c.def.durMs / 1000).toFixed(0)}s</span>`;
+    el.innerHTML = `<span class="ico">${CARD_ICONS[c.def.key] ?? c.def.ico}</span>${c.def.label}<span class="typ">${c.def.typ}·${(c.def.durMs / 1000).toFixed(0)}s</span>`;
     el.addEventListener('click', () => cardClick(c));
     // 위로 드래그해서 사용
     let sy = null;
@@ -5790,7 +5791,7 @@ function cardFlyFx(el, def) {
     const ty = (-v.y * 0.5 + 0.5) * window.innerHeight;
     const fly = document.createElement('div');
     fly.className = `card ${def.cls} fly`;
-    fly.innerHTML = `<span class="ico">${def.ico}</span>${def.label}`;
+    fly.innerHTML = `<span class="ico">${CARD_ICONS[def.key] ?? def.ico}</span>${def.label}`;
     fly.style.left = `${r ? r.left : tx}px`;
     fly.style.top = `${r ? r.top : ty}px`;
     document.body.appendChild(fly);
