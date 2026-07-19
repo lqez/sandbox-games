@@ -3320,9 +3320,9 @@ const activeTweens = [];
 const easeInOut = (k) => (k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2);
 const easeOut = (k) => 1 - Math.pow(1 - k, 3);
 const linear = (k) => k;
-function tween(dur, onUpdate, ease = easeInOut) {
+function tween(dur, onUpdate, ease = easeInOut, stop = null) {
   return new Promise((resolve) => {
-    activeTweens.push({ start: performance.now(), dur, onUpdate, ease, resolve });
+    activeTweens.push({ start: performance.now(), dur, onUpdate, ease, stop, resolve });
   });
 }
 // 파편 물리용 프레임레이트 독립 dt: 진행률 k 증가분 × 총 시간(초).
@@ -3340,6 +3340,7 @@ const delay = (ms) => tween(ms, () => {}, linear);
 function updateTweens(now) {
   for (let i = activeTweens.length - 1; i >= 0; i--) {
     const tw = activeTweens[i];
+    if (tw.stop && tw.stop()) { activeTweens.splice(i, 1); tw.resolve(); continue; } // 중도 취소 — 그 자리에서 멈춤
     const k = Math.min(1, (now - tw.start) / tw.dur);
     tw.onUpdate(tw.ease(k), k);
     if (k >= 1) { activeTweens.splice(i, 1); tw.resolve(); }
@@ -3348,13 +3349,13 @@ function updateTweens(now) {
 // 차체 선회 각속도 (rad/s) — 전차답게 느릿하게 (리얼타임: 템포 절반)
 const DRIVE_TURN_RATE = 1.3; // 주행 중 방향 전환
 const PIVOT_RATE = 1.1;      // 제자리 선회 (조준 폴백용)
-async function rotateTo(unit, targetRot, rate = DRIVE_TURN_RATE) {
+async function rotateTo(unit, targetRot, rate = DRIVE_TURN_RATE, stop = null) {
   const from = unit.group.rotation.y;
   let diff = targetRot - from;
   while (diff > Math.PI) diff -= Math.PI * 2;
   while (diff < -Math.PI) diff += Math.PI * 2;
   if (Math.abs(diff) < 0.01) return;
-  await tween((Math.abs(diff) / rate) * 1000, (e) => { unit.group.rotation.y = from + diff * e; });
+  await tween((Math.abs(diff) / rate) * 1000, (e) => { unit.group.rotation.y = from + diff * e; }, easeInOut, stop);
 }
 // 차체가 지면 경사를 따라 기울어지는 각도
 function groundPitch(unit) {
@@ -3452,12 +3453,14 @@ async function moveUnit(unit, path, finalFacing = null, onStep = null) {
   for (const cell of path) {
     if (!unit.alive) return; // 이동 중 경계 사격에 격파되면 그 자리에서 정지
     if (unit._abortMove) break; // 카드 합성(상쇄/경로 변경)으로 기동 중단
+    const abort = () => unit._abortMove || !unit.alive; // 합성 취소는 트윈 한복판에서도 즉시 멈춘다
     const reverse = hasGear ? cell.rev : fallbackRev;
     const from = unit.group.position.clone();
     const to = cellToWorld(cell.gx, cell.gz);
     const travel = Math.atan2(to.x - from.x, to.z - from.z);
     // 후진이면 차체 전면은 진행 반대 방향을 유지
-    await rotateTo(unit, reverse ? travel + Math.PI : travel, DRIVE_TURN_RATE);
+    await rotateTo(unit, reverse ? travel + Math.PI : travel, DRIVE_TURN_RATE, abort);
+    if (unit._abortMove) break;
     sfx(terrainAt(cell.gx, cell.gz) === T.WATER ? 'splash' : 'step');
     unit._trailLast ??= { x: from.x, z: from.z };
     unit._trailSm ??= { x: from.x, z: from.z };
@@ -3486,7 +3489,8 @@ async function moveUnit(unit, path, finalFacing = null, onStep = null) {
         tl.x = smx;
         tl.z = smz;
       }
-    });
+    }, easeInOut, abort);
+    if (unit._abortMove) break; // 셀 중간에서 멈춘 채 종료 — 다음 행동이 그 자리에서 이어받는다
     unit.gx = cell.gx;
     unit.gz = cell.gz;
     unit.group.position.y = driveHeight(to.x, to.z);
@@ -5974,7 +5978,7 @@ async function runAction(moveDef, moveLevel, fireLevel) {
           const diff = normAngle(rel - player.turret.rotation.y);
           if (Math.abs(diff) > 0.02) {
             const from2 = player.turret.rotation.y;
-            await tween((Math.abs(diff) / TURRET_TRACK_RATE) * 1000, (e2) => { player.turret.rotation.y = from2 + diff * e2; });
+            await tween((Math.abs(diff) / TURRET_TRACK_RATE) * 1000, (e2) => { player.turret.rotation.y = from2 + diff * e2; }, easeInOut, () => player._abortMove || !player.alive);
           }
         }
         // 카드 수행 시간을 채운다 — 명령 슬롯 점유 (취소되면 즉시 반환)
@@ -6061,11 +6065,18 @@ function nearestEnemy() {
   }
   return best;
 }
-// 차체 기준 상대각(도): 0 전방, ±180 후방, +우 / −좌
-function hullRelDeg(gx, gz) {
-  return normAngle(Math.atan2(gx - player.gx, gz - player.gz) - player.group.rotation.y) * (180 / Math.PI);
+// 카드 방향의 기준각: 가장 가까운 적을 향한 방향이 '전방'이다 — 차체가
+// 어디를 보고 있든 전진 = 적에게, 후진 = 적 반대로. 예측 가능성이 우선.
+// (적이 전멸/부재면 차체 방향 폴백)
+function cardBaseAngle() {
+  const near = nearestEnemy();
+  return near ? Math.atan2(near.gx - player.gx, near.gz - player.gz) : player.group.rotation.y;
 }
-// 셀이 어느 이동 카드 방향인지 — 전방 ≤50° / 후방 ≥132° / 그 사이 좌·우
+// 적 기준 상대각(도): 0 적 방향, ±180 적 반대, +우 / −좌
+function cardRelDeg(gx, gz, base = cardBaseAngle()) {
+  return normAngle(Math.atan2(gx - player.gx, gz - player.gz) - base) * (180 / Math.PI);
+}
+// 셀이 어느 이동 카드 방향인지 — 적 쪽 ≤50° / 적 반대 ≥132° / 그 사이 좌·우
 function arcOfRel(rel) {
   const a = Math.abs(rel);
   if (a <= 50) return 'fwd';
@@ -6081,10 +6092,11 @@ const cardPop = (def, extra = '', col = '#e8e4d8') => {
 // 좌/우 3단(우회)은 적의 측후면 각도가 서는 위치에 큰 가산.
 function materializeMove(def, level = 1) {
   const near = nearestEnemy();
+  const base = cardBaseAngle();
   const cand = [];
   for (const [k, info] of reachableCells(player)) {
     const [gx, gz] = k.split(',').map(Number);
-    if (arcOfRel(hullRelDeg(gx, gz)) !== def.mv) continue;
+    if (arcOfRel(cardRelDeg(gx, gz, base)) !== def.mv) continue;
     let score = -info.cost;
     for (const step of info.path) {
       if (items.has(cellKey(step.gx, step.gz))) score += def.mv === 'back' ? 22 : 48;
@@ -6123,8 +6135,12 @@ function materializeMove(def, level = 1) {
   cand.sort((a, b) => b.score - a.score);
   const pick = cand[0];
   const turretYaw = near ? Math.atan2(near.gx - pick.gx, near.gz - pick.gz) : null;
+  let path = pick.info.path.slice();
+  // 후진 1단: 돌아서지 않는다 — 전 구간 후진 기어로 전면장갑을 적에게 문 채
+  // 저속 이탈. 급후진(2단)부터는 돌아서 빠르게 빠지는 것도 허용 (후면 노출은 대가).
+  if (def.mv === 'back' && level === 1) path = path.map((c) => ({ ...c, rev: true }));
   return {
-    type: 'move', path: pick.info.path.slice(), facing: null,
+    type: 'move', path, facing: null,
     turretYaw, endDir: pick.info.endDir,
   };
 }
@@ -6170,10 +6186,11 @@ function refreshPlanUI(fireEmphasis = false) {
     // 셀만 필드에 남긴다 — 공격/엄호 카드가 없으면 사격 필드도 꺼진다
     {
       const kinds = new Set(hand.filter((c) => !c.used && c.def.kind === 'move').map((c) => c.def.mv));
+      const base = cardBaseAngle();
       const mv = new Map();
       for (const [k, info] of currentMoveCells) {
         const [gx, gz] = k.split(',').map(Number);
-        if (kinds.has(arcOfRel(hullRelDeg(gx, gz)))) mv.set(k, info);
+        if (kinds.has(arcOfRel(cardRelDeg(gx, gz, base)))) mv.set(k, info);
       }
       currentMoveCells = mv;
       if (!hand.some((c) => !c.used && c.def.kind === 'atk')) {
