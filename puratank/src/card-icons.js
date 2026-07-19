@@ -1,72 +1,63 @@
-// card-icons.js — 카드별 전용 그래픽 아이콘 (이모지 대체, SD 프라모델 톤)
-// 굵은 다크네이비 외곽선 + 플랫 컬러 + 하이라이트 한 줄 — 게임 카드와
-// /rules 페이지가 같은 아트를 공유한다.
-
-// 공용: 탑뷰 SD 전차 (위를 향함) — cx 중심, top이 차체 앞머리 y
-const tankTop = (cx = 24, top = 20) => `
-  <g stroke="#2b3445" stroke-linejoin="round">
-    <rect x="${cx - 13}" y="${top + 2}" width="7" height="22" rx="3" fill="#454c5c" stroke-width="2.4"/>
-    <rect x="${cx + 6}" y="${top + 2}" width="7" height="22" rx="3" fill="#454c5c" stroke-width="2.4"/>
-    <path d="M${cx - 11.5} ${top + 6} h4 M${cx - 11.5} ${top + 11} h4 M${cx - 11.5} ${top + 16} h4 M${cx - 11.5} ${top + 21} h4
-             M${cx + 7.5} ${top + 6} h4 M${cx + 7.5} ${top + 11} h4 M${cx + 7.5} ${top + 16} h4 M${cx + 7.5} ${top + 21} h4"
-          stroke="#2b3445" stroke-width="1.3" opacity="0.55"/>
-    <rect x="${cx - 8}" y="${top + 4}" width="16" height="18" rx="3" fill="#7d9b4e" stroke-width="2.4"/>
-    <path d="M${cx - 6} ${top + 6.5} h12" stroke="#a6bf74" stroke-width="2" stroke-linecap="round" opacity="0.9"/>
-    <rect x="${cx - 1.4}" y="${top - 6}" width="2.8" height="14" rx="1" fill="#5e6b78" stroke-width="1.7"/>
-    <circle cx="${cx}" cy="${top + 14}" r="5.4" fill="#93ac62" stroke-width="2.2"/>
-    <circle cx="${cx - 1.6}" cy="${top + 12.4}" r="1.5" fill="#c3d49a" stroke="none"/>
-  </g>`;
+// card-icons.js — 카드별 전용 그래픽 아이콘 (SD 프라모델 톤)
+// 전차는 그리지 않는다 (당연하니까) — 각 카드의 "특징"만 굵고 한눈에:
+//  전진 = 내닫는 화살표 + 추진선 / 후진 = 전면 방패를 문 채 하강 /
+//  좌·우 = 급격히 꺾이는 화살표 + 스키드 / 공격 = 크로스헤어에 꽂히는 예광탄.
+// 굵은 다크네이비 외곽선 + 플랫 컬러 + 하이라이트 — 게임 카드와 /rules 공유.
 
 export const CARD_ICONS = {
-  // 전진 ⬆ — 앞으로 내닫는 전차 + 큰 청색 화살표, 궤도 뒤 속도선
+  // 전진 — 두툼한 청색 화살표가 위로 내닫는다, 아래엔 추진 잔상
   fwd: `<svg viewBox="0 0 48 48" aria-label="전진">
-    <path d="M10 45.5 v-5 M38 45.5 v-5 M24 47 v-3.5" stroke="#9fb4cc" stroke-width="2.4" stroke-linecap="round"/>
-    ${tankTop(24, 20)}
-    <path d="M24 1.5 L35 13.5 H29.2 V18 H18.8 V13.5 H13 Z"
-          fill="#2f7ee0" stroke="#2b3445" stroke-width="2.4" stroke-linejoin="round"/>
-    <path d="M21.5 12.5 L24 5 L26.5 12.5" fill="none" stroke="#bcd9ff" stroke-width="1.8" stroke-linecap="round"/>
+    <path d="M17 45.5 h14 M19.5 40 h9" stroke="#9fb4cc" stroke-width="3.4" stroke-linecap="round"/>
+    <path d="M24 2 L42 22 H32.5 V34.5 H15.5 V22 H6 Z"
+          fill="#2f7ee0" stroke="#2b3445" stroke-width="3" stroke-linejoin="round"/>
+    <path d="M24 2 L42 22 H32.5 V25 H15.5 V22 H6 Z" fill="#5d9df0" stroke="none" opacity="0.55"/>
+    <path d="M18.5 17.5 L24 9 L29.5 17.5" fill="none" stroke="#cfe4ff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
   </svg>`,
 
-  // 후진 ⬇ — 전면(포)을 위로 문 채 뒤로 빠진다: 아래로 강철색 화살표 + 전면 방패 광택
+  // 후진 — 위쪽 전면 장갑판(방패)을 문 채, 강철색 화살표가 아래로 빠진다
   back: `<svg viewBox="0 0 48 48" aria-label="후진">
-    ${tankTop(24, 6)}
-    <path d="M24 46.5 L13 34.5 H18.8 V30 H29.2 V34.5 H35 Z"
-          fill="#4a6fa5" stroke="#2b3445" stroke-width="2.4" stroke-linejoin="round"/>
-    <path d="M26.5 35.5 L24 43 L21.5 35.5" fill="none" stroke="#c9d8ef" stroke-width="1.8" stroke-linecap="round"/>
+    <path d="M24 2.5 L40 6.5 V12 C40 16.5 33.5 19.5 24 21 C14.5 19.5 8 16.5 8 12 V6.5 Z"
+          fill="#8b95a8" stroke="#2b3445" stroke-width="3" stroke-linejoin="round"/>
+    <path d="M24 2.5 L40 6.5 V9 H8 V6.5 Z" fill="#b3bccb" stroke="none"/>
+    <path d="M12.5 8 L24 5.2 L35.5 8" fill="none" stroke="#e8edf5" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M24 46 L38 31 H30.5 V24.5 H17.5 V31 H10 Z"
+          fill="#4a6fa5" stroke="#2b3445" stroke-width="3" stroke-linejoin="round"/>
+    <path d="M27.5 32.5 L24 41 L20.5 32.5" fill="none" stroke="#c9d8ef" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
   </svg>`,
 
-  // 좌 ↰ — 제동 후 좌선회 전진: 왼쪽으로 감기는 굵은 화살표 + 기울어진 차체 + 스키드 자국
+  // 좌 — 굵은 화살표가 급격히 왼쪽으로 꺾인다 + 오른쪽 아래 스키드 자국
   left: `<svg viewBox="0 0 48 48" aria-label="좌">
-    <path d="M35 44 q3 -2 4.5 -5 M40 45 q3 -2.5 4.5 -5.5" stroke="#8b95a8" stroke-width="2.2" stroke-linecap="round" fill="none"/>
-    <g transform="rotate(-20 26 30)">${tankTop(27, 20)}</g>
-    <path d="M34 12 C28 4.5 16 4.5 10 11.5 L5.5 7.5 L4 20.5 L17 19 L12.8 15.2 C17 10.5 26 10.5 30.5 15.5 Z"
-          fill="#2f7ee0" stroke="#2b3445" stroke-width="2.4" stroke-linejoin="round"/>
-    <path d="M14.5 12.5 C19 8.8 25 8.8 29 12" fill="none" stroke="#bcd9ff" stroke-width="1.8" stroke-linecap="round"/>
+    <path d="M36 45 q4 -2.5 6 -6 M29.5 46.5 q4 -3 6 -6.5" stroke="#8b95a8" stroke-width="3" stroke-linecap="round" fill="none"/>
+    <path d="M21 44 V25 C21 17.5 25.5 13 33 13 H33.5 V4.5 L47 15.5 L33.5 26.5 V18.5 H33 C29.5 18.5 27.5 20.8 27.5 25 V44 Z"
+          transform="translate(48 0) scale(-1 1)"
+          fill="#2f7ee0" stroke="#2b3445" stroke-width="3" stroke-linejoin="round"/>
+    <path d="M23.5 40 V25 C23.5 19.5 27 16 32.5 15.8"
+          transform="translate(48 0) scale(-1 1)"
+          fill="none" stroke="#cfe4ff" stroke-width="2.4" stroke-linecap="round"/>
   </svg>`,
 
-  // 우 ↱ — 좌의 미러
+  // 우 — 좌의 미러
   right: `<svg viewBox="0 0 48 48" aria-label="우">
-    <path d="M13 44 q-3 -2 -4.5 -5 M8 45 q-3 -2.5 -4.5 -5.5" stroke="#8b95a8" stroke-width="2.2" stroke-linecap="round" fill="none"/>
-    <g transform="rotate(20 22 30)">${tankTop(21, 20)}</g>
-    <path d="M14 12 C20 4.5 32 4.5 38 11.5 L42.5 7.5 L44 20.5 L31 19 L35.2 15.2 C31 10.5 22 10.5 17.5 15.5 Z"
-          fill="#2f7ee0" stroke="#2b3445" stroke-width="2.4" stroke-linejoin="round"/>
-    <path d="M33.5 12.5 C29 8.8 23 8.8 19 12" fill="none" stroke="#bcd9ff" stroke-width="1.8" stroke-linecap="round"/>
+    <path d="M12 45 q-4 -2.5 -6 -6 M18.5 46.5 q-4 -3 -6 -6.5" stroke="#8b95a8" stroke-width="3" stroke-linecap="round" fill="none"/>
+    <path d="M21 44 V25 C21 17.5 25.5 13 33 13 H33.5 V4.5 L47 15.5 L33.5 26.5 V18.5 H33 C29.5 18.5 27.5 20.8 27.5 25 V44 Z"
+          fill="#2f7ee0" stroke="#2b3445" stroke-width="3" stroke-linejoin="round"/>
+    <path d="M23.5 40 V25 C23.5 19.5 27 16 32.5 15.8"
+          fill="none" stroke="#cfe4ff" stroke-width="2.4" stroke-linecap="round"/>
   </svg>`,
 
-  // 공격 🎯 — 붉은 크로스헤어 + 중심으로 파고드는 예광탄 + 포구 화염
+  // 공격 — 붉은 크로스헤어 정중앙에 꽂히는 예광탄 + 포구 섬광
   atk: `<svg viewBox="0 0 48 48" aria-label="공격">
-    <circle cx="27" cy="21" r="13.5" fill="none" stroke="#d0342c" stroke-width="3"/>
-    <path d="M27 4 v5.5 M27 32.5 v5.5 M10 21 h5.5 M38.5 21 h5.5"
-          stroke="#d0342c" stroke-width="3" stroke-linecap="round"/>
-    <path d="M13 36 L23.8 24.6" stroke="#ffd9a1" stroke-width="5" stroke-linecap="round" opacity="0.9"/>
-    <path d="M14.5 34.5 L24.2 24.2" stroke="#fff3d6" stroke-width="2.2" stroke-linecap="round"/>
-    <path d="M22.5 27.2 L27.3 22.1 c1.5 -1.6 3.9 0.7 2.4 2.3 L25 29.5 c-1.6 1.5 -3.9 -0.7 -2.4 -2.3 Z"
-          fill="#ff7a3c" stroke="#2b3445" stroke-width="1.7" stroke-linejoin="round"/>
-    <g stroke="#2b3445" stroke-width="1.8" stroke-linejoin="round">
-      <path d="M9 30.5 L11.4 35 L16.4 33.4 L13.6 37.6 L18 40.4 L13 40.9 L13.8 45.9 L9.9 42.4 L5.6 45.4 L7 40.6 L2.2 39.9 L6.6 37.4 L4.2 33.2 L8.6 35.2 Z"
+    <circle cx="28" cy="20" r="14" fill="none" stroke="#d0342c" stroke-width="3.4"/>
+    <path d="M28 2 v6 M28 32 v6 M10 20 h6 M40 20 h6" stroke="#d0342c" stroke-width="3.4" stroke-linecap="round"/>
+    <path d="M12 37 L24.5 23.8" stroke="#ffd9a1" stroke-width="5.5" stroke-linecap="round" opacity="0.9"/>
+    <path d="M13.5 35.5 L25 23.4" stroke="#fff3d6" stroke-width="2.4" stroke-linecap="round"/>
+    <path d="M23 26.5 L27.8 21.4 c1.6 -1.7 4.2 0.8 2.6 2.5 L25.5 29 c-1.7 1.6 -4.1 -0.8 -2.5 -2.5 Z"
+          fill="#ff7a3c" stroke="#2b3445" stroke-width="1.8" stroke-linejoin="round"/>
+    <g stroke="#2b3445" stroke-width="2" stroke-linejoin="round">
+      <path d="M8.5 29.5 L11.2 34.5 L16.8 32.7 L13.7 37.4 L18.6 40.5 L13 41.1 L13.9 46.7 L9.5 42.8 L4.7 46.1 L6.3 40.8 L0.9 40 L5.8 37.2 L3.1 32.5 L8 34.7 Z"
             fill="#ffb43a"/>
-      <circle cx="9.8" cy="38.6" r="2.4" fill="#ffe9a8" stroke="none"/>
+      <circle cx="9.4" cy="38" r="2.7" fill="#ffe9a8" stroke="none"/>
     </g>
-    <circle cx="27" cy="21" r="2.6" fill="#d0342c" stroke="#2b3445" stroke-width="1.6"/>
+    <circle cx="28" cy="20" r="2.9" fill="#d0342c" stroke="#2b3445" stroke-width="1.8"/>
   </svg>`,
 };
