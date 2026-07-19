@@ -5915,6 +5915,10 @@ function levelUpMove() {
   player._dash = true;
   player._dashMul = curMoveLevel >= 3 ? 1.9 : 1.6;
   player._extendMove = true; // 현 구간이 끝나면 같은 방향으로 한 구간 더
+  if (player._activeMove) {
+    player._activeMove.level = curMoveLevel;
+    player._activeMove.dur += curMoveDef.durMs * 0.6; // 연장 구간만큼 진행 바도 늘린다
+  }
   const name = MOVE_NAMES[curMoveDef.key][curMoveLevel - 1];
   cardPop({ ico: curMoveDef.ico.repeat(Math.min(2, curMoveLevel)), label: `${name}!` }, '', curMoveLevel >= 3 ? '#ffb46e' : '#8de08a');
 }
@@ -5931,6 +5935,7 @@ async function execCard(def) {
     curMoveDef = def;
     curMoveLevel = 1;
     const t0 = performance.now();
+    player._activeMove = { level: 1, t0, dur: def.durMs }; // 실행 중 카드 배지용
     try {
       let hop = 0;
       do {
@@ -5960,6 +5965,7 @@ async function execCard(def) {
       curMoveDef = null;
       curMoveLevel = 1;
       player._dashMul = 1;
+      player._activeMove = null;
       fieldsDirty = true;
     }
     return;
@@ -5968,16 +5974,21 @@ async function execCard(def) {
   // 재장전이 안 끝났으면 제자리에서 장전을 기다렸다 쏜다 (성급한 공격의 대가).
   // 이동 중 발사는 기동사격(-8), 조준 보너스도 이동 중엔 절반 — 이동·조준·노출의 상충.
   playerFireBusy = true;
-  fireStage = { level: 1, extendMs: 0, fired: false };
+  fireStage = { level: 1, extendMs: 0, fired: false, phase: 'aim', t0: performance.now(), waitDur: 0 };
   try {
     const now0 = performance.now();
     if ((player.reloadReadyAt ?? 0) > now0) {
       const wait = player.reloadReadyAt - now0;
+      fireStage.phase = 'reload';
+      fireStage.t0 = now0;
+      fireStage.waitDur = wait;
       cardPop(def, ` — 재장전 ${(wait / 1000).toFixed(1)}s`, '#ffd76e');
       const lockMove = !playerMoveBusy;
       if (lockMove) playerMoveBusy = true; // 장전 대기 중 제자리
       try { await delay(wait); } finally { if (lockMove) playerMoveBusy = false; }
       if (!player.alive || phase === 'gameover') return;
+      fireStage.phase = 'aim';
+      fireStage.t0 = performance.now();
     }
     // 조준 창: 즉응 0.6초 — 이 사이 공격 카드를 얹으면 조준/정밀로 승급
     let waited = 0;
@@ -6913,6 +6924,55 @@ function rustleNearProps(x, z) {
   }
 }
 
+// 실행 중 카드 배지: 지금 탱크가 무슨 카드를 수행 중인지 (단계명 + 진행 바)
+// 탱크 머리 위 화면 좌표를 따라다닌다.
+const activeCardsEl = document.getElementById('active-cards');
+let activeCardsSig = '';
+const _acV = new THREE.Vector3();
+function updateActiveCardsHUD(now) {
+  if (!activeCardsEl) return;
+  const parts = [];
+  if (player.alive && phase !== 'gameover') {
+    if (curMoveDef && player._activeMove) {
+      const am = player._activeMove;
+      parts.push({
+        key: curMoveDef.key, cls: '',
+        name: MOVE_NAMES[curMoveDef.key][am.level - 1],
+        pct: Math.min(96, ((now - am.t0) / am.dur) * 100),
+      });
+    }
+    if (fireStage) {
+      const isReload = fireStage.phase === 'reload';
+      const dur = isReload ? fireStage.waitDur : 600 + fireStage.extendMs;
+      parts.push({
+        key: 'atk', cls: ' fire',
+        name: fireStage.fired ? '발사!' : isReload ? '재장전…' : FIRE_NAMES[fireStage.level - 1],
+        pct: fireStage.fired ? 100 : Math.min(96, ((now - fireStage.t0) / Math.max(1, dur)) * 100),
+      });
+    }
+  }
+  if (!parts.length) {
+    if (activeCardsSig) { activeCardsEl.style.display = 'none'; activeCardsSig = ''; }
+    return;
+  }
+  const sig = parts.map((p) => p.key + p.name).join('|');
+  if (sig !== activeCardsSig) {
+    activeCardsSig = sig;
+    activeCardsEl.style.display = 'flex';
+    activeCardsEl.innerHTML = parts.map((p) =>
+      `<div class="acard${p.cls}">${CARD_ICONS[p.key] ?? ''}<span>${p.name}</span><span class="bar"><i></i></span></div>`
+    ).join('');
+  }
+  const bars = activeCardsEl.querySelectorAll('.bar i');
+  parts.forEach((p, i) => { if (bars[i]) bars[i].style.width = `${p.pct.toFixed(0)}%`; });
+  _acV.copy(player.group.position);
+  _acV.y += 2.3;
+  _acV.project(camera);
+  if (_acV.z > 1) { activeCardsEl.style.display = 'none'; activeCardsSig = ''; return; }
+  activeCardsEl.style.left = `${((_acV.x * 0.5 + 0.5) * window.innerWidth).toFixed(0)}px`;
+  activeCardsEl.style.top = `${((-_acV.y * 0.5 + 0.5) * window.innerHeight).toFixed(0)}px`;
+}
+
 function animate(now) {
   requestAnimationFrame(animate);
   const dt = Math.min(0.05, (now - lastNow) / 1000 || 0.016);
@@ -6971,6 +7031,7 @@ function animate(now) {
       if (c._el && c.def.kind === 'atk') c._el.classList.toggle('cool', reloading);
     }
   }
+  updateActiveCardsHUD(now); // 실행 중 카드 배지 (탱크 머리 위)
   updateAntennas(dt); // RC 안테나 대롱대롱
   updateSuspension(dt); // 로드휠 서스펜션 — 차체가 지형을 출렁이며 따라간다
   updateWreckFires(now); // 격파 잔해 화재/매연

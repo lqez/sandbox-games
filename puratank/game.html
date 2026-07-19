@@ -191,6 +191,30 @@
   }
   /* 재장전 중인 공격/엄호 카드 — 내면 제자리에서 장전을 기다린다 */
   .card.cool { filter: grayscale(0.65) brightness(0.72); }
+
+  /* 실행 중 카드 배지: 탱크 머리 위를 따라다닌다 — 단계명 + 진행 바 */
+  #active-cards {
+    position: fixed; z-index: 12; pointer-events: none;
+    display: flex; gap: 6px;
+    transform: translate(-50%, -100%);
+  }
+  .acard {
+    background: rgba(253, 250, 243, 0.95);
+    border: 2px solid #2f7ee0; border-radius: 9px;
+    padding: 3px 9px 6px;
+    font-size: 11px; font-weight: 800; color: #2b3445;
+    display: flex; align-items: center; gap: 5px;
+    position: relative; white-space: nowrap;
+    box-shadow: 0 2px 0 rgba(43, 52, 69, 0.3);
+  }
+  .acard svg { width: 16px; height: 16px; display: block; }
+  .acard.fire { border-color: #d0342c; }
+  .acard .bar {
+    position: absolute; left: 3px; right: 3px; bottom: 1.5px;
+    height: 3px; background: #e3e7ee; border-radius: 2px; overflow: hidden;
+  }
+  .acard .bar i { display: block; height: 100%; background: #2ea04f; width: 0%; }
+  .acard.fire .bar i { background: #e8834f; }
   @media (max-width: 640px) {
     #hand { gap: 5px; bottom: 30px; }
     .card { width: 54px; height: 74px; border-width: 2px; }
@@ -336,6 +360,7 @@
     <button id="btn-ok">✓ 확정</button>
   </div>
   <div id="hand"></div>
+  <div id="active-cards"></div>
 
   <button id="btn-settings">⚙</button>
   <div id="settings">
