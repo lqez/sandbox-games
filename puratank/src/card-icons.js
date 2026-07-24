@@ -62,8 +62,25 @@ export const CARD_ICONS = {
           fill="none" stroke="#dcebff" stroke-width="2" stroke-linecap="round" opacity="0.85"/>
   </svg>`,
 
-  // 공격 — 크로스헤어에 꽂히는 예광탄 + 포구 섬광
-  atk: `<svg viewBox="0 0 48 48" aria-label="공격">
+  // 곡사 — 능선 너머로 넘겨 쏘는 포물선 탄도 + 낙하 포탄
+  lob: `<svg viewBox="0 0 48 48" aria-label="곡사">
+    <defs>
+      <linearGradient id="gi-lob" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="#ffb765"/><stop offset="1" stop-color="#e8781c"/>
+      </linearGradient>
+    </defs>
+    <path d="M3 43 h9 l4 -9 h6 l3 9 h11" fill="none" stroke="#8a94a6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" opacity="0.75"/>
+    <path d="M6 40 C 14 6, 34 6, 42 34" fill="none" stroke="url(#gi-lob)" stroke-width="2.4" stroke-linecap="round" stroke-dasharray="1.5 4.2"/>
+    <path d="M40.2 24.5 L44.4 22 L44 26.9 Z" fill="url(#gi-lob)" stroke="#a5401f" stroke-width="1" stroke-linejoin="round"/>
+    <g transform="translate(41.6 33.4) rotate(28)">
+      <rect x="-2.1" y="-4.2" width="4.2" height="7.2" rx="1.9" fill="url(#gi-lob)" stroke="#a5401f" stroke-width="1.1"/>
+      <path d="M-2.1 3 L-3.4 6 M0 3.2 L0 6.6 M2.1 3 L3.4 6" stroke="#e8781c" stroke-width="1.1" stroke-linecap="round"/>
+    </g>
+    <circle cx="6" cy="40" r="2.2" fill="#ffd79a" stroke="#c98a24" stroke-width="1.1"/>
+  </svg>`,
+
+  // 공격(직격) — 크로스헤어에 꽂히는 예광탄 + 포구 섬광
+  atk: `<svg viewBox="0 0 48 48" aria-label="직격">
     <defs>
       <linearGradient id="gi-atk" x1="0" y1="1" x2="1" y2="0">
         <stop offset="0" stop-color="#ff9d54"/><stop offset="1" stop-color="#ff6a35"/>

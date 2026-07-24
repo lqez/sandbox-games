@@ -2833,15 +2833,18 @@ function tryPickupItem(unit) {
   if (!item) return;
   items.delete(k);
   scene.remove(item.group);
-  if (item.type === 'repair') {
-    unit.hp = Math.min(unit.maxHp, unit.hp + 40);
-    updateHpBar(unit);
-    if (unit.isPlayer) updatePlayerHpUI();
-    popText(unit.group.position.clone().add(new THREE.Vector3(0, 1.5, 0)), '🔧 +40 HP', '#8df08f');
-  } else {
-    unit.boostTurns = 3;
-    popText(unit.group.position.clone().add(new THREE.Vector3(0, 1.5, 0)), '⚡ 기동 +4 (3턴)', '#ffd24d');
+  if (unit.isPlayer) {
+    // 플레이어: 즉시 쓰지 않고 인벤토리에 담는다 — 언제 쓸지는 플레이어가 결정
+    unit.inventory.push(item.type);
+    popText(unit.group.position.clone().add(new THREE.Vector3(0, 1.5, 0)),
+      item.type === 'repair' ? '🔧 수리킷 획득' : '⚡ 연료 획득', '#ffe9a8');
+    pickupFx(unit, item);
+    if (typeof updateActionBar === 'function') updateActionBar();
+    return;
   }
+  // 적: 즉시 적용
+  if (item.type === 'repair') { unit.hp = Math.min(unit.maxHp, unit.hp + 40); updateHpBar(unit); }
+  else unit.boostTurns = 3;
   pickupFx(unit, item);
 }
 
@@ -2977,6 +2980,7 @@ function spawnUnit(isPlayer, gx, gz, facing) {
     movedLastTurn: false,
     aimStack: 0,
     boostTurns: 0,
+    inventory: [], // 플레이어: 자동 주행 중 주운 아이템(수리/연료)을 버튼으로 사용
     mp: base.mp, fireRange: base.fireRange, damage: base.damage,
     hullLv, driverLv,
     hp: maxHp, maxHp,
@@ -5717,26 +5721,9 @@ function drawOne() {
   if (!drawPile.length) { drawPile = shuffle(discardPile); discardPile = []; }
   return drawPile.length ? { def: CARD_DEFS[drawPile.pop()] } : null;
 }
-function initHand() {
-  hand = [];
-  for (let i = 0; i < 2; i++) { const c = drawOne(); if (c) hand.push(c); } // 시작 2장
-  renderHand();
-}
-// 리필: 핸드 < 5면 3초마다 1장 (진행 바 표시)
-function updateHandRefill(now) {
-  if (phase === 'gameover') return;
-  const bar = document.getElementById('refill-bar');
-  if (hand.length >= HAND_MAX) { refillT0 = now; if (bar) bar.style.width = '0%'; return; }
-  if (!refillT0) refillT0 = now;
-  const t = (now - refillT0) / REFILL_MS;
-  if (bar) bar.style.width = `${Math.min(100, t * 100).toFixed(0)}%`;
-  if (t >= 1) {
-    const c = drawOne();
-    if (c) { hand.unshift(c); lastDealt = c; renderHand(); } // 덱(왼쪽)에서 핸드 왼쪽으로
-    refillT0 = now;
-    fieldsDirty = true;
-  }
-}
+// 카드 덱/핸드는 제거됐다 (조작은 하단 액션 바). 아래는 구 턴 머신 잔재가
+// 호출해도 안전하도록 남긴 무동작 스텁.
+function renderHand() {}
 let selectedCard = null;   // 1탭 선택(확대) → 재탭/위로 드래그 = 사용
 let lastDealt = null;      // 방금 덱에서 온 카드 — 딜 애니메이션용
 let handGestureActive = false; // 스와이프 중 리필이 DOM을 갈아치우지 않게
@@ -5744,304 +5731,72 @@ let handRenderPending = false;
 let curMoveDef = null;     // 실행 중인 이동 카드 (얹기 판정용)
 let curMoveLevel = 1;      // 이동 단계: 1 기본 / 2 돌격·전개 / 3 돌파·우회
 let fireStage = null;      // 공격 조준 단계: { level, extendMs, fired }
-function renderHand() {
-  if (!handEl) return;
-  if (handGestureActive) { handRenderPending = true; return; } // 제스처 끝나면 갱신
-  handRenderPending = false;
-  handEl.innerHTML = '';
-  const pill = document.createElement('div');
-  pill.id = 'deck-pill';
-  pill.innerHTML = `${drawPile.length}<div id="refill-bar"></div>`;
-  pill.title = '남은 덱 — 3초마다 1장 리필';
-  handEl.appendChild(pill);
-  const n = hand.length;
-  hand.forEach((c, i) => {
-    const el = document.createElement('div');
-    const mid = (n - 1) / 2;
-    el.className = `card ${c.def.cls}${selectedCard === c ? ' sel' : ''}${c === lastDealt ? ' deal' : ''}`;
-    // 부채꼴: 중앙 기준 살짝 회전 + 바깥일수록 내려간다
-    const baseT = selectedCard === c
-      ? '' // .sel CSS가 담당
-      : `rotate(${((i - mid) * 4).toFixed(1)}deg) translateY(${(Math.abs(i - mid) * 5).toFixed(0)}px)`;
-    if (baseT) el.style.transform = baseT;
-    el.innerHTML = `<span class="ico">${CARD_ICONS[c.def.key] ?? c.def.ico}</span>${c.def.label}<span class="typ">${c.def.typ}·${(c.def.durMs / 1000).toFixed(0)}s</span>`;
-    // 제스처: 위로 밀면 사용, 아래로 당기면 버리기, 짧은 탭 = 선택/사용.
-    // 포인터 캡처로 카드 밖으로 나가도 끝까지 추적 — iOS 스크롤 제스처와 안 섞인다.
-    let sy = null;
-    const endGesture = () => {
-      handGestureActive = false;
-      if (handRenderPending) renderHand();
-    };
-    el.addEventListener('pointerdown', (ev) => {
-      sy = ev.clientY;
-      handGestureActive = true;
-      try { el.setPointerCapture(ev.pointerId); } catch { /* ignore */ }
-      ev.preventDefault();
-    });
-    el.addEventListener('pointermove', (ev) => {
-      if (sy === null) return;
-      const dy = sy - ev.clientY; // +위 / −아래
-      // 임계값을 넘는 "순간" 발동 — 릴리즈를 기다리면 손가락이 화면 밖
-      // (iOS 하단 제스처 영역)까지 나가버린다
-      if (dy > 36) { sy = null; endGesture(); playCardFromHand(c, el); return; }   // 위로 밀어 사용
-      if (dy < -28) { sy = null; endGesture(); discardCard(c, el); return; }       // 아래로 당겨 버리기
-      const clamped = Math.max(-30, Math.min(38, dy));
-      el.style.transition = 'none';
-      el.style.transform = `${baseT} translateY(${(-clamped).toFixed(0)}px)`;
-      el.style.opacity = dy < -12 ? String(Math.max(0.55, 1 + dy / 70)) : '1';
-    });
-    el.addEventListener('pointerup', (ev) => {
-      if (sy === null) return;
-      const dy = sy - ev.clientY;
-      sy = null;
-      endGesture();
-      if (Math.abs(dy) <= 10) { cardClick(c); return; }        // 탭 = 선택/사용
-      el.style.transition = ''; el.style.transform = baseT; el.style.opacity = '1'; // 복귀
-    });
-    el.addEventListener('pointercancel', () => {
-      sy = null;
-      endGesture();
-      el.style.transition = ''; el.style.transform = baseT; el.style.opacity = '1';
-    });
-    c._el = el;
-    handEl.appendChild(el);
-  });
-  lastDealt = null;
-}
-// 아래로 당겨 버리기 — 손패 회전용 (덱 순환이 빨라진다)
-function discardCard(c, el) {
-  if (!hand.includes(c)) return;
-  hand.splice(hand.indexOf(c), 1);
-  discardPile.push(c.def.key);
-  if (selectedCard === c) selectedCard = null;
-  try {
-    const r = el.getBoundingClientRect();
-    const fly = document.createElement('div');
-    fly.className = `card ${c.def.cls} fly`;
-    fly.innerHTML = `<span class="ico">${CARD_ICONS[c.def.key] ?? c.def.ico}</span>${c.def.label}`;
-    fly.style.left = `${r.left}px`;
-    fly.style.top = `${r.top}px`;
-    document.body.appendChild(fly);
-    requestAnimationFrame(() => {
-      fly.style.top = `${r.top + 80}px`;
-      fly.style.transform = 'rotate(9deg) scale(0.82)';
-      fly.style.opacity = '0';
-    });
-    setTimeout(() => fly.remove(), 650);
-  } catch { /* ignore */ }
-  renderHand();
-  fieldsDirty = true;
-  setHint('카드 버림');
-}
-// 1탭 = 선택(확대), 같은 카드 재탭 = 사용. 위로 드래그해도 사용.
-function cardClick(c) {
-  if (phase === 'gameover' || !player.alive || !hand.includes(c)) return;
-  if (selectedCard !== c) {
-    selectedCard = c;
-    renderHand();
-    setHint(`${c.def.ico} ${c.def.label} — 한 번 더 탭하거나 위로 밀면 사용`);
-    return;
+// ── 사격 전용 조작 (이동은 자동 조종) ──
+// 플레이어는 직격/곡사 발사와 아이템 사용만 한다. 같은 사격 버튼을 조준 창
+// 안에서 다시 누르면 조준이 강화된다(즉응→조준→정밀). 재장전은 시간 기반.
+function startFire(lob) {
+  if (phase === 'gameover' || !player.alive) return;
+  const fs = fireStage;
+  if (fs && !fs.fired && !fs.cancelled) {
+    if (fs.lob === lob) { levelUpFire(); return; } // 같은 모드 재탭 = 조준 강화
+    cancelFire();                                  // 다른 모드 = 조준 접고 새로
   }
-  playCardFromHand(c, c._el);
+  if (playerFireBusy) return; // 취소 정리 중 — 다음 탭에서
+  runFire(1, lob);
 }
-// 사용 연출: 카드가 탱크 머리 위로 날아가 사라진다
-function cardFlyFx(el, def) {
-  try {
-    const r = el?.getBoundingClientRect();
-    const v = player.group.position.clone();
-    v.y += 2;
-    v.project(camera);
-    const tx = (v.x * 0.5 + 0.5) * window.innerWidth;
-    const ty = (-v.y * 0.5 + 0.5) * window.innerHeight;
-    const fly = document.createElement('div');
-    fly.className = `card ${def.cls} fly`;
-    fly.innerHTML = `<span class="ico">${CARD_ICONS[def.key] ?? def.ico}</span>${def.label}`;
-    fly.style.left = `${r ? r.left : tx}px`;
-    fly.style.top = `${r ? r.top : ty}px`;
-    document.body.appendChild(fly);
-    requestAnimationFrame(() => {
-      fly.style.left = `${tx - 27}px`;
-      fly.style.top = `${ty - 40}px`;
-      fly.style.transform = 'scale(0.55) rotate(6deg)';
-      fly.style.opacity = '0';
-    });
-    setTimeout(() => fly.remove(), 700);
-  } catch { /* ignore */ }
-}
-function playCardFromHand(c, el) {
-  if (phase === 'gameover' || !player.alive || !hand.includes(c)) return;
-  const def = c.def;
-  hand.splice(hand.indexOf(c), 1);
-  discardPile.push(def.key);
-  selectedCard = null;
-  renderHand();
-  cardFlyFx(el, def);
-  fieldsDirty = true;
-  turnNo++; // 통계: 사용한 카드 수
-  routeCard(def);
-}
-// ── 합성 = 이전 행동 취소 ──
-// 실행 중 행동 위에 카드를 얹으면 이전 행동은 그 자리에서 취소되고,
-// 합성 동사가 "새 행동"으로 시작된다. 항상 행동은 하나뿐이다.
-//  같은 이동 = 한 단계 위 이동을 새로 / 반대 이동 = 급제동(상쇄, 무행동) /
-//  다른 이동 = 새 방향 이동 / 이동+공격(어느 순서든) = 기동사격 합성
-let lastRoute = ''; // 디버그/테스트: 마지막 라우팅 결정
-async function routeCard(def) {
-  const moveActive = playerMoveBusy && curMoveDef;
-  const fireActive = fireStage && !fireStage.fired && !fireStage.cancelled;
-  if (def.kind === 'move') {
-    if (moveActive) {
-      const cur = curMoveDef;
-      const lvl = curMoveLevel;
-      const keepFire = fireActive ? fireStage.level : 0;
-      if ((cur.key === 'fwd' && def.key === 'back') || (cur.key === 'back' && def.key === 'fwd')) {
-        lastRoute = 'brake';
-        cardPop({ ico: '⛔', label: '급제동!' }, '', '#ffd76e');
-        await cancelAction2();
-        return; // 상쇄 — 두 카드 모두 소멸, 무행동
-      }
-      const same = cur.key === def.key;
-      const nlvl = same ? Math.min(3, lvl + 1) : 1;
-      const ndef = same ? cur : def;
-      lastRoute = `restart:${ndef.key}:${nlvl}${keepFire ? '+fire' : ''}`;
-      const name = MOVE_NAMES[ndef.key][nlvl - 1];
-      cardPop({ ico: ndef.ico, label: `${name}!${keepFire ? ' (사격 유지)' : ''}` }, '', same ? (nlvl >= 3 ? '#ffb46e' : '#8de08a') : '#9fd8ff');
-      await cancelAction2();
-      runAction(ndef, nlvl, keepFire);
-      return;
-    }
-    if (fireActive) {
-      // 조준 중 이동 = 기동사격 합성: 조준을 접고 이동하며 다시 겨눈다
-      const fl = fireStage.level;
-      lastRoute = `compose:${def.key}:1+fire`;
-      cardPop({ ico: def.ico, label: `${MOVE_NAMES[def.key][0]}사격!` }, '', '#c9a6e8');
-      await cancelAction2();
-      runAction(def, 1, fl);
-      return;
-    }
-    lastRoute = `move:${def.key}`;
-    runAction(def, 1, 0);
-    return;
-  }
-  // 공격 카드
-  if (fireActive) { lastRoute = `aimup:${Math.min(3, fireStage.level + 1)}`; levelUpFire(); return; } // 조준 단계 상승
-  if (moveActive) {
-    // 이동 중 공격 = 기동사격 합성: 이전 이동을 접고 같은 기동을 새로 시작하며 사격
-    const cur = curMoveDef;
-    const lvl = curMoveLevel;
-    lastRoute = `compose:${cur.key}:${lvl}+fire`;
-    cardPop({ ico: '🎯', label: `${MOVE_NAMES[cur.key][lvl - 1]}사격!` }, '', '#c9a6e8');
-    await cancelAction2();
-    runAction(cur, lvl, 1);
-    return;
-  }
-  lastRoute = 'fire';
-  runAction(null, 0, 1); // 단독 사격
-}
-// 이전 행동 취소: 이동 중단 + 조준 취소, 러너들이 정리될 때까지 대기
-async function cancelAction2() {
-  player._abortMove = true;
+function cancelFire() {
   if (fireStage) fireStage.cancelled = true;
-  let g = 0;
-  while ((playerMoveBusy || playerFireBusy) && g++ < 120) await delay(50);
-  player._abortMove = false; // 다음 행동이 깨끗하게 시작하도록 신호 회수
+  player._steady = false;
+  player._abortMove = false;
 }
-// 같은 공격 카드 얹기 = 연사가 아니라 조준 강화 — 발사를 늦추는 대신
-// 명중이 오르고(3단은 약점 피해 1.25배), 그만큼 오래 자리에 묶인다.
+// 같은 사격 반복 = 연사가 아니라 조준 강화: 발사를 늦추는 대신 명중이 오르고
+// (3단은 약점 피해 1.25배), 그만큼 자리에 묶여 노출된다.
 function levelUpFire() {
+  if (!fireStage || fireStage.fired) return;
   fireStage.level = Math.min(3, fireStage.level + 1);
   fireStage.extendMs += fireStage.level === 2 ? 1700 : 1600;
-  cardPop({ ico: '🔭', label: `${FIRE_NAMES[fireStage.level - 1]} 준비` }, '', '#ffe9a8');
+  if (fireStage.level >= 2) steadyForAim(); // 정조준은 사수를 위해 차를 세운다
+  cardPop({ ico: fireStage.lob ? '💫' : '🎯', label: `${FIRE_NAMES[fireStage.level - 1]} 준비` }, '', '#ffe9a8');
 }
-// 단일 행동 러너: 이동 / 사격 / 기동사격(합성) — 이전 행동이 정리된 뒤 호출된다.
-async function runAction(moveDef, moveLevel, fireLevel) {
-  const firePart = fireLevel > 0 ? runFire(fireLevel, moveDef !== null) : null;
-  if (moveDef) {
-    playerMoveBusy = true;
-    curMoveDef = moveDef;
-    curMoveLevel = moveLevel;
-    player._dash = moveLevel >= 2;
-    player._dashMul = moveLevel >= 3 ? 1.9 : 1.6;
-    player._owPosture = false;
-    const t0 = performance.now();
-    player._activeMove = { level: moveLevel, t0, dur: moveDef.durMs };
-    try {
-      const plan = materializeMove(moveDef, moveLevel);
-      if (plan.type === 'move') {
-        if (moveLevel === 1 && !fireLevel) cardPop({ ico: moveDef.ico, label: MOVE_NAMES[moveDef.key][0] });
-        const from = { gx: player.gx, gz: player.gz };
-        await moveUnit(player, plan.path, null);
-        playerLastMove = { dx: player.gx - from.gx, dz: player.gz - from.gz }; // 적 리드 예측용
-        // 이동 후 포탑: 최근접 적 지향
-        if (player.alive && plan.turretYaw != null && player.hasTurret && !player._abortMove) {
-          const rel = normAngle(plan.turretYaw - player.group.rotation.y);
-          const diff = normAngle(rel - player.turret.rotation.y);
-          if (Math.abs(diff) > 0.02) {
-            const from2 = player.turret.rotation.y;
-            await tween((Math.abs(diff) / TURRET_TRACK_RATE) * 1000, (e2) => { player.turret.rotation.y = from2 + diff * e2; }, easeInOut, () => player._abortMove || !player.alive);
-          }
-        }
-        // 카드 수행 시간을 채운다 — 명령 슬롯 점유 (취소되면 즉시 반환)
-        const left = moveDef.durMs - (performance.now() - t0);
-        if (left > 0 && player.alive && !player._abortMove) {
-          let w = 0;
-          while (w < left && !player._abortMove && player.alive) { await delay(100); w += 100; }
-        }
-      } else if (!fireLevel) {
-        cardPop(moveDef, ' — 길 없음', '#c8c2b4');
-      }
-    } finally {
-      playerMoveBusy = false;
-      curMoveDef = null;
-      curMoveLevel = 1;
-      player._dash = false;
-      player._dashMul = 1;
-      player._activeMove = null;
-      fieldsDirty = true;
-    }
-  }
-  if (firePart) await firePart;
+// 정조준: 사수가 확실히 맞히도록 조종수가 차를 세운다 (기동을 접는다)
+function steadyForAim() {
+  player._steady = true;
+  player._abortMove = true;
 }
-// 사격 러너: 재장전 대기 → 조준 창(얹으면 승급) → 발사.
-// asPartOfMove = 기동사격 합성의 일부 (재장전 대기 중에도 이동은 계속)
-async function runFire(initLevel, asPartOfMove) {
+// 사격 러너: 재장전 대기(시간) → 조준 창(재탭 승급) → 발사.
+// lob=true 곡사(포물선, 능선 너머·헐다운 관통), false 직격(직사, 사선 필요).
+async function runFire(initLevel, lob) {
   playerFireBusy = true;
-  fireStage = { level: initLevel, extendMs: initLevel === 2 ? 1700 : initLevel === 3 ? 3300 : 0, fired: false, cancelled: false, phase: 'aim', t0: performance.now(), waitDur: 0 };
+  fireStage = {
+    level: initLevel, lob,
+    extendMs: initLevel === 2 ? 1700 : initLevel === 3 ? 3300 : 0,
+    fired: false, cancelled: false, phase: 'aim', t0: performance.now(), waitDur: 0,
+  };
+  if (initLevel >= 2) steadyForAim();
   try {
     const now0 = performance.now();
     if ((player.reloadReadyAt ?? 0) > now0) {
       const wait = player.reloadReadyAt - now0;
-      fireStage.phase = 'reload';
-      fireStage.t0 = now0;
-      fireStage.waitDur = wait;
-      if (!asPartOfMove) cardPop({ ico: '🎯', label: `재장전 ${(wait / 1000).toFixed(1)}s` }, '', '#ffd76e');
-      const lockMove = !asPartOfMove && !playerMoveBusy;
-      if (lockMove) playerMoveBusy = true; // 단독 사격의 성급한 장전 대기 = 제자리
-      try {
-        let w = 0;
-        while (w < wait && !fireStage.cancelled && player.alive) { await delay(100); w += 100; }
-      } finally { if (lockMove) playerMoveBusy = false; }
+      fireStage.phase = 'reload'; fireStage.t0 = now0; fireStage.waitDur = wait;
+      cardPop({ ico: lob ? '💫' : '🎯', label: `재장전 ${(wait / 1000).toFixed(1)}s` }, '', '#ffd76e');
+      let w = 0;
+      while (w < wait && !fireStage.cancelled && player.alive) { await delay(100); w += 100; }
       if (fireStage.cancelled || !player.alive || phase === 'gameover') return;
-      fireStage.phase = 'aim';
-      fireStage.t0 = performance.now();
+      fireStage.phase = 'aim'; fireStage.t0 = performance.now();
     }
-    // 조준 창: 즉응 0.6초 + 승급 연장 — 이 사이 공격 카드를 얹으면 조준/정밀
+    // 조준 창: 즉응 0.6초 + 승급 연장 — 이 사이 같은 버튼을 누르면 조준/정밀
     let waited = 0;
     while (waited < 600 + fireStage.extendMs) {
-      await delay(120);
-      waited += 120;
+      await delay(120); waited += 120;
       if (fireStage.cancelled || !player.alive || phase === 'gameover') return;
     }
     fireStage.fired = true;
     const lvl = fireStage.level;
-    const moving = playerMoveBusy;
+    const moving = playerMoveBusy && !player._steady;
     const aimBonus = lvl === 1 ? 0 : lvl === 2 ? (moving ? 8 : 15) : (moving ? 15 : 30);
-    const fp = materializeFire(CARD_DEFS.atk);
-    if (!fp) { cardPop({ ico: '🎯', label: '사격 불가' }, '', '#c8c2b4'); return; }
-    const label = moving && curMoveDef
-      ? `${MOVE_NAMES[curMoveDef.key][Math.min(curMoveLevel, 3) - 1]}사격`
-      : FIRE_NAMES[lvl - 1];
-    cardPop({ ico: '🎯', label });
+    const fp = materializeFire(fireStage.lob);
+    if (!fp) { cardPop({ ico: lob ? '💫' : '🎯', label: lob ? '곡사 불가' : '직격 불가' }, '', '#c8c2b4'); return; }
+    cardPop({ ico: lob ? '💫' : '🎯', label: `${lob ? '곡사' : '직격'} ${FIRE_NAMES[lvl - 1]}` });
     player._owPosture = false;
     player.plan = {
       type: 'fire', cell: fp.cell, shot: fp.shot,
@@ -6052,7 +5807,145 @@ async function runFire(initLevel, asPartOfMove) {
   } finally {
     playerFireBusy = false;
     fireStage = null;
+    player._steady = false;
+    player._abortMove = false; // 정조준으로 세운 신호 회수 — 다음 자동 기동 오염 방지
     fieldsDirty = true;
+  }
+}
+
+// ── 자동 조종 드라이버 AI ──
+// 사수(플레이어)가 잘 쏘도록 조종수가 알아서 기동한다: 사격각이 서는 자리로,
+// 헐다운 엄폐를 끼고, 아이템을 주우며, 전면장갑을 최대 위협에게 문 채,
+// HP가 낮거나 재장전 중이면 간격을 벌린다.
+function decideDriver() {
+  const near = nearestEnemy();
+  if (!near) return { type: 'wait' };
+  const lowHp = player.hp < player.maxHp * 0.35;
+  const reloading = (player.reloadReadyAt ?? 0) > performance.now();
+  const canSee = !near.hidden && Math.hypot(player.gx - near.gx, player.gz - near.gz) <= VIS_LIMIT;
+  const ideal = Math.min(player.fireRange - 1, 9); // 적정 교전 거리
+  const exposurePenalty = (gx, gz, endDir) => {
+    const fd = DIRS[endDir];
+    const rel = Math.abs(normAngle(
+      Math.atan2(near.gx - gx, near.gz - gz) - Math.atan2(fd.dx, fd.dz)
+    )) * (180 / Math.PI);
+    return rel >= 120 ? 40 : rel > 60 ? 18 : 0; // 후면/측면을 적에게 내주면 감점
+  };
+  const cells = reachableCells(player);
+  let best = null;
+  for (const [key, info] of cells) {
+    const [gx, gz] = key.split(',').map(Number);
+    let score = -info.cost;
+    if (canSee) {
+      const sh = computeShot(player, { unit: near }, { gx, gz });
+      if (sh.ok) score += 130 + sh.chance;           // 사선이 서는 자리 최우선
+    }
+    if (hullDownCells.has(key)) score += 42;          // 헐다운 엄폐
+    for (const st of info.path) if (items.has(cellKey(st.gx, st.gz))) score += 55; // 길목 아이템
+    const d = Math.hypot(gx - near.gx, gz - near.gz);
+    score -= Math.abs(d - ideal) * 4;                 // 적정 거리 유지
+    if (lowHp || reloading) score += d * 5;           // 위태로우면 간격 벌림
+    score -= exposurePenalty(gx, gz, info.endDir);
+    if (!best || score > best.score) best = { score, info, gx, gz };
+  }
+  // 제자리 점수 — 지금 자세가 이미 좋으면 굳이 움직이지 않는다 (지터 방지)
+  let stay = -2;
+  if (canSee) { const sh = computeShot(player, { unit: near }); if (sh.ok) stay += 130 + sh.chance; }
+  if (hullDownCells.has(cellKey(player.gx, player.gz))) stay += 42;
+  const dNow = Math.hypot(player.gx - near.gx, player.gz - near.gz);
+  stay -= Math.abs(dNow - ideal) * 4;
+  if (lowHp || reloading) stay += dNow * 5;
+  stay -= exposurePenalty(player.gx, player.gz, facingDir(player));
+  if (best && best.info.path.length && best.score > stay + 12) { // 히스테리시스
+    return { type: 'move', path: best.info.path.slice() };
+  }
+  return { type: 'wait' };
+}
+let driverPaused = false; // 테스트용: 자동 조종 일시정지
+async function playerDriverLoop() {
+  await delay(1200);
+  while (player.alive && phase !== 'gameover') {
+    await delay(1300 + rng() * 900);
+    if (!player.alive || phase === 'gameover') break;
+    if (driverPaused || player._steady || playerMoveBusy) continue; // 정지/조준/기동 중이면 쉼
+    if (player.boostTurns > 0) player.boostTurns -= 1;
+    const plan = decideDriver();
+    if (plan.type !== 'move' || !plan.path?.length) continue;
+    playerMoveBusy = true;
+    player._dash = player.boostTurns > 0;
+    player._dashMul = 1.5;
+    const from = { gx: player.gx, gz: player.gz };
+    try { await moveUnit(player, plan.path, null); }
+    catch { /* 격파 등 — 루프 조건이 정리 */ }
+    finally {
+      playerMoveBusy = false; player._dash = false; player._dashMul = 1;
+      playerLastMove = { dx: player.gx - from.gx, dz: player.gz - from.gz }; // 적 리드 예측용
+      fieldsDirty = true;
+    }
+  }
+}
+
+// ── 아이템: 자동 수집 → 인벤토리 → 버튼으로 사용 ──
+function useItem(idx) {
+  if (phase === 'gameover' || !player.alive) return;
+  const inv = player.inventory;
+  const type = inv[idx];
+  if (!type) return;
+  inv.splice(idx, 1);
+  if (type === 'repair') {
+    player.hp = Math.min(player.maxHp, player.hp + 40);
+    updateHpBar(player); updatePlayerHpUI();
+    popText(player.group.position.clone().add(new THREE.Vector3(0, 1.6, 0)), '🔧 +40 HP', '#8df08f');
+    sfx('hit');
+  } else {
+    player.boostTurns = 4;
+    popText(player.group.position.clone().add(new THREE.Vector3(0, 1.6, 0)), '⚡ 기동 부스트!', '#ffd24d');
+    sfx('hit');
+  }
+  updateActionBar();
+}
+
+// ── 하단 액션 바: 직격·곡사 버튼(조준 pip + 재장전 쿨다운) + 아이템 트레이 ──
+const fireBtnDirect = document.getElementById('btn-direct');
+const fireBtnLob = document.getElementById('btn-lob');
+const itemTrayEl = document.getElementById('item-tray');
+if (fireBtnDirect) {
+  const ic = fireBtnDirect.querySelector('.ico'); if (ic) ic.innerHTML = CARD_ICONS.atk;
+  fireBtnDirect.addEventListener('click', () => startFire(false));
+}
+if (fireBtnLob) {
+  const ic = fireBtnLob.querySelector('.ico'); if (ic) ic.innerHTML = CARD_ICONS.lob;
+  fireBtnLob.addEventListener('click', () => startFire(true));
+}
+function updateActionBar() {
+  const now = performance.now();
+  const reloadLeft = Math.max(0, (player.reloadReadyAt ?? 0) - now);
+  const reloadDur = (player.gun?.reload ?? 2) * RELOAD_MS_PER;
+  const fs = fireStage;
+  const dead = phase === 'gameover' || !player.alive;
+  for (const el of [fireBtnDirect, fireBtnLob]) {
+    if (!el) continue;
+    const isLob = el === fireBtnLob;
+    const staging = !!(fs && !fs.fired && fs.lob === isLob);
+    const lvl = staging ? fs.level : 0;
+    el.classList.toggle('staging', staging);
+    el.classList.toggle('cool', reloadLeft > 0 && !staging);
+    el.disabled = dead;
+    const pips = el.querySelector('.pips');
+    if (pips) pips.innerHTML = [1, 2, 3].map((n) => `<i class="${n <= lvl ? 'on' : ''}"></i>`).join('');
+    const cd = el.querySelector('.cd');
+    if (cd) cd.style.height = reloadLeft > 0 && !staging ? `${Math.min(100, (reloadLeft / reloadDur) * 100).toFixed(0)}%` : '0%';
+  }
+  if (itemTrayEl) {
+    const inv = player.inventory;
+    const sig = inv.join(',');
+    if (itemTrayEl._sig !== sig) {
+      itemTrayEl._sig = sig;
+      itemTrayEl.innerHTML = inv.map((t, i) =>
+        `<button class="item-btn ${t}" data-idx="${i}" title="${t === 'repair' ? '수리킷 (+40 HP)' : '연료 (기동 부스트)'}">${t === 'repair' ? '🔧' : '⚡'}</button>`).join('');
+      itemTrayEl.querySelectorAll('.item-btn').forEach((b) =>
+        b.addEventListener('click', () => useItem(+b.dataset.idx)));
+    }
   }
 }
 // 가장 가까운 적 (안개 속에서도 엔진 소리로 대략적 위치는 안다)
@@ -6144,61 +6037,53 @@ function materializeMove(def, level = 1) {
     turretYaw, endDir: pick.info.endDir,
   };
 }
-// 공격 구체화: 보이는 적 중 최고 명중 표적 (직사·곡사 자동).
-// 표적이 없으면 최근접 적의 대략 위치나 전방 허공에 맹목 사격.
-function materializeFire(def) {
-  const cells = computeFireCells(player);
-  if (!cells.size) return null;
+// 공격 구체화 — 지정 모드(lob=곡사/false=직격)로 스마트 사수가 최적 표적을
+// 고른다. 보이는 적 중 그 모드로 최고 명중을 노리고, 없으면 최근접 적의
+// 대략 위치(숨었으면 크게 흔들림)나 전방 허공에라도 그 모드로 쏜다.
+function materializeFire(lob) {
+  // 보이는 적 중 지정 모드 최고 명중 표적
   let best = null;
   for (const e of enemies) {
     if (!e.alive || e.hidden) continue;
-    const f = cells.get(cellKey(e.gx, e.gz));
-    if (f && (!best || f.shot.chance > best.shot.chance)) {
-      best = { cell: { gx: e.gx, gz: e.gz }, shot: f.shot };
+    const shot = computeShot(player, { unit: e }, null, null, lob);
+    if (shot.ok && (!best || shot.chance > best.shot.chance)) {
+      best = { cell: { gx: e.gx, gz: e.gz }, shot };
     }
   }
   if (best) return best;
+  // 표적 없음 → 최근접 적 근처(맹목) 또는 전방 허공
   const near = nearestEnemy();
   let tx, tz;
   if (near) {
     const wob = near.hidden ? 5 : 2;
-    tx = near.gx + Math.round((Math.random() - 0.5) * wob);
-    tz = near.gz + Math.round((Math.random() - 0.5) * wob);
+    tx = THREE.MathUtils.clamp(near.gx + Math.round((Math.random() - 0.5) * wob), 0, GW - 1);
+    tz = THREE.MathUtils.clamp(near.gz + Math.round((Math.random() - 0.5) * wob), 0, GH - 1);
   } else {
     const ry = player.group.rotation.y;
-    tx = Math.round(player.gx + Math.sin(ry) * player.fireRange * 0.6);
-    tz = Math.round(player.gz + Math.cos(ry) * player.fireRange * 0.6);
+    tx = THREE.MathUtils.clamp(Math.round(player.gx + Math.sin(ry) * player.fireRange * 0.6), 0, GW - 1);
+    tz = THREE.MathUtils.clamp(Math.round(player.gz + Math.cos(ry) * player.fireRange * 0.6), 0, GH - 1);
   }
+  let shot = computeShot(player, { gx: tx, gz: tz }, null, null, lob);
+  if (shot.ok) return { cell: { gx: tx, gz: tz }, shot };
+  // 그 지점을 지정 모드로 못 때리면 사거리 안에서 가장 가까운 유효 셀 탐색
   let bestCell = null, bd = Infinity;
-  for (const [k, f] of cells) {
+  for (const [k] of computeFireCells(player)) {
     const [gx, gz] = k.split(',').map(Number);
+    const s = computeShot(player, { gx, gz }, null, null, lob);
+    if (!s.ok) continue;
     const d = (gx - tx) * (gx - tx) + (gz - tz) * (gz - tz);
-    if (d < bd) { bd = d; bestCell = { cell: { gx, gz }, shot: f.shot }; }
+    if (d < bd) { bd = d; bestCell = { cell: { gx, gz }, shot: s }; }
   }
   return bestCell;
 }
 function refreshPlanUI(fireEmphasis = false) {
   if (phase !== 'plan') return;
   const o = withProjectedPlayer((o) => {
-    currentMoveCells = reachableCells(player);
+    // 이동은 자동 조종이라 이동 필드는 표시하지 않는다. 사거리 안에서 지금
+    // 때릴 수 있는 사격 필드(직사=빨강/곡사=주황)와 표적만 보여준다.
+    currentMoveCells = new Map();
     currentFireCells = o.reload > 0 ? new Map() : computeFireCells(player);
-    // 카드 게이트: 손패의 남은 이동 카드 종류(돌격/회피/후퇴)가 닿을 수 있는
-    // 셀만 필드에 남긴다 — 공격/엄호 카드가 없으면 사격 필드도 꺼진다
-    {
-      const kinds = new Set(hand.filter((c) => !c.used && c.def.kind === 'move').map((c) => c.def.mv));
-      const base = cardBaseAngle();
-      const mv = new Map();
-      for (const [k, info] of currentMoveCells) {
-        const [gx, gz] = k.split(',').map(Number);
-        if (kinds.has(arcOfRel(cardRelDeg(gx, gz, base)))) mv.set(k, info);
-      }
-      currentMoveCells = mv;
-      if (!hand.some((c) => !c.used && c.def.kind === 'atk')) {
-        currentFireCells = new Map();
-      }
-    }
     clearHighlights();
-    showMoveField(currentMoveCells, !fireEmphasis);
     showFireField(currentFireCells, fireEmphasis);
     showTargets(
       enemies
@@ -6973,50 +6858,26 @@ function rustleNearProps(x, z) {
   }
 }
 
-// 실행 중 카드: 상단 중앙에 "한 장"만 — 합성 룰을 따른다.
-// 이동+공격이 겹치면 별개 두 장이 아니라 합성 동사(돌격사격/후퇴사격/전개사격)
-// 카드 하나로 표시된다 (이동 아이콘 + 조준 미니 뱃지, 남은 시간은 긴 쪽).
+// 상단 중앙 사격 상태: 지금 조준/재장전 중인 사격을 카드 하나로 — 직격/곡사
+// 아이콘 + 단계명 + 남은 시간 + 진행 바. (이동은 자동이라 표시하지 않는다.)
 const activeCardsEl = document.getElementById('active-cards');
 let activeCardsSig = '';
 function updateActiveCardsHUD(now) {
   if (!activeCardsEl) return;
   let card = null;
   if (player.alive && phase !== 'gameover') {
-    const am = curMoveDef && player._activeMove ? player._activeMove : null;
     const fs = fireStage;
-    const moveLeft = am ? Math.max(0, am.dur - (now - am.t0)) : 0;
-    const movePct = am ? Math.min(97, ((now - am.t0) / am.dur) * 100) : 0;
-    let fireLeft = 0, firePct = 0, fireName = '';
-    if (fs) {
+    if (fs && !fs.fired) {
       const isReload = fs.phase === 'reload';
       const dur = isReload ? fs.waitDur : 600 + fs.extendMs;
-      fireLeft = fs.fired ? 0 : Math.max(0, dur - (now - fs.t0));
-      firePct = fs.fired ? 100 : Math.min(97, ((now - fs.t0) / Math.max(1, dur)) * 100);
-      fireName = fs.fired ? '발사!' : isReload ? '재장전' : FIRE_NAMES[fs.level - 1];
-    }
-    if (am && fs) {
-      // 합성: 기동사격 — 이동 단계명 + 사격 (예: 돌격사격, 좌측전개사격)
-      const mvName = MOVE_NAMES[curMoveDef.key][am.level - 1];
-      const name = fs.phase === 'reload' ? `${mvName} · 재장전` : `${mvName}사격`;
-      const useFire = fireLeft >= moveLeft;
+      const left = Math.max(0, dur - (now - fs.t0));
+      const pct = Math.min(97, ((now - fs.t0) / Math.max(1, dur)) * 100);
+      const mode = fs.lob ? '곡사' : '직격';
+      const name = isReload ? `${mode} · 재장전` : `${mode} ${FIRE_NAMES[fs.level - 1]}`;
       card = {
-        sig: `combo${curMoveDef.key}${am.level}${fireName}`,
-        cls: ' combo', key: curMoveDef.key, sub: 'atk', name,
-        left: Math.max(moveLeft, fireLeft),
-        pct: useFire ? firePct : movePct,
-      };
-    } else if (am) {
-      card = {
-        sig: `mv${curMoveDef.key}${am.level}`,
-        cls: '', key: curMoveDef.key, sub: null,
-        name: MOVE_NAMES[curMoveDef.key][am.level - 1],
-        left: moveLeft, pct: movePct,
-      };
-    } else if (fs) {
-      card = {
-        sig: `fire${fireName}`,
-        cls: ' fire', key: 'atk', sub: null,
-        name: fireName, left: fireLeft, pct: firePct,
+        sig: `${fs.lob ? 'lob' : 'dir'}${fs.phase}${fs.level}`,
+        cls: fs.lob ? ' lob' : ' fire', key: fs.lob ? 'lob' : 'atk', sub: null,
+        name, left, pct,
       };
     }
   }
@@ -7074,8 +6935,7 @@ function animate(now) {
   rippleTex.offset.set((now * 0.0000121) % 1, (now * -0.0000324) % 1);
   windUniform.value = now * 0.001 * ENV.windSpeed; // 식생 바람 (날씨별 풍속)
   sparkleTex.offset.set((now * 0.000021) % 1, (now * -0.000013) % 1); // 윤슬 흐름
-  // ── 리얼타임 루프: 카드 리필 / 필드 갱신(스로틀) / 경과 시간 / 정지 판정 ──
-  updateHandRefill(now);
+  // ── 리얼타임 루프: 필드 갱신(스로틀) / 경과 시간 / 정지 판정 / 액션 바 ──
   if (phase === 'plan' && (fieldsDirty || now - (window.__lastFieldT ?? 0) > 1400)) {
     fieldsDirty = false;
     window.__lastFieldT = now;
@@ -7089,14 +6949,8 @@ function animate(now) {
   for (const u of units) {
     if (u.alive) u.movedLastTurn = u._driving || now - (u._lastMoveT ?? -1e9) < 2500;
   }
-  // 재장전 중엔 공격/엄호 카드가 어두워진다 (그래도 낼 수는 있음 — 제자리 대기)
-  {
-    const reloading = (player.reloadReadyAt ?? 0) > performance.now();
-    for (const c of hand) {
-      if (c._el && c.def.kind === 'atk') c._el.classList.toggle('cool', reloading);
-    }
-  }
-  updateActiveCardsHUD(now); // 실행 중 카드 배지 (탱크 머리 위)
+  updateActionBar();          // 직격/곡사 버튼 상태(조준 pip·재장전 쿨다운)·아이템 트레이
+  updateActiveCardsHUD(now);  // 상단 사격 상태 배지
   updateAntennas(dt); // RC 안테나 대롱대롱
   updateSuspension(dt); // 로드휠 서스펜션 — 차체가 지형을 출렁이며 따라간다
   updateWreckFires(now); // 격파 잔해 화재/매연
@@ -7113,14 +6967,15 @@ function animate(now) {
   updatePerf(now);
 }
 updatePlayerHpUI();
-// ── 리얼타임 개전: 시작 손패 2장, 적 두뇌 가동 ──
+// ── 리얼타임 개전: 자동 조종 시동, 적 두뇌 가동 ──
 let liveT0 = 0; // 첫 프레임의 rAF 타임스탬프로 설정
 {
   phase = 'plan'; // 항상 라이브 (게임오버 전까지)
   busy = false;
-  initHand();
   refreshPlanUI();
-  setHint('카드를 탭하면 즉시 실행됩니다 — 3초마다 1장 리필');
+  updateActionBar();
+  setHint('조종은 자동입니다 — 직격/곡사로 사격하고, 주운 아이템을 쓰세요');
+  playerDriverLoop();                   // 자동 조종 시작
   for (const e of enemies) enemyActionLoop(e);
 }
 requestAnimationFrame(animate);
@@ -7186,15 +7041,25 @@ window.__puratank = {
   },
   planOverwatch() { player._owPosture = true; return true; },
   planWait() { return true; },
+  // 테스트: 플레이어를 특정 칸으로 순간이동 (위치+월드좌표 동기화)
+  warp(gx, gz) {
+    player.gx = gx; player.gz = gz;
+    const p = cellToWorld(gx, gz);
+    player.group.position.set(p.x, standHeight(gx, gz), p.z);
+    fieldsDirty = true;
+    return { gx, gz };
+  },
+  pauseDriver(v = true) { driverPaused = !!v; if (v) { player._abortMove = true; } return driverPaused; },
   acting: () => ({
     move: playerMoveBusy, fire: playerFireBusy, ow: !!player._owPosture,
-    curMove: curMoveDef?.key ?? null, curLevel: curMoveDef ? curMoveLevel : 0,
+    steady: !!player._steady,
     fireLevel: fireStage && !fireStage.cancelled ? fireStage.level : 0,
+    fireLob: fireStage ? !!fireStage.lob : null,
     firePhase: fireStage?.phase ?? null,
-    lastRoute,
+    reloadLeft: Math.max(0, (player.reloadReadyAt ?? 0) - performance.now()),
+    inv: player.inventory.slice(),
     pos: { gx: player.gx, gz: player.gz },
   }),
-  routeKey(k) { routeCard(CARD_DEFS[k]); return true; }, // 테스트: 핸드 무시하고 카드 라우팅 직접 호출
   queueMoveTo(gx, gz) { return window.__puratank.planMoveTo(gx, gz); },
   itemCells: () => [...items.keys()].map((k) => k.split(',').map(Number)),
   debugPickup(gx, gz) { player.gx = gx; player.gz = gz; tryPickupItem(player); return { hp: player.hp, boost: player.boostTurns }; },
@@ -7214,13 +7079,13 @@ window.__puratank = {
   curFireKeys: () => [...currentFireCells.keys()],
   fireOriginCell: () => { const o = fireOrigin(); return { gx: o.gx, gz: o.gz, ghost: o.ghost }; },
   queueFireAt(gx, gz) { return window.__puratank.planFireAt(gx, gz); },
-  // 카드 시스템 훅
-  cards: () => ({
-    hand: hand.map((c) => ({ key: c.def.key })),
-    deck: drawPile.length,
-    discard: discardPile.length,
-  }),
-  playCard(i) { if (!hand[i]) return false; cardClick(hand[i]); return true; },
+  // 사격/아이템/자동조종 훅 (직격=false, 곡사=true)
+  fire(lob = false) { startFire(!!lob); return true; },
+  cancelFire() { cancelFire(); return true; },
+  inventory: () => player.inventory.slice(),
+  useItem(i) { useItem(i); return true; },
+  giveItem(t) { player.inventory.push(t === 'fuel' ? 'fuel' : 'repair'); return player.inventory.slice(); },
+  driver: () => decideDriver(),
   runQueue: () => true,
   shotAt: (gx, gz) => {
     const enemy = enemies.find((e) => e.alive && e.gx === gx && e.gz === gz);

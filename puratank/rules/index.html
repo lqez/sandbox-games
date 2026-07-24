@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>PURATANK — 카드 조합 규칙</title>
+<title>PURATANK — 전투 규칙</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🃏</text></svg>">
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -109,68 +109,49 @@
 </head>
 <body>
 <main>
-  <h1>🃏 PURATANK 카드 조합 규칙</h1>
-  <p class="sub">기본 5장 × 단계 강화 — 전차전 교리로 다듬은 리얼타임 카드 전투</p>
+  <h1>🎯 PURATANK 전투 규칙</h1>
+  <p class="sub">조종은 자동 — 당신은 <b>직격·곡사</b>로 쏘고 <b>아이템</b>을 쓴다</p>
 
   <section class="panel">
-    <h2>기본 카드 5종 (덱 20장 = 각 4장)</h2>
+    <h2>조작은 셋뿐 — 직격 · 곡사 · 아이템</h2>
+    <p><b>이동은 조종수(자동)가 맡는다.</b> 사격각이 서는 자리로 붙고, 능선의 헐다운 엄폐를 끼고, 길목의 아이템을 주우며, 전면장갑을 최대 위협에게 문 채, HP가 낮거나 재장전 중이면 간격을 벌린다 — 당신은 그 위에서 <b>언제·어떻게 쏠지</b>만 결정한다.</p>
     <div class="cards">
-      <div class="gcard move"><span class="cnt">×4</span><span class="ico" data-icon="fwd"></span>전진<span class="typ">이동 · 4s</span></div>
-      <div class="gcard move"><span class="cnt">×4</span><span class="ico" data-icon="back"></span>후진<span class="typ">이동 · 4s</span></div>
-      <div class="gcard move"><span class="cnt">×4</span><span class="ico" data-icon="left"></span>좌<span class="typ">이동 · 3.5s</span></div>
-      <div class="gcard move"><span class="cnt">×4</span><span class="ico" data-icon="right"></span>우<span class="typ">이동 · 3.5s</span></div>
-      <div class="gcard fire"><span class="cnt">×4</span><span class="ico" data-icon="atk"></span>공격<span class="typ">공격 · 2s</span></div>
+      <div class="gcard fire"><span class="ico" data-icon="atk"></span>직격<span class="typ">직사 · 사선 필요</span></div>
+      <div class="gcard fire"><span class="ico" data-icon="lob"></span>곡사<span class="typ">포물선 · 4칸+</span></div>
     </div>
-    <p>이동은 <b>가장 가까운 적 기준</b>이다 — 차체가 어디를 보고 있든 적 쪽 ≤50° = 전진, 적 반대 ≥132° = 후진, 그 사이가 좌/우. 어디로 갈지 항상 예측할 수 있다. 후진 1장은 <b>돌아서지 않는다</b> — 전면장갑을 적에게 문 채 후진 기어로 저속 이탈하고, 급후진(2장)부터는 돌아서 빠르게 빠질 수도 있다 (후면 노출은 대가). 세부 목적지는 조종수가 알아서 고른다 (사격각·아이템·헐다운을 챙기는 자동 판단).</p>
     <ul style="margin-left: 18px;">
-      <li>시작 손패 <b>2장</b>, 최대 <b>5장</b>, 쓰든 안 쓰든 <b>3초마다 1장</b> 리필. 1탭 = 선택, 재탭/위로 스와이프 = 사용.</li>
-      <li><b>차종별 재장전</b>: FT 3초 · T-34/Mark IV 6초 · 티거 9초. 재장전 중 공격 카드를 내면 <b>제자리에 멈춰 장전을 기다렸다 쏜다</b>.</li>
-      <li>카드의 지속시간은 애니메이션 길이가 아니라 <b>그 전술이 점유하는 명령 슬롯의 시간</b>이다.</li>
+      <li>버튼을 누르면 <b>스마트 사수</b>가 그 모드로 최적 표적을 잡아 쏜다. 보이는 적이 없으면 소리 나는 방향(숨은 적은 크게 흔들림)이나 전방 허공에라도 쏜다.</li>
+      <li><b>차종별 재장전</b>: FT 3초 · T-34/Mark IV 6초 · 티거 9초. 재장전 중엔 버튼 아래가 회색으로 차오른다.</li>
+      <li>주운 아이템은 인벤토리에 담기고, <b>아이템 버튼</b>으로 원할 때 쓴다 — 🔧 수리킷(+40 HP) / ⚡ 연료(기동 부스트).</li>
     </ul>
   </section>
 
   <section class="panel">
-    <h2>같은 카드를 겹치면 — 단계 강화</h2>
-    <p>실행 중인 카드 위에 <b>같은 카드</b>를 얹으면 단계가 오른다. 더 많이가 아니라 <b>더 세게, 더 확실하게</b>.</p>
-    <p class="muted">합성의 대원칙: <b>합성되면 이전 행동은 그 자리에서 취소</b>되고, 합성된 동사가 <b>새 행동 하나</b>로 다시 시작된다. 행동은 언제나 하나뿐이다. (유일한 예외: 조준 중 공격 얹기 — 취소 없이 조준 단계만 오른다.)</p>
-    <h3>이동 카드</h3>
+    <h2>직격 vs 곡사 — 무엇으로 쏠까</h2>
     <table>
-      <tr><th>카드</th><th>1장</th><th>2장</th><th>3장</th></tr>
-      <tr><td class="combo"><i class="mini" data-icon="fwd"></i>전진</td><td>일반 전진</td><td><b>돌격</b> — 1.6배 가속·연장, 사격 흔들림 <span class="tag live">구현됨</span></td><td><b>전속돌파</b> — 1.9배, 기동사격 −12 <span class="tag live">구현됨</span></td></tr>
-      <tr><td class="combo"><i class="mini" data-icon="back"></i>후진</td><td>전면 유지 후진</td><td><b>급후진</b> — 빠른 이탈 <span class="tag live">구현됨</span></td><td><b>긴급이탈</b> — 최고 후진 <span class="tag live">구현됨</span></td></tr>
-      <tr><td class="combo"><i class="mini" data-icon="left"></i>좌</td><td>좌선회 전진</td><td><b>좌측전개</b> — 제동·선회 후 크게 전개 <span class="tag live">구현됨</span></td><td><b>좌측우회</b> — 적 <b>측후면 각</b>으로 파고든다 <span class="tag live">구현됨</span></td></tr>
-      <tr><td class="combo"><i class="mini" data-icon="right"></i>우</td><td>우선회 전진</td><td><b>우측전개</b> <span class="tag live">구현됨</span></td><td><b>우측우회</b> <span class="tag live">구현됨</span></td></tr>
+      <tr><th></th><th>직격 (직사)</th><th>곡사 (포물선)</th></tr>
+      <tr><td>탄도</td><td>거의 직선 — <b>사선(LOS)이 뚫려야</b> 맞는다</td><td>하늘로 솟았다 위에서 낙하 — <b>능선 너머·엄폐 뒤</b>로 넘긴다</td></tr>
+      <tr><td>사거리</td><td>근~원거리</td><td><b>최소 4칸</b> 이상</td></tr>
+      <tr><td>명중</td><td>기본이 높다</td><td>−12 페널티, 산포도 넓다</td></tr>
+      <tr><td>노림수</td><td>탁 트인 사선의 정면 표적</td><td><b>헐다운·능선 뒤에 숨은 적</b> (직격이 안 통할 때)</td></tr>
     </table>
-    <h3>공격 카드 — 연사가 아니라 조준</h3>
-    <table>
-      <tr><th>장수</th><th>결과</th><th>효과</th></tr>
-      <tr><td class="combo"><i class="mini" data-icon="atk"></i>×1</td><td class="combo">즉응사격 <span class="tag live">구현됨</span></td><td>0.6초 조준 후 즉시 1발 — 빠르지만 보너스 없음</td></tr>
-      <tr><td class="combo"><i class="mini" data-icon="atk"></i>×2</td><td class="combo">조준사격 <span class="tag live">구현됨</span></td><td>발사를 ~1.7초 늦추고 명중 <b>+15</b> (이동 중엔 +8)</td></tr>
-      <tr><td class="combo"><i class="mini" data-icon="atk"></i>×3</td><td class="combo">정밀사격 <span class="tag live">구현됨</span></td><td>~3.3초 조준, 명중 <b>+30</b> + <b>약점 피해 1.25배</b> (이동 중엔 +15) — 긴 노출이 대가</td></tr>
-    </table>
-    <p class="muted">발사 횟수는 항상 1회 — 서둘러 쏠지, 시간을 투자해 확실히 맞힐지의 선택이다.</p>
+    <p class="muted">헐다운한 적은 직격 명중이 −16이지만 곡사는 위에서 떨어져 그 엄폐를 무시한다. 반대로 곡사는 이동 표적을 맞히기 어렵다 — 상황이 무기를 고른다.</p>
   </section>
 
   <section class="panel">
-    <h2>이동 + 공격 — 기동사격</h2>
-    <p>이동 중 공격(또는 조준 중 이동)을 얹으면 이전 행동을 접고 <b>기동사격이라는 하나의 새 행동</b>으로 다시 시작한다 — 같은 기동을 새로 밟으며 달리는 채로 겨눈다. 표적은 그 순간의 위치에서 다시 잡는다.</p>
+    <h2>조준 강화 — 연사가 아니라 정밀</h2>
+    <p>같은 사격 버튼을 <b>다시 누르면</b> 발사를 늦추는 대신 조준이 깊어진다 (즉응→조준→정밀). 2단부터는 <b>조종수가 차를 세워</b> 사수가 확실히 맞히게 한다 — 그만큼 오래 자리에 묶여 노출된다.</p>
     <table>
-      <tr><th>조합</th><th>결과</th><th>보정</th></tr>
-      <tr><td class="combo">전진 계열 + 🎯</td><td class="combo">돌격사격 <span class="tag live">구현됨</span></td><td>명중 −8 (돌격/돌파 중엔 −12)</td></tr>
-      <tr><td class="combo">후진 계열 + 🎯</td><td class="combo">후퇴사격 <span class="tag live">구현됨</span></td><td>전면을 문 채 후진하며 1발, 명중 −8</td></tr>
-      <tr><td class="combo">좌/우 계열 + 🎯</td><td class="combo">전개사격 <span class="tag live">구현됨</span></td><td>차체는 새 방향, 포탑은 표적 추적 — 명중 −8</td></tr>
-      <tr><td class="combo">이동 + 🎯×2~3</td><td class="combo">기동 조준사격 <span class="tag live">구현됨</span></td><td>조준 보너스가 <b>절반</b> (+8/+15) — 완전한 정지 조준보다 못하다</td></tr>
+      <tr><th>탭</th><th>결과</th><th>효과</th></tr>
+      <tr><td class="combo"><i class="mini" data-icon="atk"></i>×1</td><td class="combo">즉응사격 <span class="tag live">구현됨</span></td><td>0.6초 조준 후 즉시 1발 — 달리는 채로도 쏜다(보너스 없음)</td></tr>
+      <tr><td class="combo"><i class="mini" data-icon="atk"></i>×2</td><td class="combo">조준사격 <span class="tag live">구현됨</span></td><td>발사를 ~1.7초 늦추고 <b>정지 조준</b> 명중 <b>+15</b></td></tr>
+      <tr><td class="combo"><i class="mini" data-icon="atk"></i>×3</td><td class="combo">정밀사격 <span class="tag live">구현됨</span></td><td>~3.3초 조준, 명중 <b>+30</b> + <b>약점 피해 1.25배</b> — 긴 정지가 대가</td></tr>
     </table>
-    <h3>이동 카드끼리 (다른 방향)</h3>
-    <table>
-      <tr><th>조합</th><th>결과</th></tr>
-      <tr><td class="combo">전진 ↔ 후진</td><td><b>급제동</b> — 이전 기동 취소·즉시 정지, 두 카드 상쇄 (페이크 무빙) <span class="tag live">구현됨</span></td></tr>
-      <tr><td class="combo">이동 중 + 좌/우 등</td><td><b>진로 변경</b> — 이전 기동을 접고 새 방향으로 새 기동 시작 <span class="tag live">구현됨</span></td></tr>
-    </table>
+    <p class="muted">발사 횟수는 항상 1회 — 서둘러 쏠지, 시간을 투자해 확실히 맞힐지의 선택이다. 다른 모드 버튼을 누르면 조준을 접고 그 모드로 새로 겨눈다.</p>
   </section>
 
   <section class="panel">
-    <h2>전차전 3원칙 — 카드보다 중요한 규칙</h2>
+    <h2>전차전 3원칙 — 무엇을 쏠지 정하는 근거</h2>
     <h3>1. 장갑 방향 <span class="tag live">구현됨</span></h3>
     <table>
       <tr><th>피격 방향</th><th>피해 배율</th></tr>
@@ -178,16 +159,15 @@
       <tr><td>측면</td><td><b>×1.2</b></td></tr>
       <tr><td>후면 (±60°)</td><td><b>×1.5</b> — 가장 약함</td></tr>
     </table>
-    <p class="muted">좌/우 우회(3장)가 노리는 것이 바로 이 측후면 각이다. 후진 카드가 강한 이유도 전면을 문 채 이탈하기 때문.</p>
+    <p class="muted">조종수(자동)는 이 각을 노려 적의 측후면으로 파고들고, 위태로울 땐 전면을 문 채 후진해 정면 장갑(×0.7)으로 받아낸다. 당신은 사수가 잡은 각이 좋을 때 방아쇠를 당긴다.</p>
     <h3>2. 엄폐와 헐다운 <span class="tag live">구현됨</span></h3>
-    <p>방어는 카드가 아니라 <b>지형의 결과</b>다. 능선 마루의 헐다운 스팟(금색 링)에 서면 차체가 가려져 피격이 어려워진다 — 조종수는 이동 시 헐다운 위치를 우선 고려한다. 안개·폭우에서는 시야 밖 전차가 아예 보이지 않는다 (풀 흔들림으로만 감지).</p>
-    <h3>3. 이동 · 조준 · 노출의 상충 <span class="tag live">구현됨</span></h3>
+    <p>방어는 <b>지형의 결과</b>다. 능선 마루의 헐다운 스팟(금색 링)에 서면 차체가 가려져 피격이 어려워진다 — 조종수는 이동 시 헐다운 위치를 우선 고려한다. 헐다운한 적은 <b>직격이 안 통하니 곡사로</b> 넘겨야 한다. 안개·폭우에서는 시야 밖 전차가 아예 보이지 않는다 (풀 흔들림으로만 감지 — 이때 곡사로 소리 나는 쪽을 노린다).</p>
+    <h3>3. 정지 조준 · 노출의 상충 <span class="tag live">구현됨</span></h3>
     <table>
       <tr><th>선택</th><th>장점</th><th>위험</th></tr>
-      <tr><td>빠른 전진 (돌격)</td><td>주도권·측면 확보</td><td>사격 −12, 크게 노출</td></tr>
-      <tr><td>정지 조준 (공격×2~3)</td><td>명중 +15/+30, 약점 피해</td><td>오래 서 있는다 — 적의 정지 표적</td></tr>
-      <tr><td>기동사격</td><td>움직이며 압박</td><td>명중 −8</td></tr>
-      <tr><td>이동 자체</td><td><b>움직이는 표적은 맞히기 어렵다 (적 명중 −12)</b></td><td>내 사격도 흔들림</td></tr>
+      <tr><td>즉응사격 (탭 1회)</td><td>달리는 채로 즉시 발사 — 기회 놓치지 않음</td><td>보너스 없음, 기동 중이면 흔들림</td></tr>
+      <tr><td>정지 조준 (탭 2~3회)</td><td>명중 +15/+30, 약점 피해 — 조종수가 차를 세운다</td><td>오래 서 있는다 — 적의 정지 표적</td></tr>
+      <tr><td>이동 중 발사</td><td><b>움직이는 나는 맞히기 어렵다 (적 명중 −12)</b></td><td>내 즉응사격도 −8 흔들림</td></tr>
     </table>
   </section>
 
@@ -200,35 +180,35 @@
             <path d="M0,0 L6,3 L0,6 z" fill="#8b4d3a"/>
           </marker>
         </defs>
-        <text x="190" y="40" text-anchor="middle">🚚 기동</text>
-        <text x="60" y="255" text-anchor="middle">🎯 사격</text>
-        <text x="320" y="255" text-anchor="middle">🔭 조준</text>
+        <text x="190" y="40" text-anchor="middle">🚚 기동(자동)</text>
+        <text x="60" y="255" text-anchor="middle">🎯 즉응사격</text>
+        <text x="320" y="255" text-anchor="middle">🔭 정지 조준</text>
         <path d="M165 55 L85 225" stroke="#8b4d3a" stroke-width="3" marker-end="url(#ah)" fill="none"/>
-        <text x="92" y="135" class="arrow-label">기동 ▶ 사격 (표적 −12)</text>
+        <text x="92" y="135" class="arrow-label">기동 ▶ 피탄 회피 (적 −12)</text>
         <path d="M300 225 L215 60" stroke="#8b4d3a" stroke-width="3" marker-end="url(#ah)" fill="none"/>
-        <text x="238" y="150" class="arrow-label">조준 ▶ 기동 (명중 보너스)</text>
+        <text x="238" y="150" class="arrow-label">정지 조준 ▶ 큰 명중 보너스</text>
         <path d="M95 245 L280 245" stroke="#8b4d3a" stroke-width="3" marker-end="url(#ah)" fill="none"/>
-        <text x="130" y="272" class="arrow-label">사격 ▶ 조준/정지 (선타)</text>
+        <text x="130" y="272" class="arrow-label">즉응 ▶ 선타 (빠른 한 발)</text>
       </svg>
     </div>
-    <p class="muted center">움직이면 안 맞지만 못 맞히고, 서면 잘 맞히지만 잘 맞는다. 조준이 길수록 세지만 그만큼 노출된다.</p>
+    <p class="muted center">움직이면 안 맞지만 못 맞히고, 서면 잘 맞히지만 잘 맞는다. 조준이 길수록 세지만 그만큼 노출된다 — 조종수가 알아서 움직이는 사이 당신은 이 저울질만 한다.</p>
   </section>
 
   <section class="panel">
-    <h2>행동 타임라인 예시</h2>
-    <p class="muted">지속시간 = 명령 슬롯. 내부 단계는 행동마다 다르다.</p>
-    <div class="timeline">좌측전개사격 — 총 ~5초<br>
-0.0~0.8s 제동 · 0.8~2.0s 차체 좌선회 · 2.0~3.8s 새 방향 전개 이동 · ~3.0s 🎯 발사(포탑은 표적 유지) · 3.8~5.0s 안정화</div>
-    <div class="timeline">정밀사격 — 총 ~5초<br>
-0.0~0.6s 즉응 조준 · +🎯 조준 연장 · +🎯 정밀 조준 (~3.9s) · 발사 (+30, 약점 1.25배) · 이후 차종별 재장전 노출</div>
+    <h2>사격 타임라인 예시</h2>
+    <p class="muted">조종수는 그 사이에도 알아서 기동한다 (2단 이상 조준 땐 정지).</p>
+    <div class="timeline">직격 즉응사격<br>
+탭 · 0.6초 조준 · 발사(달리는 채로도) — 이후 차종별 재장전 (버튼 아래 회색 차오름)</div>
+    <div class="timeline">정밀사격 (직격/곡사 공통) — 조준 ~3.9초<br>
+탭 즉응 → 다시 탭 조준(정지) → 다시 탭 정밀 → 발사 (+30, 약점 1.25배) — 긴 정지가 대가</div>
   </section>
 
   <section class="panel">
     <h2>전략 예시</h2>
-    <div class="flow">🛡 <b>전면 유지 이탈</b> — 티거를 정면에 두고 후진×2(급후진): 정면 장갑 ×0.7로 받아내며 거리 회복.</div>
-    <div class="flow">🗡 <b>측면 사냥</b> — 좌×3(좌측우회)로 적 측후면 각 진입 → 공격×2(조준사격) — ×1.2/×1.5 피해각에 +15 명중.</div>
-    <div class="flow">🏃 <b>치고 빠지기</b> — 전진×2(돌격)+공격(돌격사격)으로 압박 → 급제동(전진↔후진) 페이크 → 후진+공격(후퇴사격).</div>
-    <div class="flow">🔭 <b>선타 노림</b> — 헐다운 스팟에서 공격×3(정밀사격): +30 명중·약점 피해 — 단, 조준 3.9초 동안 정지 표적이 된다.</div>
+    <div class="flow">🎯 <b>정면 저격</b> — 사선이 트인 정면 표적은 <b>직격</b>. 여유가 있으면 두 번 탭해 정지 조준(+15)으로 확실히.</div>
+    <div class="flow">💫 <b>능선 너머로</b> — 적이 헐다운·언덕 뒤에 숨어 직격이 막히면 <b>곡사</b>로 넘겨 위에서 떨어뜨린다 (최소 4칸).</div>
+    <div class="flow">🌫 <b>안갯속 제압</b> — 폭우·안개로 안 보이면 소리 나는 쪽으로 <b>곡사</b> 맹사 — 풀 흔들림이 곧 표적 단서.</div>
+    <div class="flow">🔧 <b>타이밍 회복</b> — 조종수가 위태로우면 알아서 빠진다. HP가 급하면 <b>수리킷</b>, 좋은 각을 급히 잡아야 하면 <b>연료</b>로 부스트.</div>
   </section>
 
   <p class="center"><a class="back" href="../game.html">🛠 게임으로 돌아가기</a></p>

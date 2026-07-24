@@ -129,68 +129,59 @@
 
   /* 전술 카드 핸드: 덱 20장 → 5장 드로 → 최대 3장 순서 선택 */
   /* iOS 하단 시스템 제스처(홈 인디케이터)와 겹치지 않게 위로 띄운다 */
-  #hand {
-    position: fixed; bottom: 34px; left: 50%;
+  /* 하단 액션 바 — 직격/곡사 버튼 + 아이템 트레이 (이동은 자동 조종) */
+  #action-bar {
+    position: fixed; bottom: 26px; left: 50%;
     transform: translateX(-50%);
-    display: flex; align-items: flex-end; gap: 8px;
-    z-index: 11;
+    display: flex; flex-direction: column; align-items: center; gap: 10px;
+    z-index: 12;
   }
-  #deck-pill {
-    width: 40px; height: 56px;
-    background: repeating-linear-gradient(135deg, #35507c, #35507c 6px, #2b4066 6px, #2b4066 12px);
-    border: 3px solid #2b3445; border-radius: 8px;
+  #item-tray { display: flex; gap: 8px; min-height: 0; }
+  .item-btn {
+    width: 46px; height: 46px; border-radius: 12px;
+    border: 3px solid #2b3445; background: #fdfaf3;
     box-shadow: 0 3px 0 rgba(43,52,69,0.4);
-    color: #fff; font-size: 12px; font-weight: 800;
+    font-size: 22px; cursor: pointer; line-height: 1;
     display: flex; align-items: center; justify-content: center;
-    text-shadow: 0 1px 2px #000;
-    flex-shrink: 0;
+  }
+  .item-btn.repair { border-color: #3aa657; }
+  .item-btn.fuel { border-color: #e0a41c; }
+  .item-btn:active { transform: translateY(2px); box-shadow: 0 1px 0 rgba(43,52,69,0.4); }
+  .fire-row { display: flex; gap: 16px; }
+  .act-btn {
     position: relative; overflow: hidden;
-  }
-  /* 카드 리필 진행 바 — 3초마다 1장 */
-  #refill-bar {
-    position: absolute; left: 0; bottom: 0;
-    height: 5px; width: 0%;
-    background: #8de08a;
-    transition: width 0.15s linear;
-  }
-  .card {
-    width: 64px; height: 88px;
-    background: #fdfaf3;
-    border: 3px solid #2b3445; border-radius: 10px;
+    width: 96px; height: 84px; border-radius: 16px;
+    border: 3px solid #2b3445; background: #fdfaf3;
     box-shadow: 0 4px 0 rgba(43,52,69,0.4);
     display: flex; flex-direction: column; align-items: center; justify-content: center;
-    gap: 2px; cursor: pointer; position: relative;
-    font-weight: 800; font-size: 12px; color: #2b3445;
-    transition: transform 0.12s;
-    flex-shrink: 0;
+    gap: 2px; cursor: pointer; touch-action: manipulation;
+    font-weight: 800; font-size: 14px; color: #2b3445;
   }
-  .card .ico { font-size: 21px; line-height: 1; }
-  .card .ico svg { width: 34px; height: 34px; display: block; }
-  .card .typ { font-size: 9px; font-weight: 700; color: #8b95a8; }
-  .card.move { border-color: #2f7ee0; }
-  .card.fire { border-color: #d0342c; }
-  .card.guard { border-color: #2e8b57; }
-  .card { transform-origin: 50% 100%; transition: transform 0.15s; touch-action: none; }
-  /* 선택: 확대 + 들어올림 — 재탭/위로 밀면 사용 */
-  .card.sel {
-    transform: translateY(-16px) scale(1.18) !important;
-    box-shadow: 0 0 0 3px #ffd24d, 0 8px 0 rgba(43,52,69,0.4);
-    z-index: 3;
+  .act-btn.direct { border-color: #d0342c; }
+  .act-btn.lob { border-color: #e0781c; }
+  .act-btn .ico svg { width: 34px; height: 34px; display: block; }
+  .act-btn .lbl { font-size: 13px; }
+  .act-btn:active { transform: translateY(2px); box-shadow: 0 2px 0 rgba(43,52,69,0.4); }
+  .act-btn:disabled { opacity: 0.45; }
+  /* 재장전 쿨다운: 아래에서 차오르는 회색 오버레이 */
+  .act-btn .cd {
+    position: absolute; left: 0; right: 0; bottom: 0; height: 0%;
+    background: rgba(90,100,120,0.4); pointer-events: none;
+    transition: height 0.12s linear;
   }
-  /* 덱에서 뒤집히며 날아드는 새 카드 */
-  @keyframes card-deal {
-    0% { opacity: 0; transform: translateX(-64px) rotateY(90deg) scale(0.8); }
-    60% { opacity: 1; transform: translateX(-8px) rotateY(-14deg); }
-    100% { opacity: 1; }
+  /* 조준 강화 단계 pip (즉응/조준/정밀) */
+  .act-btn .pips { display: flex; gap: 4px; height: 6px; }
+  .act-btn .pips i {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: #d3d8e0; transition: background 0.1s;
   }
-  .card.deal { animation: card-deal 0.45s ease-out; }
-  /* 사용: 카드가 탱크 머리 위로 날아가 사라진다 */
-  .card.fly {
-    position: fixed; z-index: 30; pointer-events: none; margin: 0;
-    transition: left 0.55s ease-in, top 0.55s ease-in, transform 0.55s ease-in, opacity 0.55s ease-in;
+  .act-btn.direct .pips i.on { background: #d0342c; }
+  .act-btn.lob .pips i.on { background: #e0781c; }
+  /* 조준 중인 버튼: 강조 링 + 살짝 떠오름 */
+  .act-btn.staging {
+    box-shadow: 0 0 0 3px #ffd24d, 0 6px 0 rgba(43,52,69,0.4);
+    transform: translateY(-3px);
   }
-  /* 재장전 중인 공격/엄호 카드 — 내면 제자리에서 장전을 기다린다 */
-  .card.cool { filter: grayscale(0.65) brightness(0.72); }
 
   /* 실행 중 카드: 상단 중앙에 카드째로 — 그래픽 + 단계명 + 남은 시간 */
   #active-cards {
@@ -212,6 +203,7 @@
   .acard svg { width: 34px; height: 34px; display: block; }
   .acard .t { font-size: 11px; font-weight: 800; color: #55607a; font-variant-numeric: tabular-nums; }
   .acard.fire { border-color: #d0342c; }
+  .acard.lob { border-color: #e0781c; }
   /* 합성(기동사격): 이동 아이콘 + 조준 미니 뱃지, 보라 테두리 */
   .acard.combo { border-color: #8b5fbf; }
   .acard .sub {
@@ -227,18 +219,16 @@
   }
   .acard .bar i { display: block; height: 100%; background: #2ea04f; width: 0%; }
   .acard.fire .bar i { background: #e8834f; }
+  .acard.lob .bar i { background: #e8834f; }
   @media (max-width: 640px) {
     #active-cards { top: 96px; gap: 7px; }
     .acard { min-width: 64px; height: 90px; font-size: 11px; }
     .acard svg { width: 27px; height: 27px; }
-  }
-  @media (max-width: 640px) {
-    #hand { gap: 5px; bottom: 30px; }
-    .card { width: 54px; height: 74px; border-width: 2px; }
-    .card .ico { font-size: 18px; }
-    .card .ico svg { width: 27px; height: 27px; }
-    #deck-pill { width: 32px; height: 46px; font-size: 11px; }
-    #btn-settings { bottom: 122px; } /* 카드 핸드와 겹치지 않게 */
+    #action-bar { bottom: 20px; gap: 8px; }
+    .act-btn { width: 84px; height: 74px; }
+    .act-btn .ico svg { width: 29px; height: 29px; }
+    .item-btn { width: 42px; height: 42px; font-size: 20px; }
+    #btn-settings { bottom: 128px; } /* 액션 바와 겹치지 않게 */
   }
 
   /* 확정 바: 계획 미리보기 상태에서만 표시 — 카드 핸드 위에 뜬다 */
@@ -376,8 +366,20 @@
   <div id="confirm" class="panel">
     <button id="btn-ok">✓ 확정</button>
   </div>
-  <div id="hand"></div>
   <div id="active-cards"></div>
+  <div id="action-bar">
+    <div id="item-tray"></div>
+    <div class="fire-row">
+      <button id="btn-direct" class="act-btn direct">
+        <span class="cd"></span><span class="ico"></span>
+        <span class="lbl">직격</span><span class="pips"></span>
+      </button>
+      <button id="btn-lob" class="act-btn lob">
+        <span class="cd"></span><span class="ico"></span>
+        <span class="lbl">곡사</span><span class="pips"></span>
+      </button>
+    </div>
+  </div>
 
   <button id="btn-settings">⚙</button>
   <div id="settings">
@@ -385,7 +387,7 @@
       <h3>⚙ 설정</h3>
       <div class="env-info" id="settings-env"></div>
       <button id="btn-restart" class="secondary">↻ 다시 시작</button>
-      <button id="btn-rules" class="secondary" onclick="location.href='./rules/'">🃏 카드 조합 규칙</button>
+      <button id="btn-rules" class="secondary" onclick="location.href='./rules/'">📖 전투 규칙</button>
       <button id="btn-garage">🏁 게임 종료 — 차고로</button>
       <button id="btn-close-settings" class="secondary">닫기</button>
     </div>
