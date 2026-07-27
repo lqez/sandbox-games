@@ -67,7 +67,15 @@ for (let i = 0; i < SQUAD_SIZE; i++) {
   PLAYER_SPAWNS.push({ gx: 3 + i * 2, gz: GH - 3 });
 }
 const PLAYER_SPAWN = PLAYER_SPAWNS[1]; // 구 코드 호환 (중앙 유닛)
-const N_ENEMY = 5;
+// ── 후방 추격대 (예외적 압박) ──
+// 일부 런에서만 남쪽에서 추격대가 들어온다. 앞은 방어선, 뒤는 추격대 —
+// 정면 도탄(45%)이 유일한 방어인데 **양쪽에 동시에 정면을 줄 수 없다**.
+// 어느 쪽에 전면을 내밀지가 그 자체로 결정이 된다 (난이도 상승).
+const REAR_PRESSURE = rng() < 0.35;
+const N_PURSUER = REAR_PRESSURE ? 2 : 0;
+const PURSUER_TURN = 4 + Math.floor(rng() * 3); // 이 턴에 남쪽에서 진입
+// 총 적 수 상한을 지킨다 (검증: 아군 × 1.5. 2~3배는 산술적으로 패배)
+const N_ENEMY = 5 - N_PURSUER;
 const BANDS = 2;                       // 방어선 수 — 정리하면 정비(회복)
 const ENEMY_SPAWNS = [];
 {
@@ -84,6 +92,11 @@ const ENEMY_SPAWNS = [];
       });
     }
   }
+}
+// 추격대 스폰 위치 (남쪽 끝) — 진입 턴까지는 씬에 없다
+const PURSUER_SPAWNS = [];
+for (let i = 0; i < N_PURSUER; i++) {
+  PURSUER_SPAWNS.push({ gx: 2 + Math.round(rng() * (GW - 5)), gz: GH - 2 });
 }
 const GOAL_GZ = 2; // 이 줄까지 올라가면 돌파 성공
 // 강: 82% 확률로 존재, 폭도 구간별로 변한다 (아예 없을 수도)
@@ -597,14 +610,45 @@ let riverCx, riverAmp, riverPhase;
     })
   );
 }
+// ── 강 방향 ── 세로 회랑에서 남북 강은 통로를 길이로 덮어 못 쓴다.
+// 대신 **동서 횡단·대각선** 강이 회랑을 가로질러 애로점을 만든다 (런 변수).
+//   ns   : 기존 남북 사행 (넓은 맵 전용, 목교 생성)
+//   ew   : 동서 횡단 — 회랑을 잘라 도섭 지점으로 몰아넣는다
+//   diag : 대각선 — 한쪽 끝이 먼저 막혀 진로 선택이 갈린다
+const riverAxis = (() => {
+  if (!riverRoll) return 'none';
+  if (GW >= 24) return 'ns';
+  const r = rng();
+  return r < 0.42 ? 'none' : r < 0.76 ? 'ew' : 'diag';
+})();
+const hasRiverAxis = riverAxis !== 'none';
+// 강이 가로지르는 위치(격자 z). 스폰·목표에서 충분히 떨어뜨린다.
+const riverCz = Math.round(GH * 0.34 + rng() * GH * 0.28);
+const riverDiagSlope = (rng() < 0.5 ? 1 : -1) * (0.45 + rng() * 0.5);
+// 반드시 건널 수 있는 도섭 지점(격자 x) — 회랑 폭 안쪽에 하나 고정
+const riverCrossGx = 2 + Math.round(rng() * (GW - 5));
 const riverPoints = [];
-if (hasRiver) for (let zw = -HALFH; zw <= HALFH; zw += 0.5) {
-  const gzf = zw / TILE + (GH - 1) / 2;
-  const rx = riverCx + Math.sin(gzf * 0.085 + riverPhase) * riverAmp; // 사행 주기 완화
-  riverPoints.push({ x: (rx - (GW - 1) / 2) * TILE, z: zw });
+if (hasRiverAxis) {
+  if (riverAxis === 'ns') {
+    for (let zw = -HALFH; zw <= HALFH; zw += 0.5) {
+      const gzf = zw / TILE + (GH - 1) / 2;
+      const rx = riverCx + Math.sin(gzf * 0.085 + riverPhase) * riverAmp;
+      riverPoints.push({ x: (rx - (GW - 1) / 2) * TILE, z: zw });
+    }
+  } else {
+    // 동서/대각선: x를 따라가며 z가 변한다 (대각선은 기울기 추가)
+    for (let gxf = -2; gxf <= GW + 2; gxf += 0.4) {
+      const slope = riverAxis === 'diag' ? (gxf - GW / 2) * riverDiagSlope : 0;
+      const rz = riverCz + slope + Math.sin(gxf * 0.42 + riverPhase) * 1.5;
+      riverPoints.push({
+        x: (gxf - (GW - 1) / 2) * TILE,
+        z: (rz - (GH - 1) / 2) * TILE,
+      });
+    }
+  }
 }
 function distToRiver(wx, wz) {
-  if (!hasRiver) return Infinity;
+  if (!hasRiverAxis) return Infinity;
   let d = Infinity;
   for (const p of riverPoints) {
     const dd = Math.hypot(wx - p.x, wz - p.z);
@@ -645,14 +689,21 @@ function fieldHeight(wx, wz) {
   const dr = drRaw + bankWobble;
   if (dr < 15) {
     const gzf = wz / TILE + (GH - 1) / 2;
-    const ford = smooth01((Math.sin(gzf * 0.275 + riverPhase * 2.3) - 0.38) / 0.3);
-    // 강 폭 가변: 구간별 ~0.55×에서 최대 ~3.2×(기존의 2배)까지 —
-    // 좁은 여울목과 훨씬 넓은 소(pool)가 생긴다
+    const gxf = wx / TILE + (GW - 1) / 2;
+    // 여울·폭 변조는 "강이 흐르는 축"을 따라 준다.
+    // 남북 강이면 z, 동서/대각선 강이면 x가 강의 진행 방향이다.
+    const along = riverAxis === 'ns' ? gzf : gxf * 2.6;
+    const ford = smooth01((Math.sin(along * 0.275 + riverPhase * 2.3) - 0.38) / 0.3);
+    // 강 폭 가변: 좁은 여울목과 넓은 소(pool)
     const rw = Math.max(0.55,
-      1.45 + Math.sin(gzf * 0.055 + riverPhase * 1.7) * 0.95
-           + Math.sin(gzf * 0.026 + riverPhase * 4.1) * 0.8);
+      1.45 + Math.sin(along * 0.055 + riverPhase * 1.7) * 0.95
+           + Math.sin(along * 0.026 + riverPhase * 4.1) * 0.8);
     const bedNoise = (dNoise2(fx, fz) - 0.5) * 0.15;
-    const bed = -0.5 + ford * 0.26 + bedNoise;
+    // 보장된 도섭 지점: 회랑을 횡단하는 강은 반드시 건널 수 있어야 한다.
+    // 지정 x열 주변에서 강바닥을 들어 수심을 FORD_DEPTH 아래로 만든다.
+    const crossBoost = riverAxis === 'ns' ? 0
+      : smooth01(1 - Math.abs(gxf - riverCrossGx) / 2.2) * 0.5;
+    const bed = -0.5 + ford * 0.26 + bedNoise + crossBoost;
     // 얕은 물가 선반: 수면 살짝 아래에서 완만하게 시작 (급격히 깎이지 않게)
     const shelf = -0.16 + bedNoise * 0.4;
     // 2단 전이: 강바닥 → 얕은 선반(짧고 완만) → 뭍(넓고 완만한 강둑)
@@ -998,7 +1049,7 @@ const waterMesh = new THREE.Mesh(
 waterMesh.rotation.x = -Math.PI / 2;
 waterMesh.position.y = WATER_Y;
 noAO(waterMesh);
-if (hasRiver) scene.add(waterMesh);
+if (hasRiverAxis) scene.add(waterMesh);
 
 // 지형 테두리 스커트 — 하이트필드 가장자리가 뚫려 보이지 않게 측면을 막는다
 {
@@ -1919,7 +1970,7 @@ function placeProp(type, gx, gz) {
   // 강가 수목: 물가 1.2~2.8칸 띠에 버드나무/자작이 드문드문 늘어선다
   {
     let riverTrees = 0, guard = 0;
-    const RT_MAX = hasRiver ? Math.round(16 * AREA_F) : 0;
+    const RT_MAX = hasRiverAxis ? Math.round(16 * AREA_F) : 0;
     while (riverTrees < RT_MAX && guard++ < 3000) {
       const gx = 1 + Math.floor(rng() * (GW - 2)), gz = 1 + Math.floor(rng() * (GH - 2));
       if (!free(gx, gz) || terrainAt(gx, gz) === T.WATER) continue;
@@ -2614,7 +2665,7 @@ const bridge = { cells: new Set(), gz: -1, deckY: WATER_Y + 0.5, hp: 100, maxHp:
 {
   // 여울에서 먼(=깊은) 강 구간을 고른다 (강이 없으면 다리도 없다)
   let bestGz = -1, bestFord = Infinity;
-  if (!hasRiver) bestGz = -2;
+  if (riverAxis !== 'ns') bestGz = -2; // 목교는 남북 강 전용 (동서/대각선은 도섭)
   if (bestGz !== -2) for (let gz = 10; gz <= GH - 10; gz++) {
     const ford = smooth01((Math.sin((gz + 0.5) * 0.275 + riverPhase * 2.3) - 0.38) / 0.3);
     if (ford < bestFord) { bestFord = ford; bestGz = gz; }
@@ -5976,6 +6027,7 @@ function startPlanning() {
   ghost.visible = false;
   hideBowUI();
   turnLabel.textContent = `턴 ${turnNo}`;
+  spawnPursuers();     // 지정 턴이 되면 후방 추격대가 들어온다
   wakeNearbyEnemies();
   refreshPlanUI();
 }
@@ -6018,30 +6070,41 @@ const resolveQueue = resolveTurn; // 구 이름 호환 (테스트 훅)
 // 적 AI — AI 레벨(driverLv):
 //  Lv1: 현재 칸 조준 / Lv2: 절반 리드 + 굴착 + 경계 / Lv3: 완전 외삽 리드
 let playerLastMove = null;
-function predictPlayerCell(lvl) {
-  if (lvl <= 1 || !playerLastMove) return { gx: player.gx, gz: player.gz };
+// 표적의 다음 위치 예측 (리드 사격). foe = 이 적이 노리는 소대원.
+function predictFoeCell(foe, lvl) {
+  const mv = foe._lastMove ?? playerLastMove;
+  if (lvl <= 1 || !mv) return { gx: foe.gx, gz: foe.gz };
   const f = lvl >= 3 ? 1 : 0.5;
   return {
-    gx: THREE.MathUtils.clamp(Math.round(player.gx + playerLastMove.dx * f), 0, GW - 1),
-    gz: THREE.MathUtils.clamp(Math.round(player.gz + playerLastMove.dz * f), 0, GH - 1),
+    gx: THREE.MathUtils.clamp(Math.round(foe.gx + mv.dx * f), 0, GW - 1),
+    gz: THREE.MathUtils.clamp(Math.round(foe.gz + mv.dz * f), 0, GH - 1),
   };
 }
 // 적 단일 유닛 의사결정 — 리얼타임 두뇌 루프가 주기적으로 호출한다
 function decideEnemy(enemy) {
   enemy._plannedCell = { gx: enemy.gx, gz: enemy.gz }; // 도착 예정 칸 (기본: 제자리)
   const lvl = enemy.driverLv;
+  // 소대를 상대하므로 표적은 "이 적에게 가장 가까운 생존 소대원"이다.
+  // (선택된 유닛 하나만 노리면 모든 적이 같은 표적에 몰린다)
+  let foe = null, fd = Infinity;
+  for (const u of squad) {
+    if (!u.alive) continue;
+    const d = Math.hypot(u.gx - enemy.gx, u.gz - enemy.gz);
+    if (d < fd) { fd = d; foe = u; }
+  }
+  if (!foe) return { type: 'wait' };
   // 안개·폭우: 시야 밖 플레이어는 조준 불가 — 소리로 대충 접근만 한다
-  const canSee = Math.hypot(enemy.gx - player.gx, enemy.gz - player.gz) <= VIS_LIMIT;
+  const canSee = Math.hypot(enemy.gx - foe.gx, enemy.gz - foe.gz) <= VIS_LIMIT;
   if (enemy.reloadLeft <= 0 && canSee) {
-    const aim = predictPlayerCell(lvl);
-    const aimIsPlayer = aim.gx === player.gx && aim.gz === player.gz;
-    const shot = computeShot(enemy, aimIsPlayer ? { unit: player } : aim);
+    const aim = predictFoeCell(foe, lvl);
+    const aimIsPlayer = aim.gx === foe.gx && aim.gz === foe.gz;
+    const shot = computeShot(enemy, aimIsPlayer ? { unit: foe } : aim);
     if (shot.ok && (!aimIsPlayer || shot.chance >= 30)) {
       return { type: 'fire', cell: aim, shot };
     }
     // 곡사 (Lv2+): 사선이 막혔으면 능선 너머로 넘겨 쏜다
     if (lvl >= 2 && !shot.ok) {
-      const lobShot = computeShot(enemy, aimIsPlayer ? { unit: player } : aim, null, null, true);
+      const lobShot = computeShot(enemy, aimIsPlayer ? { unit: foe } : aim, null, null, true);
       if (lobShot.ok && (!aimIsPlayer || lobShot.chance >= 25)) {
         return { type: 'fire', cell: aim, shot: lobShot };
       }
@@ -6057,7 +6120,7 @@ function decideEnemy(enemy) {
   // 경계 (Lv2+): 사격은 안 되지만 플레이어가 근처를 지나갈 만하면 매복.
   // 시야 밖(안개·폭우)이어도 소리 나는 방향으로 매복은 가능하다.
   if (enemy.reloadLeft <= 0) {
-    const distP = Math.hypot(enemy.gx - player.gx, enemy.gz - player.gz);
+    const distP = Math.hypot(enemy.gx - foe.gx, enemy.gz - foe.gz);
     if (lvl >= 2 && distP <= enemy.fireRange + 3 && Math.random() < 0.5) {
       return { type: 'overwatch' };
     }
@@ -6085,21 +6148,21 @@ function decideEnemy(enemy) {
   const exposurePenalty = (gx, gz, endDir) => {
     const fd = DIRS[endDir];
     const rel = Math.abs(normAngle(
-      Math.atan2(player.gx - gx, player.gz - gz) - Math.atan2(fd.dx, fd.dz)
+      Math.atan2(foe.gx - gx, foe.gz - gz) - Math.atan2(fd.dx, fd.dz)
     )) * (180 / Math.PI);
     return rel >= 120 ? rearPen : rel > 60 ? sidePen : 0;
   };
   for (const [key, info] of cells) {
     const [gx, gz] = key.split(',').map(Number);
-    const sShot = canSee ? computeShot(enemy, { unit: player }, { gx, gz }) : { ok: false };
-    const distP = Math.hypot(gx - player.gx, gz - player.gz);
+    const sShot = canSee ? computeShot(enemy, { unit: foe }, { gx, gz }) : { ok: false };
+    const distP = Math.hypot(gx - foe.gx, gz - foe.gz);
     let score = sShot.ok ? 200 + sShot.chance - info.cost * 2 : 100 - distP * 5 - info.cost;
     score -= exposurePenalty(gx, gz, info.endDir);
     score -= sepPenalty(gx, gz);
     if (!best || score > best.score) best = { score, info, gx, gz };
   }
   // 제자리 대기도 후보로 평가 — 지금 자세가 이미 노출이면 이동이 이긴다
-  const stayScore = 100 - Math.hypot(enemy.gx - player.gx, enemy.gz - player.gz) * 5
+  const stayScore = 100 - Math.hypot(enemy.gx - foe.gx, enemy.gz - foe.gz) * 5
     - exposurePenalty(enemy.gx, enemy.gz, facingDir(enemy))
     - sepPenalty(enemy.gx, enemy.gz);
   if (best && best.info.path.length && best.score > stayScore) {
@@ -6141,6 +6204,24 @@ function planEnemies() {
   wakeNearbyEnemies();
   for (const e of enemies) if (e.alive && e.awake) e.plan = decideEnemy(e);
 }
+// ── 후방 추격대 진입 ──
+// 앞(방어선)과 뒤(추격대) 양쪽에서 압박받으면 정면 도탄으로 둘 다 막을 수
+// 없다 — 어느 쪽에 전면장갑을 내줄지가 결정이 된다.
+let pursuersIn = false;
+function spawnPursuers() {
+  if (pursuersIn || !REAR_PRESSURE || turnNo < PURSUER_TURN) return;
+  pursuersIn = true;
+  for (const s of PURSUER_SPAWNS) {
+    const e = spawnUnit(false, s.gx, s.gz, Math.PI); // 북쪽(아군 쪽)을 향해
+    e.band = -1;
+    e.awake = true;        // 추격대는 처음부터 교전 상태
+    e.isPursuer = true;
+    enemies.push(e);
+    popText(e.group.position.clone().add(new THREE.Vector3(0, 2, 0)), '⚠ 추격대!', '#ff6a5e');
+  }
+  if (thumbsReady) updateThumbs();
+  setHint('⚠ 후방에 추격대 — 앞뒤 양쪽이다. 어느 쪽에 전면을 줄지 골라라');
+}
 // 아군 어느 유닛에게든 (사거리+3) 안으로 들어오면 그 적이 깨어난다
 function wakeNearbyEnemies() {
   const live = squad.filter((u) => u.alive);
@@ -6158,9 +6239,10 @@ let bandsRepaired = 0;
 let killsAtLastRepair = 0;
 function checkBandCleared() {
   if (bandsRepaired >= BANDS) return;
-  // 깨어 있으면서 살아 있는 적이 없다 = 현재 교전 종료
-  if (enemies.some((e) => e.alive && e.awake)) return;
-  if (!enemies.some((e) => e.alive)) return; // 전멸이면 정비 대신 승리 판정
+  // 깨어 있으면서 살아 있는 적이 없다 = 현재 교전 종료.
+  // 추격대는 "방어선"이 아니므로 정비를 영구히 막지 않도록 제외한다.
+  if (enemies.some((e) => e.alive && e.awake && !e.isPursuer)) return;
+  if (!enemies.some((e) => e.alive && !e.isPursuer)) return; // 방어선 전멸 → 승리 판정
   // 실제로 방어선을 정리했을 때만 정비한다 — 교전 시작 전(아무도 안 깨어난
   // 상태)에는 조건이 자동 성립해 정비가 공짜로 소진됐다.
   const kills = enemies.filter((e) => !e.alive).length;
@@ -6311,6 +6393,8 @@ async function resolveOneTurn() {
   if (queueLine) { scene.remove(queueLine); queueLine.geometry.dispose(); queueLine = null; }
   hideBowUI();
   turnLabel.textContent = `턴 ${turnNo} ▶`;
+  // 소대원별 시작 위치 — 리드 사격 예측용 변위를 유닛마다 따로 기록한다
+  const squadStart = new Map(squad.map((u) => [u, { gx: u.gx, gz: u.gz }]));
   const playerStart = { gx: player.gx, gz: player.gz };
   // 포탑 사전 추적 없음 — 포탑은 사격 시작 시(aimAt의 선회 애니메이션)와
   // 이동 도착 시(드래그로 지정한 turretYaw 정렬)에만 돈다.
@@ -6421,7 +6505,11 @@ async function resolveOneTurn() {
     if (u.boostTurns > 0) u.boostTurns--;
     u.movedLastTurn = (u.plan?.type === 'move' && !!u.plan.path?.length) || !!u.plan?._moved;
   }
-  // AI 예측용: 이번 턴 플레이어 변위 기록
+  // AI 리드 사격 예측용: 이번 턴 변위를 소대원마다 기록
+  for (const [u, st0] of squadStart) {
+    const dx = u.gx - st0.gx, dz = u.gz - st0.gz;
+    u._lastMove = dx || dz ? { dx, dz } : null;
+  }
   const pdx = player.gx - playerStart.gx, pdz = player.gz - playerStart.gz;
   playerLastMove = pdx || pdz ? { dx: pdx, dz: pdz } : null;
   for (const u of units) u.plan = null;
@@ -6446,7 +6534,8 @@ function checkGameEnd() {
     overlayTitle.textContent = breached ? '🏆 돌파 성공!' : '🏆 방어선 소멸!';
     const kills = enemies.filter((e) => !e.alive).length;
     overlaySub.textContent =
-      `${turnNo}턴 · 격파 ${kills}/${enemies.length} · 생존 ${live.length}/${squad.length}대`;
+      `${turnNo}턴 · 격파 ${kills}/${N_ENEMY + N_PURSUER} · 생존 ${live.length}/${squad.length}대`
+      + (REAR_PRESSURE ? ' · 후방 추격대' : '');
     overlay.classList.add('show');
     return true;
   }
@@ -7030,6 +7119,8 @@ window.__puratank = {
   repairsDone: () => bandsRepaired,
   runInfo: () => ({ GW, GH, goalGz: GOAL_GZ, bands: BANDS, nEnemy: N_ENEMY, squadSize: SQUAD_SIZE }),
   armorStat: () => ({ ...armorStat }),
+  envInfo: () => ({ riverAxis, rearPressure: REAR_PRESSURE, pursuers: N_PURSUER,
+    pursuerTurn: PURSUER_TURN, crossGx: riverCrossGx, weather: WEATHER, tod: TOD }),
   selectSquad(i) { selectUnit(squad[i]); return !!squad[i]; },
   // 테스트: 플레이어를 특정 칸으로 순간이동 (위치+월드좌표 동기화)
   warp(gx, gz) {
