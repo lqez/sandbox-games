@@ -110,44 +110,41 @@
 <body>
 <main>
   <h1>🎯 PURATANK 전투 규칙</h1>
-  <p class="sub">조종은 자동 — 당신은 <b>직격·곡사</b>로 쏘고 <b>아이템</b>을 쓴다</p>
+  <p class="sub">2턴을 미리 예약하고 — 아군·적이 <b>동시에</b> 움직이는 동시 턴제(WeGo)</p>
 
   <section class="panel">
-    <h2>조작은 셋뿐 — 직격 · 곡사 · 아이템</h2>
-    <p><b>이동은 조종수(자동)가 맡는다.</b> 사격각이 서는 자리로 붙고, 능선의 헐다운 엄폐를 끼고, 길목의 아이템을 주우며, 전면장갑을 최대 위협에게 문 채, HP가 낮거나 재장전 중이면 간격을 벌린다 — 당신은 그 위에서 <b>언제·어떻게 쏠지</b>만 결정한다.</p>
-    <div class="cards">
-      <div class="gcard fire"><span class="ico" data-icon="atk"></span>직격<span class="typ">직사 · 사선 필요</span></div>
-      <div class="gcard fire"><span class="ico" data-icon="lob"></span>곡사<span class="typ">포물선 · 4칸+</span></div>
-    </div>
-    <ul style="margin-left: 18px;">
-      <li>버튼을 누르면 <b>스마트 사수</b>가 그 모드로 최적 표적을 잡아 쏜다. 보이는 적이 없으면 소리 나는 방향(숨은 적은 크게 흔들림)이나 전방 허공에라도 쏜다.</li>
-      <li><b>차종별 재장전</b>: FT 3초 · T-34/Mark IV 6초 · 티거 9초. 재장전 중엔 버튼 아래가 회색으로 차오른다.</li>
-      <li>주운 아이템은 인벤토리에 담기고, <b>아이템 버튼</b>으로 원할 때 쓴다 — 🔧 수리킷(+40 HP) / ⚡ 연료(기동 부스트).</li>
-    </ul>
+    <h2>조작 — 클릭으로 2턴을 미리 그린다</h2>
+    <p>턴마다 <b>이동 · 사격 · 경계</b> 중 하나를 고른다. 최대 <b>2턴</b>을 미리 예약해 두면(상단 breadcrumb <span class="crumb">① ▸ ② </span>에 쌓인다), ▶ 실행 시 <b>플레이어와 모든 적이 한꺼번에</b> 해결된다. 두 턴이 다 차면 자동 실행.</p>
+    <table>
+      <tr><th>동사</th><th>조작</th><th>설명</th></tr>
+      <tr><td>🚚 이동</td><td>파란 이동 필드의 <b>셀을 탭</b> → 고스트 미리보기 → 드래그로 포탑 방향 조정 → ✓</td><td>도착 위치는 고스트로, 8방향 경로·비용은 지형이 정한다</td></tr>
+      <tr><td>🎯 사격</td><td><b>내 전차를 탭</b>해 사격 모드 → 표적/지점 탭(또는 내 전차에서 목표로 드래그) → ✓</td><td>직사·곡사는 사거리·사선으로 <b>자동</b> 판정. 예측 사격 — 조준한 셀에 도착한 적을 맞힌다</td></tr>
+      <tr><td>👁 경계</td><td>상단 <b>👁 경계 칩</b> (재장전 중이면 ⏸ 대기)</td><td>정지해 사선을 지키다, 적이 그 사선을 지나면 <b>실시간 스냅 사격</b></td></tr>
+    </table>
+    <p class="muted">✕ 로 마지막 예약/미리보기를 취소. 아이템(🔧 수리킷 +40HP / ⚡ 연료 기동+4)은 위를 지나가면 자동 획득.</p>
   </section>
 
   <section class="panel">
-    <h2>직격 vs 곡사 — 무엇으로 쏠까</h2>
+    <h2>동시 턴(WeGo) 해결 순서</h2>
+    <p>예약한 각 턴은 이 순서로 <b>동시에</b> 풀린다:</p>
+    <ol style="margin-left: 20px;">
+      <li><b>전 차량 동시 이동</b> — 서로 스텝 단위로 나아가고, 근접 진입·자리 맞바꿈·추돌은 충돌(직전 칸에서 정지 + 양쪽 피해).</li>
+      <li><b>경계 스냅</b> — 이동 도중 상대편 경계자의 사선(포가 향한 ±12°)을 지나면 그 자리에서 즉시 사격(경계당 1회, 스냅 페널티).</li>
+      <li><b>일반 사격</b> — 모든 이동이 끝난 뒤 발사. 목적지를 맞게 예측한 셀 사격은 도착한 적을 정통으로 맞힌다.</li>
+    </ol>
+    <p class="muted">그래서 "적이 어디로 갈지" 읽고 <b>빈 셀을 예측 사격</b>하는 것이 핵심이다. 매 턴 적은 새로 반응한다.</p>
+  </section>
+
+  <section class="panel">
+    <h2>직사 vs 곡사 — 자동 판정</h2>
     <table>
-      <tr><th></th><th>직격 (직사)</th><th>곡사 (포물선)</th></tr>
+      <tr><th></th><th>직사 <i class="mini" data-icon="atk"></i></th><th>곡사 <i class="mini" data-icon="lob"></i></th></tr>
       <tr><td>탄도</td><td>거의 직선 — <b>사선(LOS)이 뚫려야</b> 맞는다</td><td>하늘로 솟았다 위에서 낙하 — <b>능선 너머·엄폐 뒤</b>로 넘긴다</td></tr>
       <tr><td>사거리</td><td>근~원거리</td><td><b>최소 4칸</b> 이상</td></tr>
       <tr><td>명중</td><td>기본이 높다</td><td>−12 페널티, 산포도 넓다</td></tr>
-      <tr><td>노림수</td><td>탁 트인 사선의 정면 표적</td><td><b>헐다운·능선 뒤에 숨은 적</b> (직격이 안 통할 때)</td></tr>
+      <tr><td>노림수</td><td>탁 트인 사선의 정면 표적</td><td><b>헐다운·능선 뒤에 숨은 적</b> (직사가 안 통할 때)</td></tr>
     </table>
-    <p class="muted">헐다운한 적은 직격 명중이 −16이지만 곡사는 위에서 떨어져 그 엄폐를 무시한다. 반대로 곡사는 이동 표적을 맞히기 어렵다 — 상황이 무기를 고른다.</p>
-  </section>
-
-  <section class="panel">
-    <h2>조준 강화 — 연사가 아니라 정밀</h2>
-    <p>같은 사격 버튼을 <b>다시 누르면</b> 발사를 늦추는 대신 조준이 깊어진다 (즉응→조준→정밀). 2단부터는 <b>조종수가 차를 세워</b> 사수가 확실히 맞히게 한다 — 그만큼 오래 자리에 묶여 노출된다.</p>
-    <table>
-      <tr><th>탭</th><th>결과</th><th>효과</th></tr>
-      <tr><td class="combo"><i class="mini" data-icon="atk"></i>×1</td><td class="combo">즉응사격 <span class="tag live">구현됨</span></td><td>0.6초 조준 후 즉시 1발 — 달리는 채로도 쏜다(보너스 없음)</td></tr>
-      <tr><td class="combo"><i class="mini" data-icon="atk"></i>×2</td><td class="combo">조준사격 <span class="tag live">구현됨</span></td><td>발사를 ~1.7초 늦추고 <b>정지 조준</b> 명중 <b>+15</b></td></tr>
-      <tr><td class="combo"><i class="mini" data-icon="atk"></i>×3</td><td class="combo">정밀사격 <span class="tag live">구현됨</span></td><td>~3.3초 조준, 명중 <b>+30</b> + <b>약점 피해 1.25배</b> — 긴 정지가 대가</td></tr>
-    </table>
-    <p class="muted">발사 횟수는 항상 1회 — 서둘러 쏠지, 시간을 투자해 확실히 맞힐지의 선택이다. 다른 모드 버튼을 누르면 조준을 접고 그 모드로 새로 겨눈다.</p>
+    <p class="muted">사격은 통합 동사 — 표적 셀까지 직사 사선이 서면 직사, 막혔으면 자동으로 곡사로 넘긴다. 헐다운한 적은 직사 −16이지만 곡사는 위에서 떨어져 엄폐를 무시한다. 조준 셀이 파랑(직사)/주황(곡사)으로 표시된다.</p>
   </section>
 
   <section class="panel">
@@ -159,15 +156,15 @@
       <tr><td>측면</td><td><b>×1.2</b></td></tr>
       <tr><td>후면 (±60°)</td><td><b>×1.5</b> — 가장 약함</td></tr>
     </table>
-    <p class="muted">조종수(자동)는 이 각을 노려 적의 측후면으로 파고들고, 위태로울 땐 전면을 문 채 후진해 정면 장갑(×0.7)으로 받아낸다. 당신은 사수가 잡은 각이 좋을 때 방아쇠를 당긴다.</p>
+    <p class="muted">이동으로 적의 측후면 각에 붙으면 큰 피해를 준다. 반대로 위태로울 땐 전면을 문 채 후진해 정면 장갑(×0.7)으로 받아낸다.</p>
     <h3>2. 엄폐와 헐다운 <span class="tag live">구현됨</span></h3>
-    <p>방어는 <b>지형의 결과</b>다. 능선 마루의 헐다운 스팟(금색 링)에 서면 차체가 가려져 피격이 어려워진다 — 조종수는 이동 시 헐다운 위치를 우선 고려한다. 헐다운한 적은 <b>직격이 안 통하니 곡사로</b> 넘겨야 한다. 안개·폭우에서는 시야 밖 전차가 아예 보이지 않는다 (풀 흔들림으로만 감지 — 이때 곡사로 소리 나는 쪽을 노린다).</p>
-    <h3>3. 정지 조준 · 노출의 상충 <span class="tag live">구현됨</span></h3>
+    <p>방어는 <b>지형의 결과</b>다. 능선 마루의 헐다운 스팟(금색 링)에 서면 차체가 가려져 피격이 어려워진다 — 이동 목적지로 우선 노려라. 헐다운한 적은 <b>직사가 안 통하니 곡사로</b> 넘겨야 한다. 안개·폭우에서는 시야 밖 전차가 아예 보이지 않는다 (풀 흔들림으로만 감지).</p>
+    <h3>3. 기동 · 사격 · 경계의 상충 <span class="tag live">구현됨</span></h3>
     <table>
       <tr><th>선택</th><th>장점</th><th>위험</th></tr>
-      <tr><td>즉응사격 (탭 1회)</td><td>달리는 채로 즉시 발사 — 기회 놓치지 않음</td><td>보너스 없음, 기동 중이면 흔들림</td></tr>
-      <tr><td>정지 조준 (탭 2~3회)</td><td>명중 +15/+30, 약점 피해 — 조종수가 차를 세운다</td><td>오래 서 있는다 — 적의 정지 표적</td></tr>
-      <tr><td>이동 중 발사</td><td><b>움직이는 나는 맞히기 어렵다 (적 명중 −12)</b></td><td>내 즉응사격도 −8 흔들림</td></tr>
+      <tr><td>이동</td><td><b>움직이는 나는 맞히기 어렵다 (적 명중 −12)</b>, 각·엄폐 확보</td><td>그 턴엔 사격 못 함</td></tr>
+      <tr><td>정지 사격</td><td>안정된 명중으로 한 발</td><td>서 있는 동안 적의 좋은 표적</td></tr>
+      <tr><td>경계</td><td>지나는 적을 이동 도중 스냅 사격</td><td>스스로 움직이지 못함, 스냅 페널티</td></tr>
     </table>
   </section>
 
@@ -180,35 +177,35 @@
             <path d="M0,0 L6,3 L0,6 z" fill="#8b4d3a"/>
           </marker>
         </defs>
-        <text x="190" y="40" text-anchor="middle">🚚 기동(자동)</text>
-        <text x="60" y="255" text-anchor="middle">🎯 즉응사격</text>
-        <text x="320" y="255" text-anchor="middle">🔭 정지 조준</text>
+        <text x="190" y="40" text-anchor="middle">🚚 기동</text>
+        <text x="60" y="255" text-anchor="middle">🎯 사격</text>
+        <text x="320" y="255" text-anchor="middle">👁 경계</text>
         <path d="M165 55 L85 225" stroke="#8b4d3a" stroke-width="3" marker-end="url(#ah)" fill="none"/>
-        <text x="92" y="135" class="arrow-label">기동 ▶ 피탄 회피 (적 −12)</text>
+        <text x="92" y="135" class="arrow-label">기동 ▶ 사격 (표적 −12)</text>
         <path d="M300 225 L215 60" stroke="#8b4d3a" stroke-width="3" marker-end="url(#ah)" fill="none"/>
-        <text x="238" y="150" class="arrow-label">정지 조준 ▶ 큰 명중 보너스</text>
+        <text x="238" y="150" class="arrow-label">경계 ▶ 기동 (사선 스냅)</text>
         <path d="M95 245 L280 245" stroke="#8b4d3a" stroke-width="3" marker-end="url(#ah)" fill="none"/>
-        <text x="130" y="272" class="arrow-label">즉응 ▶ 선타 (빠른 한 발)</text>
+        <text x="120" y="272" class="arrow-label">사격 ▶ 경계 (선타)</text>
       </svg>
     </div>
-    <p class="muted center">움직이면 안 맞지만 못 맞히고, 서면 잘 맞히지만 잘 맞는다. 조준이 길수록 세지만 그만큼 노출된다 — 조종수가 알아서 움직이는 사이 당신은 이 저울질만 한다.</p>
+    <p class="muted center">움직이는 표적은 못 맞히고(적 −12), 경계는 지나는 적을 스냅하지만 스스로 못 움직인다. 상대가 무엇을 예약했을지 읽어 한 수 앞서라.</p>
   </section>
 
   <section class="panel">
-    <h2>사격 타임라인 예시</h2>
-    <p class="muted">조종수는 그 사이에도 알아서 기동한다 (2단 이상 조준 땐 정지).</p>
-    <div class="timeline">직격 즉응사격<br>
-탭 · 0.6초 조준 · 발사(달리는 채로도) — 이후 차종별 재장전 (버튼 아래 회색 차오름)</div>
-    <div class="timeline">정밀사격 (직격/곡사 공통) — 조준 ~3.9초<br>
-탭 즉응 → 다시 탭 조준(정지) → 다시 탭 정밀 → 발사 (+30, 약점 1.25배) — 긴 정지가 대가</div>
+    <h2>턴 예약 예시</h2>
+    <p class="muted">2턴을 미리 그려두면 아군·적이 동시에 풀린다.</p>
+    <div class="timeline">치고 빠지기<br>
+① 🚚 능선 마루(헐다운)로 이동 · ② 🎯 도착 위치에서 적 예측 사격 → 다음 라운드 후퇴로 이어간다</div>
+    <div class="timeline">매복<br>
+① 👁 경계(길목 사선 확보) · ② 👁 경계 — 두 턴 연속 지키며 지나는 적을 스냅 사격</div>
   </section>
 
   <section class="panel">
     <h2>전략 예시</h2>
-    <div class="flow">🎯 <b>정면 저격</b> — 사선이 트인 정면 표적은 <b>직격</b>. 여유가 있으면 두 번 탭해 정지 조준(+15)으로 확실히.</div>
-    <div class="flow">💫 <b>능선 너머로</b> — 적이 헐다운·언덕 뒤에 숨어 직격이 막히면 <b>곡사</b>로 넘겨 위에서 떨어뜨린다 (최소 4칸).</div>
-    <div class="flow">🌫 <b>안갯속 제압</b> — 폭우·안개로 안 보이면 소리 나는 쪽으로 <b>곡사</b> 맹사 — 풀 흔들림이 곧 표적 단서.</div>
-    <div class="flow">🔧 <b>타이밍 회복</b> — 조종수가 위태로우면 알아서 빠진다. HP가 급하면 <b>수리킷</b>, 좋은 각을 급히 잡아야 하면 <b>연료</b>로 부스트.</div>
+    <div class="flow">🎯 <b>예측 사격</b> — 적이 이동할 <b>빈 셀</b>을 예약 사격하면 도착한 적을 정통으로 맞힌다. 동시 턴이라 "지금 위치"가 아니라 "갈 위치"를 노려라.</div>
+    <div class="flow">💫 <b>능선 너머로</b> — 적이 헐다운·언덕 뒤에 숨어 직사가 막히면 사격이 <b>자동으로 곡사</b>가 되어 위에서 떨어진다 (최소 4칸).</div>
+    <div class="flow">👁 <b>사선 매복</b> — 경계로 길목을 지키면 그 사선을 지나는 적을 이동 도중 스냅. 두 턴 연속 경계도 가능.</div>
+    <div class="flow">🛡 <b>측면 사냥</b> — 이동으로 적 측후면 각(×1.2/×1.5)에 붙어 사격. 헐다운 스팟(금색 링)에 서면 내 차체가 가려진다.</div>
   </section>
 
   <p class="center"><a class="back" href="../game.html">🛠 게임으로 돌아가기</a></p>
