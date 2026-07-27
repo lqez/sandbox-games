@@ -38,18 +38,35 @@
   #turn-label { font-size: 12px; font-weight: 800; color: #1d4ed8; }
   #env-label { font-size: 12px; font-weight: 700; color: #55607a; margin-left: 6px; }
   #hint { font-size: 11px; font-weight: 600; color: #b0452c; min-height: 13px; max-width: 60vw; }
-  /* 계획 breadcrumb: ① 이동 ▸ ② 사격 — 예약/미리보기/빈 슬롯 */
+  /* 하단 소대 명령줄 — 엄지 접근 영역 */
+  #squad-bar {
+    bottom: 22px; left: 50%;
+    transform: translateX(-50%);
+    padding: 8px 10px;
+    display: flex; flex-direction: column; align-items: center; gap: 6px;
+    z-index: 12;
+    /* 폭을 명시해야 안쪽 flex-wrap이 칩 줄 폭에 갇히지 않는다 */
+    width: min(94vw, 366px); box-sizing: border-box;
+  }
+  #chip-row { display: flex; gap: 8px; }
+  /* 소대 명령 배정 줄: [↑남은거리] [T-34 이동] [FT 사격] [MkIV ·] */
   #crumb-row {
     display: flex; align-items: center; justify-content: center;
-    gap: 5px; margin: 4px 0 3px;
+    flex-wrap: wrap; gap: 4px;
+    max-width: 90vw;
   }
   .crumb {
-    font-size: 12px; font-weight: 800; color: #2b3445;
+    font-size: 11px; font-weight: 800; color: #2b3445;
     background: #e8ecf3; border: 2px solid #2b3445; border-radius: 8px;
-    padding: 3px 9px; white-space: nowrap;
+    padding: 3px 7px; white-space: nowrap;
+    font-family: inherit; line-height: 1.25;
   }
+  /* 유닛 칩은 탭 가능해야 한다 — #hud가 pointer-events:none이므로 개별 지정 */
+  button.crumb { pointer-events: auto; cursor: pointer; }
   .crumb.empty { color: #9aa3b5; background: transparent; border-style: dashed; border-color: #9aa3b5; }
   .crumb.pending { color: #2ea04f; border-color: #2ea04f; background: #eaf7ee; }
+  /* 선택된 소대원 — 굵은 노란 링 */
+  .crumb.sel { box-shadow: 0 0 0 3px #ffd24d; border-color: #1d4ed8; color: #1d4ed8; }
   .crumb-sep { font-size: 12px; font-weight: 900; color: #8b95a8; }
   .chip {
     pointer-events: auto;
@@ -115,6 +132,15 @@
   #thumb-enemies {
     position: fixed; top: 10px; right: 10px; z-index: 10;
     display: flex; flex-direction: column; gap: 6px;
+  }
+  /* 폰 세로: 적 섬네일이 화면 절반을 먹지 않게 축소 + 2열 랩 */
+  @media (max-aspect-ratio: 3/4) {
+    #thumb-enemies {
+      flex-direction: row; flex-wrap: wrap-reverse; justify-content: flex-end;
+      max-width: 108px; gap: 4px;
+    }
+    #thumb-enemies .thumb { width: 34px; height: 34px; border-radius: 7px; }
+    #thumb-player { width: 44px; height: 44px; }
   }
   /* 섬네일 확대 상세 */
   #thumb-detail {
@@ -344,13 +370,19 @@
 
   <div id="hud" class="panel">
     <div><span id="turn-label">턴 1</span><span id="env-label"></span></div>
+    <div id="hint"></div>
+  </div>
+
+  <!-- 소대 명령줄: 엄지가 닿는 하단에 유닛 칩 + 액션 칩 -->
+  <div id="squad-bar" class="panel">
     <div id="crumb-row">
       <span id="crumbs"></span>
+    </div>
+    <div id="chip-row">
       <button id="chip-ow" class="chip" hidden>👁 경계</button>
       <button id="chip-run" class="chip" hidden>▶ 실행</button>
       <button id="chip-undo" class="chip" hidden>✕</button>
     </div>
-    <div id="hint"></div>
   </div>
 
   <div id="thumb-player" class="thumb player"></div>

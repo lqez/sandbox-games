@@ -49,29 +49,49 @@ function mulberry32(a) {
 }
 const rng = mulberry32(seed);
 
-// 맵 크기: 60~120 가로세로 독립 (비정사각 가능) — 시드 기반.
-// GW = x축(가로) 칸 수, GH = z축(세로) 칸 수.
-const GW = 60 + Math.floor(rng() * 61);
-const GH = 60 + Math.floor(rng() * 61);
+// ── 돌파 런: 세로 회랑 (폰 세로 화면) ──
+// 가로 10칸(셀 ≈39px, 엄지 조작 가능한 최대 폭) × 세로 36칸.
+// 위로 올라가며 방어선을 하나씩 돌파한다 — 시뮬레이션 검증:
+// 회랑은 '동시에 나를 때리는 적 수'를 3.0 → 1.5로 낮춘다(순차 교전).
+const GW = 10;
+const GH = 36;
 const GRID = Math.max(GW, GH); // 노이즈 격자 등 단일 스케일용
 const AREA_F = (GW * GH) / 3600;  // 60×60 기준 면적 배율 (식생/프랍 개수)
 const MSCALE = GRID / 60;         // 카메라/포그/섀도 스케일
-// 하이트필드 밀도: 큰 맵일수록 낮춰 정점 예산(~480² 수준) 유지
 const VRES = Math.max(3, Math.min(8, Math.round(480 / GRID)));
-// 스폰: 플레이어는 남쪽 중앙부, 적은 북쪽 띠에 고르게 —
-// 맵이 클수록 적이 많아진다 (면적 비례, 2~6)
-const PLAYER_SPAWN = { gx: Math.round(GW * 0.5), gz: GH - 9 };
-const N_ENEMY = Math.max(2, Math.min(6, Math.round(2 * AREA_F)));
-const ENEMY_SPAWNS = [];
-for (let ei = 0; ei < N_ENEMY; ei++) {
-  const fr = N_ENEMY === 1 ? 0.5 : ei / (N_ENEMY - 1);
-  ENEMY_SPAWNS.push({
-    gx: Math.round(THREE.MathUtils.clamp(GW * (0.18 + 0.64 * fr) + (rng() - 0.5) * 5, 3, GW - 4)),
-    gz: 8 + Math.floor(rng() * 7),
-  });
+// 소대: 3대를 남쪽 끝에 나란히. 적 총 5대를 2개 방어선(밴드)에 배치.
+// (검증: 총 적 수 상한 ≈ 아군 × 1.5. 2~3배는 산술적으로 패배)
+const SQUAD_SIZE = 3;
+const PLAYER_SPAWNS = [];
+for (let i = 0; i < SQUAD_SIZE; i++) {
+  PLAYER_SPAWNS.push({ gx: 3 + i * 2, gz: GH - 3 });
 }
+const PLAYER_SPAWN = PLAYER_SPAWNS[1]; // 구 코드 호환 (중앙 유닛)
+const N_ENEMY = 5;
+const BANDS = 2;                       // 방어선 수 — 정리하면 정비(회복)
+const ENEMY_SPAWNS = [];
+{
+  const perBand = Math.ceil(N_ENEMY / BANDS);
+  let placed = 0;
+  for (let b = 0; b < BANDS && placed < N_ENEMY; b++) {
+    // 밴드 z: 위쪽(목표)부터 아래로 균등 — b=0이 가장 먼 방어선
+    const bz = Math.round(4 + b * ((GH - 12) / BANDS));
+    for (let j = 0; j < perBand && placed < N_ENEMY; j++, placed++) {
+      ENEMY_SPAWNS.push({
+        gx: Math.round(THREE.MathUtils.clamp(2 + rng() * (GW - 4), 1, GW - 2)),
+        gz: Math.max(2, bz + Math.floor((rng() - 0.5) * 3)),
+        band: b,
+      });
+    }
+  }
+}
+const GOAL_GZ = 2; // 이 줄까지 올라가면 돌파 성공
 // 강: 82% 확률로 존재, 폭도 구간별로 변한다 (아예 없을 수도)
-const hasRiver = rng() < 0.82;
+// 강은 남북으로 흐른다(riverCx = x좌표). 가로 10칸 세로 회랑에서는 통로를
+// 길이 방향으로 덮어 이동 가능 셀이 0이 된다 — 좁은 판에서는 생성하지 않는다.
+// (동서로 횡단하는 강 + 교량 애로점은 후속 과제)
+const riverRoll = rng() < 0.82; // rng 호출 순서 유지 (시드 재현성)
+const hasRiver = GW >= 24 && riverRoll;
 
 // ---------------------------------------------------------------------------
 // 시간대·날씨 — 지형 rng와 분리된 시드 분기 (같은 시드 = 같은 지형 유지).
@@ -142,6 +162,12 @@ const ENV = (() => {
     e.fogCol = gray(e.fogCol, 0.85, 0.45); e.fogNear = 14; e.fogFar = 46 + 14 * MSCALE;
     e.rainCount = 3000; e.lightning = true; e.cloudy = true; e.sky = { ...e.sky, top: null };
   }
+  // ── 회랑 보정 ── 기존 포그 거리는 60~120칸 대형 맵 기준이라, 카메라가
+  // 소대 뒤 ~28유닛에 있는 세로 회랑에서는 화면 전체가 흰 안개로 덮인다.
+  // 시야 제한(VIS_LIMIT)은 게임 규칙이 담당하므로, 시각 포그는 판이 읽히는
+  // 최소 거리까지 밀어낸다.
+  e.fogNear = Math.max(e.fogNear, 32);
+  e.fogFar = Math.max(e.fogFar, 76);
   return e;
 })();
 
@@ -182,18 +208,39 @@ app.appendChild(renderer.domElement);
 const scene = new THREE.Scene();
 scene.fog = new THREE.Fog(ENV.fogCol, ENV.fogNear, ENV.fogFar);
 
+// 폰 세로 화면 회랑 카메라: 소대 뒤에서 북쪽(−z)을 내려다본다.
+// 오빗/팬은 잠근다 — 세로 화면에서 카메라 조작은 탭-플랜과 손가락을 다툰다.
+// 세로 화면(폭 390)에서 가로 10칸이 딱 들어차는 거리 ≈ 28유닛.
+const CAM_OFF = new THREE.Vector3(0, 18, 22); // 소대 기준 (뒤·위)
+const CAM_LOOKAHEAD = 8;                      // 목표점을 북쪽으로 당겨 전방을 넓게
 const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 400);
-camera.position.set(32 * MSCALE, 37 * MSCALE, 44 * MSCALE);
+const camTarget = new THREE.Vector3(0, 0, (GH - 1) / 2 - CAM_LOOKAHEAD);
+camera.position.copy(camTarget).add(CAM_OFF);
 
 const controls = new OrbitControls(camera, renderer.domElement);
-controls.target.set(0, 0, 6 * MSCALE);
+controls.target.copy(camTarget);
 controls.enableDamping = true;
 controls.dampingFactor = 0.08;
-controls.minDistance = 12;
-controls.maxDistance = 70;
+controls.minDistance = 14;
+controls.maxDistance = 34;
 controls.maxPolarAngle = Math.PI * 0.46;
-controls.enablePan = true;
-controls.panSpeed = 0.6;
+controls.enableRotate = false; // 세로 회랑은 고정 앵글
+controls.enablePan = false;
+// 소대 선두를 따라 카메라가 위로 스크롤한다
+function updateCorridorCamera(dt) {
+  const live = (typeof squad !== 'undefined' ? squad : []).filter((u) => u.alive);
+  if (!live.length) return;
+  let sx = 0, sz = 0;
+  for (const u of live) { sx += u.group.position.x; sz += u.group.position.z; }
+  const cx = sx / live.length;
+  const frontZ = Math.min(...live.map((u) => u.group.position.z)); // 최선두(북쪽)
+  const wantZ = Math.min(cx * 0 + frontZ - CAM_LOOKAHEAD, (GH - 1) / 2);
+  const k = 1 - Math.exp(-dt * 2.6);
+  const prev = controls.target.clone();
+  controls.target.x += (cx * 0.5 - controls.target.x) * k; // 좌우는 절반만 따라간다
+  controls.target.z += (wantZ - controls.target.z) * k;
+  camera.position.add(controls.target.clone().sub(prev)); // 카메라도 같은 만큼 평행이동
+}
 
 const hemiLight = new THREE.HemisphereLight(ENV.hemiSky, ENV.hemiGnd, ENV.hemiInt);
 scene.add(hemiLight);
@@ -2960,25 +3007,31 @@ function updateHpBar(unit) {
 // 유닛
 // ---------------------------------------------------------------------------
 const units = [];
-function spawnUnit(isPlayer, gx, gz, facing) {
-  // 차고에서 조립한 SD 킷 모델 사용 — 플레이어는 선택 기체, 적은 나머지 기체
-  const kitKey = isPlayer ? playerKit : enemyKit;
+function spawnUnit(isPlayer, gx, gz, facing, kitOverride = null) {
+  // 차고에서 조립한 SD 킷 모델 사용 — 플레이어 소대는 혼성, 적은 단일 기체
+  const kitKey = kitOverride ?? (isPlayer ? playerKit : enemyKit);
   const model = buildKitTank(kitKey);
-  const hullLv = isPlayer ? PLAYER_STATS.hullLv : 1 + Math.floor(rng() * 3);
-  const driverLv = isPlayer ? PLAYER_STATS.driverLv : 1 + Math.floor(rng() * 3);
-  const base = isPlayer ? PLAYER_STATS : ENEMY_BASE;
+  // 소대원은 각자 자기 차종의 스탯을 쓴다 (혼성 편성의 핵심)
+  const kitStats = KIT_INFO[kitKey].stats;
+  const hullLv = isPlayer ? kitStats.hullLv : 1 + Math.floor(rng() * 3);
+  const driverLv = isPlayer ? kitStats.driverLv : 1 + Math.floor(rng() * 3);
+  const base = isPlayer ? kitStats : ENEMY_BASE;
   const maxHp = (isPlayer ? 110 : 60) + hullLv * 15;
+  // 회랑(10×36)에 맞춘 사거리·이동력 축소 — 사거리가 판을 다 덮으면
+  // 거리가 상수가 되어 차종 차이가 무의미해진다 (검증: 스케일 0.42~0.5)
+  const RANGE_F = 0.45, MP_F = 0.4;
   const unit = {
     isPlayer, gx, gz, kitKey,
-    // 리얼타임: 플레이어 재장전은 시간 기반(reloadReadyAt) — 차종별 reload×3초
     gun: KIT_INFO[kitKey].gun,
     reloadReadyAt: 0,
     reloadLeft: 0,
     movedLastTurn: false,
     aimStack: 0,
     boostTurns: 0,
-    inventory: [], // 플레이어: 자동 주행 중 주운 아이템(수리/연료)을 버튼으로 사용
-    mp: base.mp, fireRange: base.fireRange, damage: base.damage,
+    inventory: [],
+    mp: Math.max(3, Math.round(base.mp * MP_F)),
+    fireRange: Math.max(4, Math.round(base.fireRange * RANGE_F)),
+    damage: base.damage,
     hullLv, driverLv,
     hp: maxHp, maxHp,
     alive: true,
@@ -3020,8 +3073,20 @@ function spawnUnit(isPlayer, gx, gz, facing) {
 }
 // 적은 모두 같은 차체 — 시드로 하나 선택
 const enemyKit = enemyKits[Math.floor(rng() * enemyKits.length)];
-const player = spawnUnit(true, PLAYER_SPAWN.gx, PLAYER_SPAWN.gz, Math.PI);
-const enemies = ENEMY_SPAWNS.map((s) => spawnUnit(false, s.gx, s.gz, 0));
+// ── 소대 편성: 선택 차종 + 다른 차종들 (혼성) ──
+// 차종마다 기계적 성격이 달라 쓸 자리가 다르다 (FT 속사·경장 / Mark IV 고정
+// 스폰슨 측면포 / T-34 균형 / 티거 장거리 중장).
+const SQUAD_KITS = [playerKit, ...enemyKits].slice(0, SQUAD_SIZE);
+const squad = PLAYER_SPAWNS.map((s, i) =>
+  spawnUnit(true, s.gx, s.gz, Math.PI, SQUAD_KITS[i % SQUAD_KITS.length]));
+// player = "지금 선택된 아군 유닛" 포인터 — 기존 코드 전체가 이걸 통해 동작한다
+let player = squad[0];
+const enemies = ENEMY_SPAWNS.map((s) => {
+  const e = spawnUnit(false, s.gx, s.gz, 0);
+  e.band = s.band;
+  e.awake = false; // 휴면: 소대가 접근하면 깨어난다 (순차 교전의 핵심)
+  return e;
+});
 
 // 탱크가 2×2타일 크기이므로 다른 유닛과 체비쇼프 1칸 이내로 접근 불가
 const isOccupied = (gx, gz, except = null) =>
@@ -3496,8 +3561,9 @@ async function moveUnit(unit, path, finalFacing = null, onStep = null) {
     unit.gz = cell.gz;
     unit.group.position.y = driveHeight(to.x, to.z);
     tryPickupItem(unit); // 아이템 위를 지나면 획득
+    // 경계 스냅은 resolveOneTurn의 onStep이 담당한다 (WeGo 단일 경로).
+    // 리얼타임 시절의 rtSnapCheck를 함께 호출하면 이중 사격이 됐다.
     if (onStep) onStep(unit);
-    rtSnapCheck(unit); // 리얼타임 경계망: 자세 잡은 상대가 있으면 스냅 사격
   }
   } finally {
     unit._driving = false;
@@ -3513,39 +3579,6 @@ async function moveUnit(unit, path, finalFacing = null, onStep = null) {
 }
 
 // 리얼타임 경계망: 경계 자세(_owPosture)인 유닛은 상대가 자기 포 방향
-// ±12° 사선으로 이동해 들어오는 순간 스냅 사격한다 (자세 소모, 페널티 -8)
-function rtSnapCheck(mover) {
-  if (!mover.alive) return;
-  const ARC = THREE.MathUtils.degToRad(12);
-  for (const ow of units) {
-    if (!ow.alive || ow === mover || ow.isPlayer === mover.isPlayer) continue;
-    if (!ow._owPosture || ow._snapBusy) continue;
-    if (ow.isPlayer ? (ow.reloadReadyAt ?? 0) > performance.now() : ow.reloadLeft > 0) continue;
-    const dx = mover.group.position.x - ow.group.position.x;
-    const dz = mover.group.position.z - ow.group.position.z;
-    if (Math.hypot(dx, dz) / TILE > VIS_LIMIT) continue; // 안개·폭우 시야 밖
-    const bearing = Math.atan2(dx, dz);
-    let aligned;
-    if (ow.sponsonTwin) {
-      aligned = ow.sponsons.some((s) =>
-        Math.abs(normAngle(bearing - (ow.group.rotation.y + s.group.rotation.y))) <= ARC);
-    } else {
-      const gunYaw = ow.group.rotation.y +
-        (ow.hasTurret ? ow.turret.rotation.y : (ow.cannon?.rotation.y ?? 0));
-      aligned = Math.abs(normAngle(bearing - gunYaw)) <= ARC;
-    }
-    if (!aligned) continue;
-    const shot = computeShot(ow, { unit: mover });
-    if (!shot.ok) continue;
-    ow._owPosture = false;
-    ow._snapBusy = true;
-    shot.chance = Math.max(5, shot.chance - SNAP_PENALTY);
-    popText(ow.group.position.clone().add(new THREE.Vector3(0, 1.2, 0)), '경계 사격!', '#ffd76e');
-    if (ow.isPlayer) ow.reloadReadyAt = performance.now() + (ow.gun?.reload ?? 2) * RELOAD_MS_PER;
-    else ow.reloadLeft = ow.gun?.reload ?? 2;
-    fireSequence(ow, { unit: mover }, shot).finally(() => { ow._snapBusy = false; });
-  }
-}
 
 // ---------------------------------------------------------------------------
 // 이펙트: 파편 / 폭발 / 크레이터 / 분해
@@ -4470,6 +4503,20 @@ async function applyUnitDamage(target, rawDmg, fromPos = null) {
     if (rel <= 60) { aspectMult = 0.7; aspectLabel = '전면 장갑'; aspectColor = '#8fc9ff'; }
     else if (rel >= 120) { aspectMult = 1.5; aspectLabel = '후면 직격'; aspectColor = '#ff6a5e'; }
     else { aspectMult = 1.2; aspectLabel = '측면 관통'; aspectColor = '#ffb454'; }
+    // ── 정면 도탄 ── 각이 좋으면 무피해로 튕긴다.
+    // 시뮬레이션에서 실력 보상을 4배로 키운 유일한 레버(헤드룸 +3 → +12).
+    // 화력·HP를 올려 똑같이 쉽게 만든 대조군은 헤드룸 0~3에 그쳤다.
+    armorStat[aspectMult === 0.7 ? 'front' : aspectMult === 1.5 ? 'rear' : 'side']++;
+    if (rel <= 60 && Math.random() < RICOCHET_CHANCE) {
+      armorStat.ricochet++;
+      const p = target.group.position.clone();
+      p.y += 1.3;
+      popText(p, '⟋ 튕겼다!', '#bfe3ff');
+      hitDirectionFx(target, fromPos, '#bfe3ff');
+      sfx('hit');
+      if (target.isPlayer) setHint('⟋ 정면 도탄 — 전면장갑이 막아냈다');
+      return;
+    }
   }
   const dmg = Math.round(rawDmg * aspectMult * (1 - 0.07 * target.hullLv)); // 차체 레벨 = 장갑
   target.hp -= dmg;
@@ -5614,6 +5661,8 @@ function hideBowUI() {
 // 목표가 그 턴에 움직이면 빗나간다. 플레이어가 행동을 고르는 즉시
 // 적들도 행동을 계획하고 전원 동시에 해결된다.
 const COLLISION_DMG = 16; // 같은 칸 진입 충돌 시 상호 피해
+const RICOCHET_CHANCE = 0.45; // 정면 피격 도탄 확률 — 각 싸움의 핵심
+const armorStat = { ricochet: 0, front: 0, side: 0, rear: 0 }; // 계측(테스트용)
 let turnNo = 1;
 let phase = 'plan'; // plan | resolve | gameover
 let busy = false;
@@ -5879,21 +5928,39 @@ function refreshPlanUI(fireEmphasis = false) {
   renderCrumbs();
 }
 
-// 상단 breadcrumb: 예약 슬롯 [① 이동 ▸ ② 사격] + 액션 칩 (경계/실행/취소)
+// ── 소대 명령 배정 ──
+// 한 턴에 소대원 각자 동사 하나(이동/사격/경계). 전원 배정되면 동시 해결.
 const PLAN_LABEL = { move: '🚚 이동', fire: '🎯 사격', overwatch: '👁 경계', wait: '⏸ 대기' };
+const KIT_SHORT = { ft: 'FT', mk4: 'MkIV', t34: 'T-34', tiger: '티거' };
+const squadAlive = () => squad.filter((u) => u.alive);
+const squadPlanned = () => squadAlive().every((u) => u.plan);
+const nextUnplanned = () => squadAlive().find((u) => u !== player && !u.plan) ?? null;
+function selectUnit(u) {
+  if (!u || !u.alive || phase !== 'plan' || busy) return;
+  clearPending();
+  player = u;
+  refreshPlanUI();
+  setHint(`${KIT_SHORT[u.kitKey] ?? ''} 선택 — 셀을 탭해 이동, 자기 차를 탭하면 사격`);
+}
+// 상단 상태줄: 소대원별 배정 현황 + 액션 칩
 function renderCrumbs() {
-  let html = '';
-  for (let i = 0; i < PLAN_AHEAD; i++) {
-    if (i > 0) html += '<span class="crumb-sep">▸</span>';
-    const q = planQueue[i];
-    if (q) html += `<span class="crumb">${i + 1} ${PLAN_LABEL[q.type]}</span>`;
-    else if (i === planQueue.length && pendingPlan) html += `<span class="crumb pending">${i + 1} ${PLAN_LABEL[pendingPlan.type]}?</span>`;
-    else html += `<span class="crumb empty">${i + 1} ·</span>`;
+  let html = `<span class="crumb empty">↑ ${Math.max(0, Math.min(...squadAlive().map((u) => u.gz)) - GOAL_GZ)}칸</span>`;
+  for (const u of squad) {
+    if (!u.alive) { html += '<span class="crumb empty">💥</span>'; continue; }
+    const sel = u === player ? ' sel' : '';
+    const lbl = u.plan ? PLAN_LABEL[u.plan.type]
+      : (u === player && pendingPlan) ? `${PLAN_LABEL[pendingPlan.type]}?` : '·';
+    html += `<button class="crumb${sel}${u.plan ? '' : ' empty'}" data-uid="${units.indexOf(u)}">`
+      + `${KIT_SHORT[u.kitKey] ?? ''} ${lbl}</button>`;
   }
   crumbsEl.innerHTML = html;
+  // 유닛 칩 탭 = 그 유닛 선택
+  crumbsEl.querySelectorAll('[data-uid]').forEach((b) =>
+    b.addEventListener('click', () => selectUnit(units[+b.dataset.uid])));
   const planning = phase === 'plan' && !busy;
-  chipRun.hidden = !(planning && planQueue.length > 0);
-  chipUndo.hidden = !(planning && (planQueue.length > 0 || pendingPlan || fireMode));
+  const anyPlan = squadAlive().some((u) => u.plan);
+  chipRun.hidden = !(planning && anyPlan);
+  chipUndo.hidden = !(planning && (anyPlan || pendingPlan || fireMode));
   if (chipOw) { chipOw.hidden = !planning; chipOw.textContent = projReload > 0 ? '⏸ 대기' : '👁 경계'; }
 }
 
@@ -5903,51 +5970,50 @@ function startPlanning() {
   busy = false;
   planQueue = [];
   for (const u of units) if (u.alive && u.reloadLeft > 0) u.reloadLeft -= 1;
+  for (const u of squad) u.plan = null;
+  if (!player.alive) player = squadAlive()[0] ?? player;
   clearPending();
   ghost.visible = false;
   hideBowUI();
   turnLabel.textContent = `턴 ${turnNo}`;
+  wakeNearbyEnemies();
   refreshPlanUI();
 }
 
-// 단일 턴 즉시 해결 (테스트 훅·경계 버튼용)
+// 단일 유닛 플랜 즉시 해결 (테스트 훅용)
 async function submitPlan(plan) {
   if (phase !== 'plan' || busy) return;
   player.plan = plan;
-  planEnemies();
-  await resolveOneTurn();
-  if (phase !== 'gameover') startPlanning();
+  await resolveTurn();
 }
 
-// 인터랙티브: 플랜을 큐에 예약. PLAN_AHEAD턴 차면 자동 실행(동시 턴 해결).
+// 선택 유닛에 명령 배정 → 다음 미배정 유닛으로 이동. 전원 차면 자동 실행.
 function enqueuePlan(plan) {
   if (phase !== 'plan' || busy) return;
-  planQueue.push(plan);
-  if (planQueue.length >= PLAN_AHEAD) { resolveQueue(); return; }
+  player.plan = plan;
+  clearPending();
   ghost.visible = false;
   hideBowUI();
+  if (squadPlanned()) { resolveTurn(); return; }
+  const nxt = nextUnplanned();
+  if (nxt) player = nxt;
   refreshPlanUI();
 }
 
-// 예약된 플랜들을 순차 서브턴으로 실행. 매 서브턴 적이 새로 반응하고,
-// 플레이어·적 전 차량이 동시에(WeGo) 이동·사격한다.
-async function resolveQueue() {
-  if (phase !== 'plan' || busy || !planQueue.length) return;
+// 동시 해결: 소대·적 전 차량이 한꺼번에 이동·사격한다 (WeGo)
+async function resolveTurn() {
+  if (phase !== 'plan' || busy) return;
   clearPending();
-  const queue = planQueue;
-  planQueue = [];
   ghost.visible = false;
   drawQueueGhosts();
-  for (let i = 0; i < queue.length; i++) {
-    if (!player.alive) break;
-    if (i > 0) for (const u of units) if (u.alive && u.reloadLeft > 0) u.reloadLeft -= 1;
-    player.plan = queue[i];
-    planEnemies();
-    await resolveOneTurn();
-    if (phase === 'gameover') return;
-  }
+  for (const u of squad) if (u.alive && !u.plan) u.plan = { type: 'wait' };
+  planEnemies();
+  await resolveOneTurn();
+  if (phase === 'gameover') return;
+  checkBandCleared();
   startPlanning();
 }
+const resolveQueue = resolveTurn; // 구 이름 호환 (테스트 훅)
 
 // 적 AI — AI 레벨(driverLv):
 //  Lv1: 현재 칸 조준 / Lv2: 절반 리드 + 굴착 + 경계 / Lv3: 완전 외삽 리드
@@ -6068,9 +6134,52 @@ async function enemyActionLoop(e) {
   }
 }
 
-// 구 턴 머신 호환 심 (테스트 훅 경유 시)
+// 적 결심 — 휴면(dormant) 적은 계획하지 않는다.
+// 회랑 돌파의 핵심: 소대가 접근할 때까지 방어선은 잠들어 있어서
+// '동시에 나를 때리는 적 수'가 낮게 유지된다 (검증: 3.0 → 1.5).
 function planEnemies() {
-  for (const e of enemies) if (e.alive) e.plan = decideEnemy(e);
+  wakeNearbyEnemies();
+  for (const e of enemies) if (e.alive && e.awake) e.plan = decideEnemy(e);
+}
+// 아군 어느 유닛에게든 (사거리+3) 안으로 들어오면 그 적이 깨어난다
+function wakeNearbyEnemies() {
+  const live = squad.filter((u) => u.alive);
+  for (const e of enemies) {
+    if (!e.alive || e.awake) continue;
+    if (live.some((u) => Math.hypot(e.gx - u.gx, e.gz - u.gz) <= e.fireRange + 3)) {
+      e.awake = true;
+      popText(e.group.position.clone().add(new THREE.Vector3(0, 1.8, 0)), '⚠ 적 발견', '#ff9a6e');
+    }
+  }
+}
+// 방어선(밴드) 정리 판정 → 정비: 살아남은 소대원 HP 일부 회복.
+// 시뮬레이션에서 정비 없는 연전은 잔여 HP 0%로 수렴했다 (런의 전제 조건).
+let bandsRepaired = 0;
+let killsAtLastRepair = 0;
+function checkBandCleared() {
+  if (bandsRepaired >= BANDS) return;
+  // 깨어 있으면서 살아 있는 적이 없다 = 현재 교전 종료
+  if (enemies.some((e) => e.alive && e.awake)) return;
+  if (!enemies.some((e) => e.alive)) return; // 전멸이면 정비 대신 승리 판정
+  // 실제로 방어선을 정리했을 때만 정비한다 — 교전 시작 전(아무도 안 깨어난
+  // 상태)에는 조건이 자동 성립해 정비가 공짜로 소진됐다.
+  const kills = enemies.filter((e) => !e.alive).length;
+  if (kills <= killsAtLastRepair) return;
+  killsAtLastRepair = kills;
+  bandsRepaired++;
+  for (const u of squad) {
+    if (!u.alive) continue;
+    const before = u.hp;
+    u.hp = Math.min(u.maxHp, u.hp + Math.round(u.maxHp * 0.5));
+    u.reloadLeft = 0;
+    updateHpBar(u);
+    if (u.hp > before) {
+      popText(u.group.position.clone().add(new THREE.Vector3(0, 1.6, 0)),
+        `🔧 +${u.hp - before}`, '#8df08f');
+    }
+  }
+  updatePlayerHpUI();
+  setHint(`🔧 방어선 돌파 — 소대 정비 완료 (${bandsRepaired}/${BANDS})`);
 }
 
 // 이동 충돌 시뮬레이션: 스텝 단위로 동시 진행.
@@ -6186,12 +6295,9 @@ async function resolvePlannedShot(u) {
   }
   if (!shot?.ok) { target = { gx, gz }; shot = computeShot(u, target, null, null, wasLob); }
   if (!shot.ok) { target = { gx, gz }; shot = u.plan.shot; } // 지형 변화 등 — 계획값으로 발사
-  if (u.isPlayer) {
-    u.reloadLeft = 0; // 플레이어는 시간 기반 재장전
-    u.reloadReadyAt = performance.now() + (u.gun?.reload ?? 2) * RELOAD_MS_PER;
-  } else {
-    u.reloadLeft = u.gun?.reload ?? 2;
-  }
+  // 턴제 재장전 — 양측 동일. (리얼타임 시절의 플레이어 전용 시간 재장전은
+  // 버그로 남아 플레이어만 매 턴 사격하게 만들었다: 승률 3% → 37% 왜곡)
+  u.reloadLeft = u.gun?.reload ?? 2;
   u.aimStack = 0; // 조준 스택 소모
   await fireSequence(u, target, shot);
 }
@@ -6324,18 +6430,23 @@ async function resolveOneTurn() {
   // startPlanning은 호출자(submitPlan/resolveQueue)가 큐를 마친 뒤 부른다
 }
 
+// 돌파 런 종료 판정: 소대 전멸 = 패배 / 최상단 도달 또는 전멸 = 돌파 성공
 function checkGameEnd() {
-  if (!player.alive) {
+  const live = squad.filter((u) => u.alive);
+  if (!live.length) {
     phase = 'gameover';
-    overlayTitle.textContent = '💥 패배...';
-    overlaySub.textContent = '내 탱크가 격파되었습니다. 다시 조립해 봅시다!';
+    overlayTitle.textContent = '💥 소대 전멸';
+    overlaySub.textContent = `${turnNo}턴에서 돌파 실패. 차고에서 다시 편성해 봅시다!`;
     overlay.classList.add('show');
     return true;
   }
-  if (enemies.every((e) => !e.alive)) {
+  const breached = live.some((u) => u.gz <= GOAL_GZ);
+  if (breached || enemies.every((e) => !e.alive)) {
     phase = 'gameover';
-    overlayTitle.textContent = '🏆 승리!';
-    overlaySub.textContent = `${turnNo}턴 만에 모든 적 탱크를 격파했습니다!`;
+    overlayTitle.textContent = breached ? '🏆 돌파 성공!' : '🏆 방어선 소멸!';
+    const kills = enemies.filter((e) => !e.alive).length;
+    overlaySub.textContent =
+      `${turnNo}턴 · 격파 ${kills}/${enemies.length} · 생존 ${live.length}/${squad.length}대`;
     overlay.classList.add('show');
     return true;
   }
@@ -6348,11 +6459,12 @@ if (chipOw) chipOw.addEventListener('click', () => {
   clearPending();
   enqueuePlan(projReload > 0 ? { type: 'wait' } : { type: 'overwatch' });
 });
-// ▶ 실행: 예약한 턴들을 동시 턴으로 해결.
+// ▶ 실행: 배정한 명령을 동시 턴으로 해결 (미배정 유닛은 대기).
 chipRun.addEventListener('click', () => {
-  if (phase !== 'plan' || busy || !planQueue.length) return;
+  if (phase !== 'plan' || busy) return;
+  if (!squadAlive().some((u) => u.plan)) return;
   clearPending();
-  resolveQueue();
+  resolveTurn();
 });
 chipUndo.addEventListener('click', () => cancelAction());
 
@@ -6600,10 +6712,15 @@ function cancelAction() {
   if (fireGesture) { fireGesture = null; hideBowUI(); hoverAim = null; controls.enabled = true; downPos = null; refreshPlanUI(false); setHint('취소'); return; }
   if (ghostGesture) { ghostGesture = null; ghost.visible = false; controls.enabled = true; downPos = null; refreshPlanUI(false); setHint('취소'); return; }
   if (pendingPlan || fireMode) { clearPending(); refreshPlanUI(false); setHint('취소'); return; }
-  if (phase === 'plan' && !busy && planQueue.length) {
-    planQueue.pop();
-    setHint(`예약 취소 (${planQueue.length}턴 남음)`);
-    refreshPlanUI(false);
+  if (phase === 'plan' && !busy) {
+    // 배정 취소: 선택 유닛 → 없으면 배정된 유닛 중 마지막
+    const target = player.plan ? player : [...squadAlive()].reverse().find((u) => u.plan);
+    if (target) {
+      target.plan = null;
+      player = target;
+      setHint(`${KIT_SHORT[target.kitKey] ?? ''} 명령 취소`);
+      refreshPlanUI(false);
+    }
   }
 }
 window.addEventListener('keydown', (e) => {
@@ -6672,17 +6789,24 @@ let lastNow = 0;
 // ── 안개·폭우 시야: VIS_LIMIT칸 밖의 적은 렌더링 자체를 끈다.
 // 풀 튕김·나무 흔들림·궤도 자국·엔진음 같은 간접 신호만 남는다.
 function updateVisibility() {
-  if (VIS_LIMIT === Infinity) return;
+  const live = squad.filter((u) => u.alive);
   for (const e of enemies) {
     if (!e.alive) {
       // 격파 순간 은폐 해제 — 잔해·화염은 안개 속에서도 빛나 보인다
       if (e.hidden) { e.hidden = false; e.group.visible = true; if (thumbsReady) updateThumbs(); }
       continue;
     }
-    const d = Math.hypot(
-      e.group.position.x - player.group.position.x,
-      e.group.position.z - player.group.position.z
-    ) / TILE;
+    // 아직 발견하지 않은(휴면) 적은 HP·레벨을 노출하지 않는다
+    if (e.hpBar) e.hpBar.sprite.visible = !!e.awake;
+    if (VIS_LIMIT === Infinity || !live.length) continue;
+    // 소대원 중 가장 가까운 유닛 기준 — 3대가 흩어지므로 최근접이 시야 기준
+    let d = Infinity;
+    for (const u of live) {
+      d = Math.min(d, Math.hypot(
+        e.group.position.x - u.group.position.x,
+        e.group.position.z - u.group.position.z
+      ) / TILE);
+    }
     const hid = d > VIS_LIMIT;
     if (hid !== !!e.hidden) {
       e.hidden = hid;
@@ -6805,6 +6929,7 @@ function animate(now) {
     it.group.rotation.y = now * 0.0012;
     it.group.position.y += Math.sin(now * 0.0028 + it.group.position.x) * 0.0007;
   }
+  updateCorridorCamera(dt); // 소대 선두를 따라 위로 스크롤
   controls.update();
   renderer.info.reset();
   composer.render();
@@ -6813,7 +6938,7 @@ function animate(now) {
 updatePlayerHpUI();
 // ── 개전: 2턴 미리 예약 → 동시 턴 해결 (WeGo) ──
 startPlanning();
-setHint('셀을 탭해 이동, 내 전차를 탭하면 사격 모드 — 최대 2턴 예약 후 ▶ 실행');
+setHint('↑ 북쪽으로 돌파하라 — 소대원마다 명령 하나, 전원 배정되면 동시 실행');
 requestAnimationFrame(animate);
 
 // ---------------------------------------------------------------------------
@@ -6895,6 +7020,17 @@ window.__puratank = {
   },
   runQueue: () => resolveQueue(),
   acting: () => ({ phase, busy, queueLen: planQueue.length, pos: { gx: player.gx, gz: player.gz } }),
+  // ── 돌파 런 관찰 훅 ──
+  squadCells: () => squad.map((u) => ({
+    kit: u.kitKey, gx: u.gx, gz: u.gz, hp: u.hp, maxHp: u.maxHp,
+    alive: u.alive, reload: u.reloadLeft, plan: u.plan?.type ?? null,
+  })),
+  squadMinZ: () => Math.min(...squad.filter((u) => u.alive).map((u) => u.gz)),
+  awakeCount: () => enemies.filter((e) => e.alive && e.awake).length,
+  repairsDone: () => bandsRepaired,
+  runInfo: () => ({ GW, GH, goalGz: GOAL_GZ, bands: BANDS, nEnemy: N_ENEMY, squadSize: SQUAD_SIZE }),
+  armorStat: () => ({ ...armorStat }),
+  selectSquad(i) { selectUnit(squad[i]); return !!squad[i]; },
   // 테스트: 플레이어를 특정 칸으로 순간이동 (위치+월드좌표 동기화)
   warp(gx, gz) {
     player.gx = gx; player.gz = gz;
