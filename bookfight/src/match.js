@@ -4,8 +4,9 @@
 // 단판 1라운드. 5분 안에 KO/TKO가 안 나면 심판 3인 판정으로 끝난다.
 
 import { Rng } from './rng.js';
-import { deriveStats, rivalryFor } from './books.js';
+import { rivalryFor } from './books.js';
 import { buildClash, readTime } from './taunts.js';
+import { Boxer, PUNCHES, VERBAL, BOXING_TUNING, initiative, choosePunch, resolvePunch, checkStagger, recover } from './boxing.js';
 
 export const ROUND_SECONDS = 300; // 단판 5분
 
@@ -18,67 +19,13 @@ export const TUNING = {
   INITIATIVE_DIV: 620, // 작을수록 얇은 책(기동)이 유리
   DAMAGE_BASE: 0.5, // 논지 0일 때의 타격 계수
   DAMAGE_LOGIC: 0.72, // 논지 100일 때 더해지는 계수
-  DAMAGE_SCALE: 1.15, // 전체 화력. 낮추면 KO가 줄고 판정이 늘어난다. 1.15에서 KO 58% / 판정 42%.
+  DAMAGE_SCALE: 0.6, // 설전 치명타의 화력(권투 쪽은 boxing.js가 따로 쥔다).
+  // 0.55/0.6 조합에서 KO 57% · 승률 스프레드 26pt · 권투가 전체 피해의 41%.
   DOT_PER_HIT: 1.6, // 불안 누적량. 감쇠가 0.7이라 최대 체감치는 이 값의 약 3배.
   DOT_CAP: 5.5,
   DOT_DECAY: 0.7,
   CHARGE_RECOIL: 0.45, // 풍차 돌격이 빗나갔을 때 자해가 일어날 확률
 };
-
-const MOVES = {
-  jab: { key: 'jab', label: '잽', power: 9.5, cost: 4, acc: 0.9, kr: '견제 인용' },
-  combo: { key: 'combo', label: '연타', power: 15, cost: 9, acc: 0.78, kr: '연속 인용' },
-  heavy: { key: 'heavy', label: '훅', power: 24, cost: 15, acc: 0.62, kr: '핵심 논지' },
-  finisher: { key: 'finisher', label: '피니시', power: 38, cost: 26, acc: 0.72, kr: '대표 문장' },
-  riposte: { key: 'riposte', label: '반박', power: 17, cost: 3, acc: 1, kr: '논파 반격' },
-  breathe: { key: 'breathe', label: '호흡', power: 0, cost: -18, acc: 1, kr: '뜸 들이기' },
-};
-
-class Fighter {
-  constructor(book, corner) {
-    this.book = book;
-    this.corner = corner; // 'red' | 'blue'
-    const d = deriveStats(book);
-    this.d = d;
-    this.hpMax = d.hpMax;
-    this.hp = d.hpMax;
-    this.stMax = d.stMax;
-    this.st = d.stMax;
-    this.logic = d.logic;
-    this.style = d.style;
-    this.legacy = d.legacy;
-    this.chaos = d.chaos;
-    this.grit = d.grit;
-    this.speed = d.speed;
-
-    this.staggered = false;
-    this.knockdowns = 0;
-    this.dot = 0; // 카프카식 지속 피해
-    this.transformed = false;
-    this.evadeCharge = false; // 앨리스식 회피 후 강타
-    this.finisherUsed = 0;
-    this.usedQuotes = new Set();
-    this.usedLines = new Set(); // 설전 대사 재사용 방지
-
-    // 스코어카드용 누적
-    this.stats = { landed: 0, thrown: 0, dmg: 0, crit: 0, heavy: 0, evaded: 0, rebutted: 0 };
-  }
-  get alive() {
-    return this.hp > 0;
-  }
-  get hpPct() {
-    return Math.max(0, this.hp / this.hpMax);
-  }
-  get stPct() {
-    return Math.max(0, this.st / this.stMax);
-  }
-  get groggy() {
-    return this.hpPct < 0.3 || this.stPct < 0.18;
-  }
-  get name() {
-    return this.book.title;
-  }
-}
 
 // ── 저자 특성 훅 ─────────────────────────────────────────────
 // 각 특성은 공격 직전/직후에 끼어들어 수치를 비튼다. 발동하면 방송 자막으로 뜬다.
@@ -183,33 +130,6 @@ function traitOnDefend(def, atk, ctx, rng) {
   return fired;
 }
 
-// ── 무브 선택 AI ─────────────────────────────────────────────
-function chooseMove(atk, def, ctx, rng) {
-  const canFinish =
-    atk.st >= MOVES.finisher.cost &&
-    atk.finisherUsed < 2 &&
-    (def.hpPct < 0.38 || def.groggy || ctx.clock < 45);
-  if (canFinish && rng.chance(0.62)) return MOVES.finisher;
-
-  if (atk.st < MOVES.heavy.cost + 4) {
-    // 숨이 찼다 — 잽으로 버티거나 아예 호흡을 고른다
-    if (atk.st < 14 && rng.chance(0.55)) return MOVES.breathe;
-    return MOVES.jab;
-  }
-  // 공격적인 책(광기/문체 높음)일수록 큰 걸 던진다
-  const aggro = (atk.chaos * 0.5 + atk.style * 0.5) / 100;
-  const r = rng.next();
-  if (r < 0.2 + aggro * 0.24) return MOVES.heavy;
-  if (r < 0.58 + aggro * 0.18) return MOVES.combo;
-  return MOVES.jab;
-}
-
-function pickQuote(f, move, rng) {
-  if (move.key === 'finisher') return f.book.quotes.finisher.line;
-  const pool = move.key === 'jab' ? f.book.quotes.jab : f.book.quotes.heavy.concat(f.book.quotes.jab);
-  return rng.pickFresh(pool, f.usedQuotes);
-}
-
 // ── 해설 ─────────────────────────────────────────────────────
 const CALL = {
   bigCrit: (a, d) => `${a} 제대로 꽂혔습니다! ${d} 완전히 굳었어요!`,
@@ -226,18 +146,23 @@ const CALL = {
 };
 
 // ── 본체 ─────────────────────────────────────────────────────
+// 두 층을 엮는다.
+//   권투층(boxing.js) — 쉬지 않고 짧게 오간다. 잽·보디·훅.
+//   설전층(taunts.js)  — 콤비네이션 사이에 끼어들어 치명타를 만든다.
+// 말하는 동안 주먹이 멈추면 리듬이 죽으므로, 설전은 '가끔 터지는 큰 사건'으로만 쓴다.
 export function simulate(bookA, bookB, seed) {
   const rng = new Rng(seed);
-  const A = new Fighter(bookA, 'red');
-  const B = new Fighter(bookB, 'blue');
+  const A = new Boxer(bookA, 'red');
+  const B = new Boxer(bookB, 'blue');
+  A.usedLines = new Set();
+  B.usedLines = new Set();
   const rivalry = rivalryFor(bookA.id, bookB.id);
 
   const events = [];
-  let t = 0; // 재생 시각(초)
-  let clock = ROUND_SECONDS; // 경기 시계(남은 초)
+  let t = 0;
+  let clock = ROUND_SECONDS;
   const push = (e) => events.push({ t: +t.toFixed(2), clock: Math.max(0, Math.round(clock)), ...e });
 
-  // 시드 자체가 유불리를 만든다 — 컨디션. 같은 대진도 시드마다 몸 상태가 다르다.
   const condA = rng.float(0.9, 1.1);
   const condB = rng.float(0.9, 1.1);
   A.logic = Math.round(A.logic * condA);
@@ -246,52 +171,90 @@ export function simulate(bookA, bookB, seed) {
   B.cond = condB;
 
   push({ type: 'intro', a: A.book.id, b: B.book.id, seed: String(seed) });
-  if (rivalry) {
-    push({ type: 'commentary', text: `오늘의 관전 포인트 — ${rivalry.why}.`, tone: 'hype' });
-  }
+  if (rivalry) push({ type: 'commentary', text: `오늘의 관전 포인트 — ${rivalry.why}.`, tone: 'hype' });
   t += 0.2;
   push({ type: 'bell', text: '1라운드, 단판 승부' });
   t += 1.1;
 
-  let beat = 0;
-  let last = null; // 직전 공격자 — 같은 쪽이 계속 때리면 흐름 자막
-  let streak = 0;
   let finish = null;
   let calledClockLow = false;
+  let beat = 0;
+  let guard = 0;
 
-  while (clock > 0 && A.alive && B.alive && beat < 60) {
+  const applyBlow = (win, lose, dmg, meta) => {
+    lose.hp -= dmg;
+    win.stats.dmg += dmg;
+    const st = checkStagger(lose, dmg, rng, meta.staggerResist || 0);
+    push({
+      type: 'strike',
+      by: win.corner,
+      move: meta.move,
+      moveLabel: meta.label,
+      moveKr: meta.kr,
+      finisherName: meta.finisherName || null,
+      quote: meta.quote,
+      source: win.book.title,
+      tag: meta.tag,
+      rebuttal: !!meta.rebuttal,
+      dmg,
+      crit: !!meta.crit,
+      evaded: false,
+      staggered: st.staggered && !st.knockdown,
+      knockdown: st.knockdown,
+      traits: meta.traits || [],
+      healed: meta.healed || 0,
+      transform: !!meta.transform,
+      hp: { red: A.hp, blue: B.hp },
+      st: { red: A.st, blue: B.st },
+    });
+    return st;
+  };
+
+  while (clock > 0 && A.alive && B.alive && beat < 90) {
     beat++;
 
-    // 선공 결정 — 기동(분량)이 빠른 쪽이 유리, 휘청이면 못 잡는다.
-    // 얇은 책이 체력 열세를 만회하는 유일한 통로라 분모를 좁게 잡는다.
-    let pA = 0.5 + (A.speed - B.speed) / TUNING.INITIATIVE_DIV;
-    if (A.staggered) pA -= 0.3;
-    if (B.staggered) pA += 0.3;
-    pA = Math.min(0.9, Math.max(0.1, pA));
-    let atk = rng.chance(pA) ? A : B;
-    let def = atk === A ? B : A;
-
-    const ctx = { mult: 1, beat, clock, move: null, staggered: def.staggered };
-    const opener = chooseMove(atk, def, ctx, rng);
-    ctx.move = opener;
-
-    // 호흡 고르기
-    if (opener.key === 'breathe') {
-      atk.st = Math.min(atk.stMax, atk.st - opener.cost);
+    // ── 1) 권투 콤비네이션 — 여기가 경기의 기본 박자 ──
+    const combo = rng.int(BOXING_TUNING.COMBO_MIN, BOXING_TUNING.COMBO_MAX);
+    for (let i = 0; i < combo && clock > 0 && A.alive && B.alive; i++) {
+      const atk = initiative(A, B, rng, TUNING.INITIATIVE_DIV) ? A : B;
+      const def = atk === A ? B : A;
+      const punch = choosePunch(atk, def, rng);
+      const r = resolvePunch(atk, def, punch, rng);
+      const st = r.result === 'hit' ? checkStagger(def, r.dmg, rng) : { staggered: false, knockdown: false };
       push({
-        type: 'breathe',
+        type: 'punch',
         by: atk.corner,
-        text: `${atk.name}, 페이지를 넘기며 숨을 고릅니다.`,
+        punch: punch.key,
+        punchLabel: punch.label,
+        result: r.result,
+        dmg: r.dmg,
+        crit: !!r.crit,
+        staggered: st.staggered && !st.knockdown,
+        knockdown: st.knockdown,
+        hp: { red: A.hp, blue: B.hp },
+        st: { red: A.st, blue: B.st },
       });
-      if (rng.chance(0.5)) push({ type: 'commentary', text: CALL.gassed(atk.name), tone: 'calm' });
-      t += 1.6;
-      clock -= rng.float(8, 13);
-      continue;
+      t += rng.float(BOXING_TUNING.PUNCH_SECONDS[0], BOXING_TUNING.PUNCH_SECONDS[1]);
+      clock -= rng.float(BOXING_TUNING.PUNCH_CLOCK[0], BOXING_TUNING.PUNCH_CLOCK[1]);
+      recover(A, A.d.recover * 0.5);
+      recover(B, B.d.recover * 0.5);
+      if (st.knockdown && def.hp > 0) {
+        push({ type: 'knockdown', who: def.corner, count: def.knockdowns, hp: { red: A.hp, blue: B.hp } });
+        push({ type: 'commentary', text: CALL.down(def.name), tone: 'shout' });
+        t += 2.6;
+        clock -= rng.float(8, 14);
+      }
     }
+    if (!A.alive || !B.alive || clock <= 0) break;
 
-    // ── 설전 ──────────────────────────────────────────────
-    // 이 게임의 한 합은 "도발 → 반박 → 판정 → 주먹" 순이다.
-    // 주먹이 누구에게 들어갈지는 주사위가 아니라 말싸움 결과가 정한다.
+    // ── 2) 설전 — 콤비네이션 사이에 끼어들어 치명타를 만든다 ──
+    guard++;
+    if (guard < 1) continue;
+    guard = 0;
+
+    const atk = initiative(A, B, rng, TUNING.INITIATIVE_DIV) ? A : B;
+    const def = atk === A ? B : A;
+    const ctx = { mult: 1, beat, clock, move: null, staggered: def.staggered };
     const clash = buildClash(rng, atk, def, ctx);
 
     push({
@@ -305,6 +268,7 @@ export function simulate(bookA, bookB, seed) {
       hold: readTime(clash.taunt),
     });
     t += readTime(clash.taunt);
+    clock -= rng.float(4, 7);
 
     push({
       type: 'reply',
@@ -316,205 +280,113 @@ export function simulate(bookA, bookB, seed) {
       hold: readTime(clash.reply),
     });
     t += readTime(clash.reply);
+    clock -= rng.float(4, 7);
 
-    // 논파당하면 공수가 뒤집힌다 — 반박에 성공한 쪽이 때린다
+    // 논파당하면 공수가 뒤집힌다 — 반박에 성공한 쪽이 꽂는다
     const win = clash.rebutted ? def : atk;
     const lose = clash.rebutted ? atk : def;
-    const move = clash.rebutted ? MOVES.riposte : opener;
-
-    win.st = Math.max(0, win.st - move.cost);
-    win.stats.thrown++;
-    win.stats.landed++;
     if (clash.rebutted) lose.stats.rebutted++;
-    if (move.key === 'heavy' || move.key === 'finisher') win.stats.heavy++;
-    if (move.key === 'finisher') win.finisherUsed++;
+    win.stats.verbal++;
 
-    // 특성은 실제로 때리는 쪽 기준으로 다시 계산한다
+    const canFinish = win.st >= VERBAL.finisher.cost && (win.finisherUsed || 0) < 2 && (lose.hpPct < 0.4 || lose.groggy || clock < 50);
+    const move = clash.rebutted ? VERBAL.riposte : canFinish && rng.chance(0.5) ? VERBAL.finisher : VERBAL.win;
+    if (move.key === 'finisher') win.finisherUsed = (win.finisherUsed || 0) + 1;
+    win.st = Math.max(0, win.st - move.cost);
+
     const wctx = { mult: 1, beat, clock, move, staggered: lose.staggered };
-    const traitsA = traitOnAttack(win, lose, move, wctx, rng);
+    const traits = traitOnAttack(win, lose, move, wctx, rng);
     traitOnDefend(lose, win, wctx, rng);
 
-    // 피해 계산
-    const crit = rng.next() < 0.07 + win.style / 100 * 0.17 - lose.chaos / 100 * 0.04;
-    const critMult = crit ? 1.5 + win.style / 100 * 0.55 : 1;
-    const blockFactor = rng.float(0.55, 1);
-    const mitigation = 1 - Math.min(0.44, (lose.legacy / 100) * 0.44 * blockFactor);
-    const gassed = win.stPct < 0.22 ? 0.66 : 1;
+    const crit = rng.next() < 0.12 + (win.style / 100) * 0.2;
+    const critMult = crit ? 1.5 + (win.style / 100) * 0.5 : 1;
+    const mitigation = 1 - Math.min(0.4, (lose.legacy / 100) * 0.4 * rng.float(0.55, 1));
     const rivalryMult = rivalry && rivalry.favors === win.book.id ? 1 + rivalry.bonus : 1;
-    const staggerBonus = lose.staggered ? 1.3 : 1;
     const rivalLine = clash.isRival && !clash.rebutted ? 1.2 : 1;
 
     let dmg =
       move.power *
       (TUNING.DAMAGE_BASE + (win.logic / 100) * TUNING.DAMAGE_LOGIC) *
-      wctx.mult *
-      critMult *
-      mitigation *
-      gassed *
-      rivalryMult *
-      staggerBonus *
-      rivalLine *
-      rng.float(0.85, 1.15) *
-      TUNING.DAMAGE_SCALE;
+      wctx.mult * critMult * mitigation * rivalryMult * rivalLine *
+      (lose.staggered ? 1.25 : 1) *
+      rng.float(0.85, 1.15) * TUNING.DAMAGE_SCALE;
     dmg = Math.max(1, Math.round(dmg));
 
-    // 아래 공통 처리는 "때린 쪽 = atk, 맞은 쪽 = def"으로 이어진다
-    atk = win;
-    def = lose;
-    Object.assign(ctx, wctx);
-
-    def.hp -= dmg;
-    atk.stats.dmg += dmg;
-    if (crit) atk.stats.crit++;
-    // 피니시는 설전 대사 대신 그 책의 대표 문장으로 마무리한다 — 클라이맥스니까
-    const quote =
-      move.key === 'finisher' ? atk.book.quotes.finisher.line : clash.rebutted ? clash.reply : clash.taunt;
-
-    // 돈키호테의 헛돌격은 제 몸이 상한다
-    if (wctx.recoil) {
-      const self = Math.round(rng.float(3, 7));
-      atk.hp -= self;
-      push({
-        type: 'recoil',
-        by: atk.corner,
-        dmg: self,
-        text: `${atk.name}, 풍차에 걸려 스스로 나가떨어집니다!`,
-        hp: { red: A.hp, blue: B.hp },
-      });
+    if (wctx.lifesteal) {
+      const heal = Math.round(dmg * wctx.lifesteal);
+      win.hp = Math.min(win.hpMax, win.hp + heal);
+      wctx.healed = heal;
     }
+    if (wctx.drain) lose.st = Math.max(0, lose.st - wctx.drain);
+    if (crit && wctx.drainOnCrit) lose.st = Math.max(0, lose.st - wctx.drainOnCrit);
+    if (wctx.applyDot) lose.dot = Math.min(TUNING.DOT_CAP, (lose.dot || 0) + wctx.applyDot);
 
-    // 특성 후처리
-    if (ctx.lifesteal) {
-      const heal = Math.round(dmg * ctx.lifesteal);
-      atk.hp = Math.min(atk.hpMax, atk.hp + heal);
-      ctx.healed = heal;
-    }
-    if (ctx.drain) def.st = Math.max(0, def.st - ctx.drain);
-    if (crit && ctx.drainOnCrit) def.st = Math.max(0, def.st - ctx.drainOnCrit);
-    if (ctx.applyDot) def.dot = Math.min(TUNING.DOT_CAP, def.dot + ctx.applyDot);
-
-    def.staggered = false;
-    // 휘청 / 다운 판정
-    const ratio = dmg / def.hpMax;
-    let staggered = false;
-    let knockdown = false;
-    if (def.hp > 0) {
-      const resist = (def.grit / 100) * 0.45 * (ctx.staggerResist ? 1 + ctx.staggerResist : 1);
-      if (ratio > 0.19 && rng.next() < (ratio - 0.12) * 3.6 - resist) {
-        knockdown = true;
-        def.knockdowns++;
-        def.st = Math.max(0, def.st - 18);
-        def.staggered = true;
-      } else if (ratio > 0.11 && rng.next() < (ratio - 0.07) * 3.2 - resist * 0.6) {
-        staggered = true;
-        def.staggered = true;
-      }
-    }
-
-    push({
-      type: 'strike',
-      by: atk.corner,
-      move: move.key,
-      moveLabel: move.label,
-      moveKr: move.kr,
-      finisherName: move.key === 'finisher' ? atk.book.quotes.finisher.name : null,
-      quote,
-      source: atk.book.title,
-      tag: clash.tag,
-      rebuttal: clash.rebutted,
-      dmg,
-      crit,
-      evaded: false,
-      staggered,
-      knockdown,
-      traits: traitsA,
-      healed: ctx.healed || 0,
-      transform: !!ctx.transformNow,
-      hp: { red: A.hp, blue: B.hp },
-      st: { red: A.st, blue: B.st },
+    const quote = move.key === 'finisher' ? win.book.quotes.finisher.line : clash.rebutted ? clash.reply : clash.taunt;
+    const st = applyBlow(win, lose, dmg, {
+      move: move.key, label: move.label, kr: move.kr, quote, tag: clash.tag,
+      rebuttal: clash.rebutted, crit, traits,
+      finisherName: move.key === 'finisher' ? win.book.quotes.finisher.name : null,
+      healed: wctx.healed, transform: wctx.transformNow, staggerResist: wctx.staggerResist,
     });
 
-    if (ctx.transformNow) push({ type: 'commentary', text: CALL.transform(), tone: 'hype' });
-    if (move.key === 'finisher')
-      push({ type: 'commentary', text: CALL.finisher(atk.name, atk.book.quotes.finisher.name), tone: 'hype' });
-    else if (crit) push({ type: 'commentary', text: CALL.bigCrit(atk.name, def.name), tone: 'hype' });
-    else if (mitigation < 0.68 && rng.chance(0.4))
-      push({ type: 'commentary', text: CALL.block(def.name), tone: 'calm' });
+    if (wctx.transformNow) push({ type: 'commentary', text: CALL.transform(), tone: 'hype' });
+    else if (move.key === 'finisher') push({ type: 'commentary', text: CALL.finisher(win.name, win.book.quotes.finisher.name), tone: 'hype' });
+    else if (clash.rebutted) push({ type: 'commentary', text: `${win.name}, 되받아칩니다! ${lose.name}의 논지가 무너졌어요!`, tone: 'hype' });
+    else if (crit) push({ type: 'commentary', text: CALL.bigCrit(win.name, lose.name), tone: 'hype' });
 
-    t += move.key === 'finisher' ? 2.4 : crit ? 2.0 : 1.5;
+    t += move.key === 'finisher' ? 2.4 : 1.6;
+    clock -= rng.float(6, 10);
 
-    if (knockdown && def.hp > 0) {
-      push({ type: 'knockdown', who: def.corner, count: def.knockdowns, hp: { red: A.hp, blue: B.hp } });
-      push({ type: 'commentary', text: CALL.down(def.name), tone: 'shout' });
-      // 다운 모션(약 2.6초)이 끝난 뒤에 리플레이를 건다 — 겹치면 둘 다 죽는다
+    if (st.knockdown && lose.hp > 0) {
+      push({ type: 'knockdown', who: lose.corner, count: lose.knockdowns, hp: { red: A.hp, blue: B.hp } });
+      push({ type: 'commentary', text: CALL.down(lose.name), tone: 'shout' });
       t += 3.0;
-      push({ type: 'replay', of: 'knockdown', by: atk.corner, quote, source: atk.book.title });
+      push({ type: 'replay', of: 'knockdown', by: win.corner, quote, source: win.book.title });
       t += 1.0;
       clock -= rng.float(10, 16);
-    } else if (staggered) {
-      push({ type: 'stagger', who: def.corner });
-      push({ type: 'commentary', text: CALL.stagger(def.name), tone: 'shout' });
+    } else if (st.staggered) {
+      push({ type: 'stagger', who: lose.corner });
+      push({ type: 'commentary', text: CALL.stagger(lose.name), tone: 'shout' });
       t += 0.8;
     }
 
-    // 지속 피해(불안) 정산
+    // 불안(카프카) 정산
     for (const f of [A, B]) {
       if (f.dot > 0 && f.hp > 0) {
         const d = Math.round(f.dot);
         if (d > 0) {
           f.hp -= d;
-          push({
-            type: 'dot',
-            who: f.corner,
-            dmg: d,
-            text: `불안이 ${f.name}를 갉아먹습니다 (-${d})`,
-            hp: { red: A.hp, blue: B.hp },
-          });
+          push({ type: 'dot', who: f.corner, dmg: d, text: `불안이 ${f.name}를 갉아먹습니다 (-${d})`, hp: { red: A.hp, blue: B.hp } });
         }
         f.dot *= TUNING.DOT_DECAY;
         if (f.dot < 1) f.dot = 0;
       }
     }
 
-    // 스태미나 회복
-    A.st = Math.min(A.stMax, A.st + A.d.recover * 1.4);
-    B.st = Math.min(B.stMax, B.st + B.d.recover * 1.4);
+    recover(A, A.d.recover);
+    recover(B, B.d.recover);
 
-    // 흐름 자막
-    streak = last === atk.corner ? streak + 1 : 1;
-    last = atk.corner;
-    if (streak === 4) {
-      push({ type: 'commentary', text: `${atk.name}가 흐름을 완전히 가져왔습니다.`, tone: 'hype' });
-      streak = 0;
-    }
-
-    clock -= rng.float(27, 38);
     if (!calledClockLow && clock <= 60 && clock > 0) {
       calledClockLow = true;
       push({ type: 'commentary', text: CALL.clockLow(), tone: 'calm' });
-      const behind = A.hpPct < B.hpPct ? A : B;
-      push({ type: 'commentary', text: CALL.clutch(behind.name), tone: 'hype' });
+      push({ type: 'commentary', text: CALL.clutch((A.hpPct < B.hpPct ? A : B).name), tone: 'hype' });
       t += 0.6;
     }
-
-    // TKO — 3다운
-    if (def.knockdowns >= 3 && def.hp > 0) {
-      def.hp = 0;
-      finish = { winner: atk.corner, method: 'TKO', detail: '3다운 규정' };
+    if (lose.knockdowns >= 3 && lose.hp > 0) {
+      lose.hp = 0;
+      finish = { winner: win.corner, method: 'TKO', detail: '3다운 규정' };
       break;
     }
   }
 
-  // 결과
   const loserByHp = A.hp <= 0 ? A : B.hp <= 0 ? B : null;
   if (!finish && loserByHp) {
     const w = loserByHp === A ? B : A;
-    const lastStrike = [...events].reverse().find((e) => e.type === 'strike' && e.by === w.corner && e.dmg > 0);
+    const last = [...events].reverse().find((e) => (e.type === 'strike' || e.type === 'punch') && e.by === w.corner && e.dmg > 0);
     finish = {
       winner: w.corner,
-      method: lastStrike && lastStrike.move === 'finisher' ? 'KO' : 'KO',
-      detail: lastStrike ? `「${lastStrike.quote}」` : '마무리 한 방',
-      quote: lastStrike ? lastStrike.quote : null,
+      method: 'KO',
+      detail: last && last.quote ? `「${last.quote}」` : last ? `${last.punchLabel || last.moveLabel} 한 방` : '마무리 한 방',
+      quote: last ? last.quote : null,
     };
   }
 
@@ -522,40 +394,28 @@ export function simulate(bookA, bookB, seed) {
     clock = Math.max(0, clock);
     t += 0.4;
     push({ type: 'finish', ...finish, hp: { red: A.hp, blue: B.hp } });
-    t += 6.5; // KO 후 정적 — 쓰러지는 모션 + 승자 세리머니가 다 나올 시간
+    t += 6.5;
   } else {
-    // 판정 — 심판 3인. 데미지/유효타/피니시 시도를 섞고 시드로 흔든다.
     t += 0.8;
     push({ type: 'bell', text: '종료 — 판정으로 갑니다' });
     t += 1.6;
-    const scoreOf = (f, o) =>
-      f.stats.dmg * 1.0 + f.stats.landed * 2.4 + f.stats.crit * 6 + f.stats.heavy * 3 + (f.hp - o.hp) * 0.8;
+    const scoreOf = (f, o) => f.stats.dmg * 1.0 + f.stats.landed * 1.2 + f.stats.verbal * 8 + f.stats.crit * 5 + (f.hp - o.hp) * 0.8;
     const sA = scoreOf(A, B);
     const sB = scoreOf(B, A);
     const cards = [];
     for (let i = 0; i < 3; i++) {
-      const bias = rng.float(-0.14, 0.14) * (sA + sB); // 심판마다 보는 눈이 다르다
+      const bias = rng.float(-0.14, 0.14) * (sA + sB);
       const dA = sA + bias;
       const dB = sB - bias;
       const gap = Math.abs(dA - dB) / Math.max(1, (dA + dB) / 2);
       const dominant = gap > 0.42 || A.knockdowns + B.knockdowns > 0;
       const win = dA >= dB ? 'red' : 'blue';
-      cards.push({
-        judge: ['서울', '뉴욕', '런던'][i],
-        red: win === 'red' ? 10 : dominant ? 8 : 9,
-        blue: win === 'blue' ? 10 : dominant ? 8 : 9,
-      });
+      cards.push({ judge: ['서울', '뉴욕', '런던'][i], red: win === 'red' ? 10 : dominant ? 8 : 9, blue: win === 'blue' ? 10 : dominant ? 8 : 9 });
     }
     const redCards = cards.filter((c) => c.red > c.blue).length;
     const winner = redCards >= 2 ? 'red' : 'blue';
     const unanimous = redCards === 3 || redCards === 0;
-    push({
-      type: 'decision',
-      winner,
-      cards,
-      method: unanimous ? '만장일치 판정' : '스플릿 판정',
-      hp: { red: A.hp, blue: B.hp },
-    });
+    push({ type: 'decision', winner, cards, method: unanimous ? '만장일치 판정' : '스플릿 판정', hp: { red: A.hp, blue: B.hp } });
     finish = { winner, method: unanimous ? '만장일치 판정' : '스플릿 판정', detail: '5분 풀타임' };
     t += 5;
   }
@@ -566,10 +426,7 @@ export function simulate(bookA, bookB, seed) {
     seed: String(seed),
     a: bookA,
     b: bookB,
-    fighters: {
-      red: summarize(A),
-      blue: summarize(B),
-    },
+    fighters: { red: summarize(A), blue: summarize(B) },
     rivalry,
     result: finish,
     events,

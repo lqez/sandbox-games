@@ -275,9 +275,12 @@ export class BookFighter {
   // ── 복싱 모션 ──────────────────────────────────────────
   attack(moveKey, onImpact) {
     if (this.koed) return;
-    const big = moveKey === 'heavy' || moveKey === 'finisher';
-    const dur = moveKey === 'finisher' ? 1.0 : big ? 0.78 : 0.5;
-    const reach = moveKey === 'finisher' ? 0.85 : big ? 0.6 : 0.34;
+    const HEAVY = ['heavy', 'hook', 'upper', 'finisher', 'verbal', 'riposte'];
+    const big = HEAVY.includes(moveKey);
+    // 권투 잽은 아주 짧아야 리듬이 산다. 설전 정타는 크게 휘두른다.
+    const quick = moveKey === 'jab' || moveKey === 'cross' || moveKey === 'body';
+    const dur = moveKey === 'finisher' ? 1.0 : quick ? 0.34 : big ? 0.6 : 0.5;
+    const reach = moveKey === 'finisher' ? 0.85 : quick ? 0.26 : big ? 0.6 : 0.34;
     const arm = big ? (this.lead === 'R' ? 'L' : 'R') : this.lead; // 훅은 뒷손
     const other = arm === 'R' ? 'L' : 'R';
     const s = arm === 'L' ? -1 : 1;
@@ -342,6 +345,40 @@ export class BookFighter {
       this.materials.coverMat.emissive.setRGB(k * 0.5, k * 0.12, k * 0.06);
     });
     a.kind = 'hit';
+    return a;
+  }
+
+  // 슬립 — 상체를 옆으로 빼서 흘린다. 무릎도 같이 굽혀야 위빙으로 보인다.
+  evade() {
+    if (this.koed) return;
+    const dir = Math.random() < 0.5 ? 1 : -1;
+    const a = this.play(0.42, (u) => {
+      const k = Math.sin(u * Math.PI);
+      this.body.position.x = dir * k * 0.42;
+      this.body.rotation.z = -dir * k * 0.28;
+      this.body.rotation.y = -dir * k * 0.34;
+      this.hips.position.y = this.dims.legLen - k * 0.12;
+      this.legs[dir > 0 ? 'R' : 'L'].joint.rotation.x = 0.18 + k * 0.4;
+    }, () => {
+      this.body.position.x = 0;
+    });
+    a.kind = 'evade';
+    return a;
+  }
+
+  // 가드 — 글러브로 막는다
+  block() {
+    if (this.koed) return;
+    const a = this.play(0.3, (u) => {
+      const k = Math.sin(u * Math.PI);
+      this.pose.L.sh = lerp(GUARD.sh, -0.3, k);
+      this.pose.R.sh = lerp(GUARD.sh, -0.3, k);
+      this.pose.L.el = lerp(GUARD.el, -2.25, k);
+      this.pose.R.el = lerp(GUARD.el, -2.25, k);
+      this.stanceOffset = -k * 0.12;
+      this.body.rotation.x = k * 0.08;
+    });
+    a.kind = 'block';
     return a;
   }
 

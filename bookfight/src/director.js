@@ -312,6 +312,12 @@ export class Director {
         // 반박 — 반대편으로 넘긴다(리버스 숏). 같은 side를 써야 180도 선이 안 깨진다.
         this.cut('dialogue', { focus: ev.by, dur: ev.hold, side: this.lineSide });
         break;
+      case 'punch':
+        // 주먹 하나하나에 컷을 붙이면 그게 곧 산만함이다. 컷이 충분히 익었을 때만 넘긴다.
+        if (this.shotT > 3.6 && this.rand() < 0.5) {
+          this.cut(this.pickAmbient(), { focus: ev.by === 'red' ? 'blue' : 'red' });
+        }
+        break;
       case 'strike': {
         const hitCorner = ev.by === 'red' ? 'blue' : 'red';
         if (ev.move === 'finisher') this.cut('lowAngle', { focus: ev.by, dur: 2.6 });

@@ -637,7 +637,9 @@ export function deriveStats(book) {
 
   // 세월: 오래된 책일수록 관록 보너스 (기원전은 -500으로 계산)
   const age = 2026 - book.year;
-  const ageBonus = Math.min(10, Math.round(Math.log10(Math.max(10, age)) * 3.2));
+  // 명단이 전부 고전이라 이 값은 6~11로 거의 일정하다. 크게 주면 차이는 안 만들고
+  // 관록만 죄다 상한(100)에 붙어버려 '가드'가 사실상 고정값이 된다. 그래서 작게 준다.
+  const ageBonus = Math.min(5, Math.round(Math.log10(Math.max(10, age)) * 1.6));
   return {
     hpMax,
     stMax,

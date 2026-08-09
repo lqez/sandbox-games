@@ -279,6 +279,38 @@ class Game {
         this.excitement = 0.7;
         break;
       }
+      case 'punch': {
+        // 권투 층 — 짧고 빠르게. 자막도 카메라 컷도 건드리지 않는다(리듬이 끊기므로).
+        const atk = F[ev.by];
+        const def = F[ev.by === 'red' ? 'blue' : 'red'];
+        if (!atk || !def) break;
+        this.director.onEvent(ev);
+        atk.attack(ev.punch, () => {
+          if (ev.result === 'slip') {
+            def.evade();
+            Audio.paper(0.35);
+            return;
+          }
+          const maxHp = ev.by === 'red' ? this.match.fighters.blue.hpMax : this.match.fighters.red.hpMax;
+          const ratio = ev.dmg / maxHp;
+          if (ev.result === 'block') {
+            def.block();
+            Audio.impact(0.45);
+            this.director.punch(0.25);
+          } else {
+            def.hit(ratio, ev.crit);
+            const strength = Math.min(1, 0.3 + ratio * 4 + (ev.crit ? 0.3 : 0));
+            this.director.punch(strength * 0.5);
+            this.arena.punchFlash(def.chestPoint(), strength * 0.6);
+            Audio.impact(strength * 0.8);
+            this.hitstop = Math.min(0.07, 0.015 + strength * 0.04);
+          }
+          this.hud.damagePop(ev.by === 'red' ? 'blue' : 'red', ev.dmg, ev.crit);
+          this.excitement = Math.min(1, this.excitement + 0.05);
+        });
+        break;
+      }
+
       case 'taunt': {
         const f = F[ev.by];
         const book = ev.by === 'red' ? this.match.a : this.match.b;
