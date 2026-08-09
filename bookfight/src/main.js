@@ -9,11 +9,14 @@ import { Arena } from './arena.js';
 import { BookFighter, QuoteSlip } from './fighter.js';
 import { Director } from './director.js';
 import { Hud } from './hud.js';
-import { randomSeed } from './rng.js';
+import { randomSeed, Rng } from './rng.js';
+
+// 180도 선을 어느 쪽에 그을지 — 시드로 정해 경기 내내 고정한다
+const rng180 = (seed) => (new Rng('line' + seed).next() < 0.5 ? 1 : -1);
 import * as Audio from './audio.js';
 
-const RED_Z = 2.25;
-const BLUE_Z = -2.25;
+const RED_Z = 1.5;
+const BLUE_Z = -1.5;
 
 class Game {
   constructor() {
@@ -70,7 +73,7 @@ class Game {
 
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     this.controls.enabled = false;
-    this.controls.target.set(0, 1.1, 0);
+    this.controls.target.set(0, 2.0, 0);
     this.controls.enableDamping = true;
     this.controls.maxPolarAngle = Math.PI * 0.495;
     this.controls.minDistance = 2;
@@ -128,7 +131,7 @@ class Game {
       this.director.setFree(free);
       this.controls.enabled = free;
       if (free) {
-        this.controls.target.set(0, 1.1, 0);
+        this.controls.target.set(0, 2.0, 0);
         this.camera.position.set(8, 3.6, 4);
       }
       document.getElementById('btn-free').classList.toggle('on', free);
@@ -204,6 +207,7 @@ class Game {
 
     this.hud.setFighters(a, b);
     this.hud.clearTicker();
+    this.hud.clearDebate();
     this.hud.hideQuote();
     this.hud.hideBanner();
     this.hud.setReplay(false);
@@ -229,6 +233,7 @@ class Game {
     this.director.free = false;
     this.controls.enabled = false;
     document.getElementById('btn-free').classList.remove('on');
+    this.director.lineSide = rng180(seed);
     this.director.cut('staredown', { dur: 2.6 });
     Audio.crowdBase(0.09);
   }
@@ -274,6 +279,27 @@ class Game {
         this.excitement = 0.7;
         break;
       }
+      case 'taunt': {
+        const f = F[ev.by];
+        const book = ev.by === 'red' ? this.match.a : this.match.b;
+        this.hud.showTaunt(ev, book);
+        this.director.onEvent(ev);
+        if (f) f.speak(ev.hold * 0.82);
+        break;
+      }
+
+      case 'reply': {
+        const f = F[ev.by];
+        const other = F[ev.by === 'red' ? 'blue' : 'red'];
+        const book = ev.by === 'red' ? this.match.a : this.match.b;
+        this.hud.showReply(ev, book);
+        this.director.onEvent(ev);
+        if (f) f.speak(ev.hold * 0.82);
+        // 논파당한 쪽은 말문이 막힌다 — 맞은 건 아니라서 따로 모션을 둔다
+        if (ev.rebutted && other) this.schedule(ev.hold * 0.6, () => other.flinch());
+        break;
+      }
+
       case 'commentary':
         this.hud.commentary(ev.text, ev.tone);
         if (ev.tone === 'shout') Audio.roar(0.7);
@@ -290,7 +316,8 @@ class Game {
         if (!atk || !def) break;
         const book = ev.by === 'red' ? this.match.a : this.match.b;
         this.lastStrike = { ev, atk, def, book };
-        this.hud.showQuote(ev, book);
+        // 로어서드는 이제 피니시의 대표 문장 전용 — 평타까지 자막을 띄우면 설전 패널과 겹쳐 읽을 수 없다
+        if (ev.move === 'finisher') this.hud.showQuote(ev, book);
         this.director.onEvent(ev);
 
         atk.attack(ev.move === 'counter' ? 'jab' : ev.move, () => {
@@ -554,7 +581,7 @@ class Game {
       // 선택 화면 — 빈 옥타곤을 천천히 돈다
       const a = time * 0.16;
       this.camera.position.set(Math.cos(a) * 11, 4.4 + Math.sin(a * 0.6) * 0.9, Math.sin(a) * 11);
-      this.camera.lookAt(0, 1, 0);
+      this.camera.lookAt(0, 1.6, 0);
     } else if (this.director.free) {
       this.controls.update();
     } else {

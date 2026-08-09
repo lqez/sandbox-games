@@ -33,6 +33,23 @@ function fitToAspect(out, aspect) {
 // 각 샷: (ctx) => { pos, target, fov, roll, outside }
 // ctx = { u(0~1 진행), t(초), red, blue, focus, other, mid, impact, side }
 const SHOTS = {
+  // 대사 컷 — 언쟁을 찍는 정석. 듣는 쪽 어깨 너머로 말하는 쪽을 잡고, 발언이 끝날 때까지 안 끊는다.
+  // side를 경기 내내 고정해서 180도 선을 넘지 않는다 → 레드는 늘 화면 한쪽, 블루는 반대쪽에 선다.
+  dialogue: {
+    dur: [2.6, 3.6],
+    weight: 0,
+    fn: (c) => {
+      const dir = c.focus.clone().sub(c.other).setY(0).normalize(); // 듣는 쪽 → 말하는 쪽
+      // 뒤로 물러나기보다 옆으로 크게 비켜 선다.
+      // 듣는 쪽 바로 뒤에 서면 그쪽이 카메라~화자 축 위에 놓여 화면 한가운데를 덮어버린다.
+      // 옆으로 빼야 앞사람이 프레임 구석의 전경(어깨)이 되고 화자가 열린다.
+      const perp = new THREE.Vector3(-dir.z, 0, dir.x).multiplyScalar(c.side * 3.0);
+      const pos = c.other.clone().addScaledVector(dir, -2.6 - c.u * 0.3).add(perp).setY(c.focus.y + 1.05);
+      const target = c.focus.clone().setY(c.focus.y + 0.35); // 얼굴(눈)은 책 중심보다 위에 있다. 권마다 키가 달라 고정값을 쓰면 머리가 잘린다.
+      return { pos, target, fov: 32 - c.u * 1.2 };
+    },
+  },
+
   // 케이지사이드 와이드 — 기본 컷. 천천히 옆으로 흐른다.
   wide: {
     dur: [2.4, 3.6],
@@ -42,8 +59,8 @@ const SHOTS = {
       const a = c.side * 1.35 + c.t * 0.06;
       const r = CAGE_RADIUS + 3.2 - c.u * 0.9;
       return {
-        pos: V().set(Math.cos(a) * r, 3.1 - c.u * 0.35, Math.sin(a) * r),
-        target: c.mid.clone().setY(1.15),
+        pos: V().set(Math.cos(a) * r, 3.9 - c.u * 0.4, Math.sin(a) * r),
+        target: c.mid.clone().setY(2.0),
         fov: 42 - c.u * 3,
       };
     },
@@ -51,14 +68,14 @@ const SHOTS = {
 
   // 매트 높이 로우앵글 — 책이 커 보인다
   lowAngle: {
-    dur: [1.8, 2.6],
-    weight: 2.4,
+    dur: [2.6, 3.2],
+    weight: 1.6,
     fn: (c) => {
       const dir = c.focus.clone().sub(c.other).setY(0).normalize();
       const side = new THREE.Vector3(-dir.z, 0, dir.x).multiplyScalar(c.side * 1.5);
       return {
-        pos: c.focus.clone().addScaledVector(dir, 2.5 + c.u * -0.7).add(side).setY(0.42 + c.u * 0.16),
-        target: c.focus.clone().setY(1.4),
+        pos: c.focus.clone().addScaledVector(dir, -2.0 + c.u * 0.5).add(side).setY(0.55 + c.u * 0.18),
+        target: c.focus.clone().setY(2.35),
         fov: 36 - c.u * 2,
       };
     },
@@ -71,8 +88,8 @@ const SHOTS = {
     fn: (c) => {
       const a = c.t * 0.28 + c.side * 2;
       return {
-        pos: V().set(Math.cos(a) * 3.4, 7.4 - c.u * 1.6, Math.sin(a) * 3.4),
-        target: c.mid.clone().setY(0.8),
+        pos: V().set(Math.cos(a) * 3.4, 8.8 - c.u * 1.8, Math.sin(a) * 3.4),
+        target: c.mid.clone().setY(1.5),
         fov: 52,
       };
     },
@@ -80,14 +97,14 @@ const SHOTS = {
 
   // 클로즈업 — 좁은 화각으로 푸시인. 표지가 화면을 채운다.
   closeUp: {
-    dur: [1.6, 2.3],
-    weight: 2.2,
+    dur: [2.8, 3.4],
+    weight: 1.4,
     fn: (c) => {
       const dir = c.focus.clone().sub(c.other).setY(0).normalize();
-      const side = new THREE.Vector3(-dir.z, 0, dir.x).multiplyScalar(c.side * 0.9);
+      const side = new THREE.Vector3(-dir.z, 0, dir.x).multiplyScalar(c.side * 2.4);
       return {
-        pos: c.focus.clone().addScaledVector(dir, 2.5 - c.u * 0.4).add(side).setY(1.6),
-        target: c.focus.clone().setY(1.32),
+        pos: c.focus.clone().addScaledVector(dir, -1.9 - c.u * 0.3).add(side).setY(c.focus.y + 0.5),
+        target: c.focus.clone().setY(2.45),
         fov: 30 - c.u * 3,
       };
     },
@@ -95,14 +112,14 @@ const SHOTS = {
 
   // 오버 더 숄더 — 상대 어깨 너머로 본다. 대치감이 산다.
   ots: {
-    dur: [1.9, 2.8],
-    weight: 2.6,
+    dur: [3.0, 3.6],
+    weight: 2.2,
     fn: (c) => {
       const dir = c.other.clone().sub(c.focus).setY(0).normalize();
       const side = new THREE.Vector3(-dir.z, 0, dir.x).multiplyScalar(c.side * 0.95);
       return {
-        pos: c.other.clone().addScaledVector(dir, 1.75).add(side).setY(2.0 - c.u * 0.15),
-        target: c.focus.clone().setY(1.25),
+        pos: c.other.clone().addScaledVector(dir, 1.75).add(side).setY(3.1 - c.u * 0.15),
+        target: c.focus.clone().setY(2.3),
         fov: 38 - c.u * 4,
       };
     },
@@ -110,14 +127,14 @@ const SHOTS = {
 
   // 더치 앵글 — 화면을 기울인다. 큰 게 터졌을 때만.
   dutch: {
-    dur: [1.5, 2.0],
-    weight: 0.9,
+    dur: [1.6, 2.1],
+    weight: 0,
     fn: (c) => {
       const dir = c.focus.clone().sub(c.other).setY(0).normalize();
       const side = new THREE.Vector3(-dir.z, 0, dir.x).multiplyScalar(c.side * 1.7);
       return {
-        pos: c.focus.clone().addScaledVector(dir, 2.0).add(side).setY(0.95 + c.u * 0.5),
-        target: c.focus.clone().setY(1.35),
+        pos: c.focus.clone().addScaledVector(dir, -1.8).add(side).setY(1.7 + c.u * 0.5),
+        target: c.focus.clone().setY(2.4),
         fov: 33,
         roll: c.side * (0.18 + c.u * 0.1),
       };
@@ -126,15 +143,15 @@ const SHOTS = {
 
   // 케이지캠 — 그물 너머로 본다. 철망이 앞에 걸리는 그 화면.
   cageCam: {
-    dur: [2.0, 3.0],
+    dur: [3.0, 3.6],
     outside: true,
-    weight: 2,
+    weight: 1.4,
     fn: (c) => {
       const a = Math.atan2(c.mid.z, c.mid.x) + c.side * 0.9 + c.t * 0.05;
       const r = CAGE_RADIUS + 0.85;
       return {
-        pos: V().set(Math.cos(a) * r, 1.55 + c.u * 0.25, Math.sin(a) * r),
-        target: c.focus.clone().setY(1.2),
+        pos: V().set(Math.cos(a) * r, 2.5 + c.u * 0.25, Math.sin(a) * r),
+        target: c.focus.clone().setY(2.2),
         fov: 40 - c.u * 5,
       };
     },
@@ -142,16 +159,16 @@ const SHOTS = {
 
   // 스카이캠 — 링 위를 가로질러 훑고 지나간다
   skyCam: {
-    dur: [2.6, 3.4],
-    weight: 0.8,
+    dur: [2.8, 3.4],
+    weight: 0.35,
     fn: (c) => {
       const a = c.side * 1.2;
-      const from = V().set(Math.cos(a) * 9, 5.6, Math.sin(a) * 9);
-      const to = V().set(Math.cos(a + 1.5) * 3.2, 2.4, Math.sin(a + 1.5) * 3.2);
+      const from = V().set(Math.cos(a) * 9, 6.4, Math.sin(a) * 9);
+      const to = V().set(Math.cos(a + 1.5) * 3.2, 3.2, Math.sin(a + 1.5) * 3.2);
       const u = c.u * c.u * (3 - 2 * c.u);
       return {
         pos: from.lerp(to, u),
-        target: c.mid.clone().setY(1.1),
+        target: c.mid.clone().setY(2.0),
         fov: 46 - u * 8,
       };
     },
@@ -159,14 +176,14 @@ const SHOTS = {
 
   // 코너캠 — 코너 기둥 뒤 대각선
   corner: {
-    dur: [1.9, 2.6],
-    weight: 1.5,
+    dur: [2.8, 3.4],
+    weight: 1.2,
     fn: (c) => {
       const a = c.side > 0 ? Math.PI * 0.25 : Math.PI * 1.25;
       const r = CAGE_RADIUS - 0.6;
       return {
-        pos: V().set(Math.cos(a) * r, 2.1 - c.u * 0.5, Math.sin(a) * r),
-        target: c.mid.clone().setY(1.1),
+        pos: V().set(Math.cos(a) * r, 3.1 - c.u * 0.5, Math.sin(a) * r),
+        target: c.mid.clone().setY(2.0),
         fov: 40,
       };
     },
@@ -179,8 +196,8 @@ const SHOTS = {
     fn: (c) => {
       const dir = c.focus.clone().sub(c.other).setY(0).normalize();
       return {
-        pos: c.focus.clone().addScaledVector(dir, 1.9).setY(0.18),
-        target: c.focus.clone().setY(0.42),
+        pos: c.focus.clone().addScaledVector(dir, -2.2).setY(0.22),
+        target: c.focus.clone().setY(0.9),
         fov: 34,
         roll: c.side * 0.06,
       };
@@ -195,8 +212,8 @@ const SHOTS = {
       const a = c.t * 0.85 + c.side * 2.2;
       const r = 4.0 - c.u * 0.9;
       return {
-        pos: V().set(c.focus.x + Math.cos(a) * r, 1.1 + Math.sin(c.t * 0.5) * 0.5 + c.u * 0.8, c.focus.z + Math.sin(a) * r),
-        target: c.focus.clone().setY(1.05),
+        pos: V().set(c.focus.x + Math.cos(a) * r, 2.0 + Math.sin(c.t * 0.5) * 0.5 + c.u * 0.8, c.focus.z + Math.sin(a) * r),
+        target: c.focus.clone().setY(2.05),
         fov: 40 - c.u * 6,
       };
     },
@@ -215,8 +232,8 @@ const SHOTS = {
           .clone()
           .addScaledVector(dir, Math.cos(a) * 2.5)
           .addScaledVector(side, Math.sin(a) * 2.5)
-          .setY(0.8 + c.u * 1.0),
-        target: c.focus.clone().setY(1.15),
+          .setY(1.5 + c.u * 1.1),
+        target: c.focus.clone().setY(2.2),
         fov: 38,
       };
     },
@@ -230,8 +247,8 @@ const SHOTS = {
       const a = Math.PI / 2 + c.u * 0.5;
       const r = 4.6 - c.u * 1.2;
       return {
-        pos: V().set(Math.cos(a) * r, 1.9 - c.u * 0.5, Math.sin(a) * r),
-        target: c.mid.clone().setY(1.25),
+        pos: V().set(Math.cos(a) * r, 2.9 - c.u * 0.5, Math.sin(a) * r),
+        target: c.mid.clone().setY(2.3),
         fov: 34 - c.u * 4,
       };
     },
@@ -258,6 +275,7 @@ export class Director {
     this._roll = 0;
     this.free = false; // 자유 시점 모드에서는 감독이 손을 뗀다
     this.rngState = 1;
+    this.lineSide = 1; // 180도 선 — 경기 내내 고정
   }
 
   // 감독 전용 난수 — 경기 시뮬레이션 시드를 오염시키지 않는다(연출은 판정과 무관)
@@ -281,23 +299,24 @@ export class Director {
     this.arena.setFenceStrength(name === 'cageCam' ? 1 : s.outside ? 0.6 : 0.35);
   }
 
-  // 사건에 맞는 컷을 고른다
+  // 사건에 맞는 컷을 고른다.
+  // 원칙: 말하는 동안은 절대 안 끊는다. 컷은 화자가 바뀔 때와 주먹이 들어갈 때만.
   onEvent(ev) {
     if (this.free) return;
     switch (ev.type) {
+      case 'taunt':
+        // 도발 — 말하는 쪽으로. 발언 길이만큼 컷을 유지한다.
+        this.cut('dialogue', { focus: ev.by, dur: ev.hold, side: this.lineSide });
+        break;
+      case 'reply':
+        // 반박 — 반대편으로 넘긴다(리버스 숏). 같은 side를 써야 180도 선이 안 깨진다.
+        this.cut('dialogue', { focus: ev.by, dur: ev.hold, side: this.lineSide });
+        break;
       case 'strike': {
-        const focus = ev.evaded ? (ev.by === 'red' ? 'blue' : 'red') : ev.by === 'red' ? 'blue' : 'red';
-        if (ev.move === 'finisher') {
-          this.cut('lowAngle', { focus: ev.by, dur: 2.4 });
-        } else if (ev.crit || ev.knockdown) {
-          this.cut(this.rand() < 0.55 ? 'dutch' : 'closeUp', { focus, dur: 1.9 });
-        } else if (ev.evaded) {
-          if (this.shotT > 1.4) this.cut(this.pickAmbient(), { focus });
-        } else if (ev.move === 'heavy') {
-          if (this.shotT > 1.2) this.cut(this.rand() < 0.5 ? 'ots' : 'cageCam', { focus });
-        } else if (this.shotT > this.shotDur * 0.75) {
-          this.cut(this.pickAmbient(), { focus });
-        }
+        const hitCorner = ev.by === 'red' ? 'blue' : 'red';
+        if (ev.move === 'finisher') this.cut('lowAngle', { focus: ev.by, dur: 2.6 });
+        else if (ev.crit || ev.knockdown) this.cut('dutch', { focus: hitCorner, dur: 2.0 });
+        else this.cut(this.rand() < 0.5 ? 'closeUp' : 'wide', { focus: hitCorner, dur: 2.4 });
         break;
       }
       case 'knockdown':
@@ -313,10 +332,7 @@ export class Director {
         this.cut('overhead', { dur: 4 });
         break;
       case 'stagger':
-        this.cut('closeUp', { focus: ev.who, dur: 1.7 });
-        break;
-      case 'counter':
-        this.cut('dutch', { focus: ev.by, dur: 1.8 });
+        this.cut('closeUp', { focus: ev.who, dur: 2.0 });
         break;
       case 'breathe':
         this.cut(this.rand() < 0.5 ? 'skyCam' : 'overhead', {});
@@ -370,17 +386,17 @@ export class Director {
 
     // 손각도 흔들림 — 삼각대가 아니라 사람이 들고 있다
     const t = performance.now() * 0.001;
-    const hh = 0.028 + this.shake * 0.05;
-    out.pos.x += Math.sin(t * 2.3) * hh + Math.sin(t * 5.7) * hh * 0.4;
-    out.pos.y += Math.sin(t * 1.9 + 1.3) * hh * 0.8;
-    out.pos.z += Math.cos(t * 2.1 + 0.7) * hh;
+    const hh = 0.011 + this.shake * 0.03;
+    out.pos.x += Math.sin(t * 1.7) * hh + Math.sin(t * 4.1) * hh * 0.35;
+    out.pos.y += Math.sin(t * 1.4 + 1.3) * hh * 0.7;
+    out.pos.z += Math.cos(t * 1.6 + 0.7) * hh;
 
     // 타격 흔들림
     if (this.shake > 0.001) {
       const s = this.shake;
-      out.pos.x += (this.rand() - 0.5) * s * 0.42;
-      out.pos.y += (this.rand() - 0.5) * s * 0.42;
-      out.pos.z += (this.rand() - 0.5) * s * 0.42;
+      out.pos.x += (this.rand() - 0.5) * s * 0.26;
+      out.pos.y += (this.rand() - 0.5) * s * 0.26;
+      out.pos.z += (this.rand() - 0.5) * s * 0.26;
       out.target.x += (this.rand() - 0.5) * s * 0.16;
       out.target.y += (this.rand() - 0.5) * s * 0.16;
       this.shake = Math.max(0, this.shake - dt * this.shakeDecay);

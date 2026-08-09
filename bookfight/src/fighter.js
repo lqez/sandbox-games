@@ -1,8 +1,10 @@
-// 책 파이터 — 표지가 입이자 주먹이다.
-// 책등을 경첩 삼아 앞표지가 열리며 발췌문을 뱉고, 맞으면 낱장이 터져 나온다.
+// 책 파이터 — 가분수 포테이토헤드 복서.
+// 책이 머리이자 몸통이고, 짧은 팔다리와 눈·머리카락이 거기 꽂힌다.
+// 표지는 곧 얼굴이라 항상 상대(그리고 대개 카메라)를 향한다. 앞표지를 여닫아 말을 한다.
 
 import * as THREE from 'three';
 import { drawCover, drawBackCover, drawSpine, drawPageEdge, drawQuoteSlip } from './cover.js';
+import { makeLimb, makeEyes, makeHair } from './rig.js';
 
 const PAGE_EDGE_TEX = (() => {
   let t = null;
@@ -26,14 +28,17 @@ function tex(canvas) {
 const easeOut = (x) => 1 - Math.pow(1 - x, 3);
 const easeIn = (x) => x * x * x;
 const easeInOut = (x) => (x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2);
+const lerp = (a, b, k) => a + (b - a) * Math.min(1, Math.max(0, k));
+
+// 가드 자세 — 글러브를 얼굴(표지) 앞에 올린 기본형
+const GUARD = { sh: -0.55, el: -1.75 };
 
 export class BookFighter {
   constructor(book, corner, opts = {}) {
     this.book = book;
     this.corner = corner;
-    this.facing = opts.facing ?? 1; // +1이면 +Z를 본다
+    this.facing = opts.facing ?? 1;
 
-    // 분량이 곧 두께이자 덩치
     const th = Math.min(0.46, Math.max(0.075, Math.pow(book.pages, 0.62) * 0.0072));
     const scale = 1.15 + Math.pow(book.pages, 0.3) * 0.07;
     this.thickness = th;
@@ -41,28 +46,29 @@ export class BookFighter {
 
     const w = 1.05;
     const h = 1.55;
-    this.dims = { w, h, th };
+    const legLen = 0.6; // 가분수 — 그래도 책 높이의 40% 아래
+    this.dims = { w, h, th, legLen };
 
     this.root = new THREE.Group();
     this.root.scale.setScalar(scale);
 
-    // body — 흔들림/기울임 전부 여기에 건다
+    // 엉덩이(다리가 붙는 기준) — 책이 기울어도 발은 바닥에 남는다
+    this.hips = new THREE.Group();
+    this.hips.position.y = legLen;
+    this.root.add(this.hips);
+
+    // body = 책. 모든 상체 모션은 여기에 건다.
     this.body = new THREE.Group();
     this.body.position.y = h / 2;
-    this.root.add(this.body);
+    this.hips.add(this.body);
 
     const coverTex = tex(drawCover(book));
     const backTex = tex(drawBackCover(book));
     const spineTex = tex(drawSpine(book));
-    // 책등이 바깥을 보는 면은 BoxGeometry의 -X 면인데, 이 면의 UV는 +X 면과 좌우가 뒤집혀 있다.
-    // 그대로 두면 제목이 거울처럼 뒤집혀 읽힌다 — 텍스처를 미리 뒤집어 상쇄한다.
     spineTex.wrapS = THREE.RepeatWrapping;
     spineTex.repeat.x = -1;
     spineTex.offset.x = 1;
     const edgeTex = PAGE_EDGE_TEX();
-
-    // 이 파이터만 쓰는 텍스처 — 정리할 때 이것만 버린다.
-    // 낱장 단면(PAGE_EDGE_TEX)은 모두가 공유하므로 절대 dispose하면 안 된다.
     this.ownedTextures = [coverTex, backTex, spineTex];
 
     const coverMat = new THREE.MeshStandardMaterial({ map: coverTex, roughness: 0.78, metalness: 0.04 });
@@ -75,21 +81,18 @@ export class BookFighter {
 
     const coverT = 0.045;
 
-    // 낱장 뭉치
     const pages = new THREE.Mesh(new THREE.BoxGeometry(w * 0.96, h * 0.96, th), pageMat);
     pages.castShadow = true;
     pages.receiveShadow = true;
     pages.position.x = 0.02;
     this.body.add(pages);
-    this.pages = pages;
 
-    // 책등
     const spine = new THREE.Mesh(new THREE.BoxGeometry(coverT * 1.4, h, th + coverT * 2), spineMat);
     spine.position.set(-w / 2, 0, 0);
     spine.castShadow = true;
     this.body.add(spine);
 
-    // 앞표지 — 책등을 축으로 열린다(= 입 + 주먹)
+    // 앞표지 = 입. 말할 때 여닫는다.
     this.frontHinge = new THREE.Group();
     this.frontHinge.position.set(-w / 2, 0, th / 2 + coverT / 2);
     const front = new THREE.Mesh(new THREE.BoxGeometry(w, h, coverT), coverMat);
@@ -98,9 +101,7 @@ export class BookFighter {
     front.receiveShadow = true;
     this.frontHinge.add(front);
     this.body.add(this.frontHinge);
-    this.frontCover = front;
 
-    // 뒤표지
     this.backHinge = new THREE.Group();
     this.backHinge.position.set(-w / 2, 0, -th / 2 - coverT / 2);
     const back = new THREE.Mesh(new THREE.BoxGeometry(w, h, coverT), backMat);
@@ -109,46 +110,98 @@ export class BookFighter {
     this.backHinge.add(back);
     this.body.add(this.backHinge);
 
-    // 가름끈 — 흔들리면 살아 있어 보인다
+    // 눈 — 표지에 붙은 스티커. 앞표지와 함께 열리면 안 되니 body에 직접 단다.
+    const { group: eyeGroup, eyes } = makeEyes(w, h);
+    eyeGroup.position.z = th / 2 + coverT + 0.02;
+    this.body.add(eyeGroup);
+    this.eyes = eyes;
+
+    // 머리카락 — 책 윗변에 꽂는다
+    const { group: hairGroup, materials: hairMats } = makeHair(book.hair, w, book.cover.accent);
+    hairGroup.position.set(0, h / 2, -0.06);
+    this.body.add(hairGroup);
+    this.hair = hairGroup;
+    this.hairMats = hairMats;
+
+    // ── 팔 ──
+    const gloveColor = corner === 'red' ? 0xd93a30 : 0x2f63d9;
+    this.arms = {};
+    for (const side of ['L', 'R']) {
+      const s = side === 'L' ? -1 : 1;
+      const limb = makeLimb({
+        upperLen: 0.4,
+        lowerLen: 0.34,
+        radius: 0.105,
+        endRadius: 0.175,
+        color: 0xf2dcc0,
+        endColor: gloveColor,
+      });
+      limb.root.position.set(s * (w / 2 + 0.04), -h * 0.12, 0);
+      limb.root.rotation.z = s * 0.24;
+      this.body.add(limb.root);
+      this.arms[side] = limb;
+    }
+
+    // ── 다리 ──
+    this.legs = {};
+    for (const side of ['L', 'R']) {
+      const s = side === 'L' ? -1 : 1;
+      const limb = makeLimb({
+        upperLen: 0.32,
+        lowerLen: 0.28,
+        radius: 0.115,
+        endRadius: 0.145,
+        color: 0xf2dcc0,
+        endColor: 0x3a2c22,
+        boot: true,
+      });
+      limb.root.position.set(s * w * 0.24, 0, 0);
+      this.hips.add(limb.root);
+      this.legs[side] = limb;
+    }
+
+    // 가름끈
     const ribbonGeo = new THREE.PlaneGeometry(0.055, 0.9, 1, 8);
-    const ribbonMat = new THREE.MeshStandardMaterial({
-      color: new THREE.Color(book.cover.accent),
-      side: THREE.DoubleSide,
-      roughness: 0.6,
-    });
-    this.ribbon = new THREE.Mesh(ribbonGeo, ribbonMat);
+    this.ribbon = new THREE.Mesh(
+      ribbonGeo,
+      new THREE.MeshStandardMaterial({ color: new THREE.Color(book.cover.accent), side: THREE.DoubleSide, roughness: 0.6 })
+    );
     this.ribbon.position.set(w * 0.32, -h * 0.32, th / 2 + 0.005);
     this.body.add(this.ribbon);
     this.ribbonBase = ribbonGeo.attributes.position.array.slice();
 
-    // 접지 그림자 대용 — 바닥에 어두운 원
-    const shadowTexCv = document.createElement('canvas');
-    shadowTexCv.width = shadowTexCv.height = 128;
-    const sctx = shadowTexCv.getContext('2d');
-    const sg = sctx.createRadialGradient(64, 64, 4, 64, 64, 62);
+    // 접지 그림자
+    const cv = document.createElement('canvas');
+    cv.width = cv.height = 128;
+    const c2 = cv.getContext('2d');
+    const sg = c2.createRadialGradient(64, 64, 4, 64, 64, 62);
     sg.addColorStop(0, 'rgba(0,0,0,0.55)');
     sg.addColorStop(1, 'rgba(0,0,0,0)');
-    sctx.fillStyle = sg;
-    sctx.fillRect(0, 0, 128, 128);
+    c2.fillStyle = sg;
+    c2.fillRect(0, 0, 128, 128);
     this.blob = new THREE.Mesh(
       new THREE.PlaneGeometry(1.9, 1.4),
-      new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(shadowTexCv), transparent: true, depthWrite: false })
+      new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(cv), transparent: true, depthWrite: false })
     );
     this.blob.rotation.x = -Math.PI / 2;
     this.blob.position.y = 0.012;
     this.root.add(this.blob);
 
-    // 코너 색 글로우 링
-    const ringColor = corner === 'red' ? 0xff4d4d : 0x4d8cff;
     this.ring = new THREE.Mesh(
       new THREE.RingGeometry(0.72, 0.86, 40),
-      new THREE.MeshBasicMaterial({ color: ringColor, transparent: true, opacity: 0.42, side: THREE.DoubleSide, depthWrite: false })
+      new THREE.MeshBasicMaterial({
+        color: corner === 'red' ? 0xff4d4d : 0x4d8cff,
+        transparent: true,
+        opacity: 0.42,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+      })
     );
     this.ring.rotation.x = -Math.PI / 2;
     this.ring.position.y = 0.02;
     this.root.add(this.ring);
 
-    // 낱장 파티클 풀
+    // 낱장 파티클
     this.paper = [];
     const paperGeo = new THREE.PlaneGeometry(0.26, 0.34);
     const paperMat = new THREE.MeshStandardMaterial({
@@ -157,13 +210,12 @@ export class BookFighter {
       roughness: 0.9,
       transparent: true,
     });
-    for (let i = 0; i < 34; i++) {
+    for (let i = 0; i < 30; i++) {
       const m = new THREE.Mesh(paperGeo, paperMat.clone());
       m.visible = false;
       this.paper.push({ mesh: m, life: 0, vel: new THREE.Vector3(), spin: new THREE.Vector3() });
     }
 
-    // 상태
     this.anims = [];
     this.phase = Math.random() * Math.PI * 2;
     this.hurt = 0;
@@ -171,6 +223,10 @@ export class BookFighter {
     this.koed = false;
     this.openAmount = 0;
     this.stanceOffset = 0;
+    this.talking = 0; // >0이면 입(앞표지)이 움직인다
+    this.lead = corner === 'red' ? 'R' : 'L';
+    this.pose = { L: { ...GUARD }, R: { ...GUARD } };
+    this.step = 0;
   }
 
   addTo(scene) {
@@ -188,9 +244,7 @@ export class BookFighter {
     this.paper[0]?.mesh.geometry.dispose();
     this.root.traverse((o) => {
       if (o.geometry) o.geometry.dispose();
-      if (o.material) {
-        for (const m of Array.isArray(o.material) ? o.material : [o.material]) m.dispose();
-      }
+      if (o.material) for (const m of Array.isArray(o.material) ? o.material : [o.material]) m.dispose();
     });
     for (const t of this.ownedTextures) t.dispose();
     this.blob.material.map.dispose();
@@ -203,98 +257,119 @@ export class BookFighter {
   }
 
   lookAt(x, z) {
-    const dx = x - this.root.position.x;
-    const dz = z - this.root.position.z;
-    this.baseRotY = Math.atan2(dx, dz);
+    this.baseRotY = Math.atan2(x - this.root.position.x, z - this.root.position.z);
     this.root.rotation.y = this.baseRotY;
   }
 
-  // ── 애니메이션 트랙 ────────────────────────────────────────
   play(dur, fn, onDone) {
     const a = { t: 0, dur, fn, onDone };
     this.anims.push(a);
     return a;
   }
 
-  clearAnims(kind) {
-    this.anims = this.anims.filter((a) => (kind ? a.kind !== kind : false));
+  // 말하기 — 입(앞표지)을 대사 길이만큼 여닫는다
+  speak(seconds) {
+    this.talking = seconds;
   }
 
+  // ── 복싱 모션 ──────────────────────────────────────────
   attack(moveKey, onImpact) {
     if (this.koed) return;
     const big = moveKey === 'heavy' || moveKey === 'finisher';
-    const dur = moveKey === 'finisher' ? 1.05 : big ? 0.82 : 0.55;
-    const reach = moveKey === 'finisher' ? 1.5 : big ? 1.1 : 0.62;
-    const openMax = moveKey === 'finisher' ? 2.15 : big ? 1.75 : 1.25;
+    const dur = moveKey === 'finisher' ? 1.0 : big ? 0.78 : 0.5;
+    const reach = moveKey === 'finisher' ? 0.85 : big ? 0.6 : 0.34;
+    const arm = big ? (this.lead === 'R' ? 'L' : 'R') : this.lead; // 훅은 뒷손
+    const other = arm === 'R' ? 'L' : 'R';
+    const s = arm === 'L' ? -1 : 1;
     let fired = false;
+
     const a = this.play(dur, (u) => {
-      // 0→0.35 준비(뒤로 당김), 0.35→0.55 뻗음, 0.55→1 복귀
-      let lunge, open;
-      if (u < 0.32) {
-        const k = u / 0.32;
-        lunge = -0.22 * easeOut(k);
-        open = 0.35 * easeOut(k);
-      } else if (u < 0.55) {
-        const k = (u - 0.32) / 0.23;
-        lunge = -0.22 + (reach + 0.22) * easeOut(k);
-        open = 0.35 + (openMax - 0.35) * easeOut(k);
-      } else {
-        const k = (u - 0.55) / 0.45;
-        lunge = reach * (1 - easeInOut(k));
-        open = openMax * (1 - easeInOut(k)) + 0.1 * easeInOut(k);
-      }
-      this.stanceOffset = lunge;
-      this.openAmount = open;
-      this.body.rotation.x = -lunge * 0.16;
-      this.body.rotation.z = Math.sin(u * Math.PI) * (big ? 0.16 : 0.08);
+      let k; // 0=준비 1=최대신장
+      if (u < 0.3) k = -0.32 * easeOut(u / 0.3);
+      else if (u < 0.52) k = lerp(-0.32, 1, easeOut((u - 0.3) / 0.22));
+      else k = 1 - easeInOut((u - 0.52) / 0.48);
+
+      // 뻗는 팔 — 어깨가 앞으로, 팔꿈치가 펴진다
+      this.pose[arm].sh = lerp(GUARD.sh, -1.62, Math.max(0, k));
+      this.pose[arm].el = lerp(GUARD.el, -0.12, Math.max(0, k));
+      // 반대 팔은 가드를 조인다
+      this.pose[other].sh = lerp(GUARD.sh, -0.42, Math.abs(k) * 0.6);
+      this.pose[other].el = lerp(GUARD.el, -2.05, Math.abs(k) * 0.6);
+
+      // 몸통 — 어깨를 넣으며 회전, 훅이면 크게
+      this.body.rotation.y = -s * k * (big ? 0.55 : 0.3);
+      this.body.rotation.z = s * k * (big ? 0.16 : 0.07);
+      this.body.rotation.x = -k * 0.1;
+      this.stanceOffset = k * reach;
+      // 입은 공격할 때 크게 벌어진다
+      this.openAmount = Math.max(0, k) * (moveKey === 'finisher' ? 0.75 : big ? 0.5 : 0.32);
+      // 뒷발로 밀어낸다
+      this.legs[other].root.rotation.x = k * 0.4;
+      this.legs[arm].root.rotation.x = -k * 0.22;
+
       if (!fired && u >= 0.5) {
         fired = true;
         if (onImpact) onImpact();
       }
+    }, () => {
+      this.pose.L = { ...GUARD };
+      this.pose.R = { ...GUARD };
     });
     a.kind = 'attack';
     return a;
   }
 
-  // 맞았다 — 뒤로 젖혀지고 낱장이 터진다
   hit(ratio, crit) {
     if (this.koed) return;
     const strength = Math.min(1, 0.35 + ratio * 3.4 + (crit ? 0.3 : 0));
-    this.burstPages(Math.round(4 + strength * 14), strength);
+    this.burstPages(Math.round(3 + strength * 12), strength);
     this.hurt = Math.min(1, this.hurt + strength * 0.7);
-    const a = this.play(0.42 + strength * 0.2, (u) => {
+    const dir = Math.random() < 0.5 ? 1 : -1;
+    const a = this.play(0.44 + strength * 0.2, (u) => {
       const k = Math.sin(u * Math.PI) * strength;
-      this.stanceOffset = -k * 0.55;
-      this.body.rotation.x = k * 0.42;
-      this.body.rotation.z = k * 0.2 * (crit ? 1.6 : 1);
-      this.openAmount = k * 0.5;
+      this.stanceOffset = -k * 0.4;
+      this.body.rotation.x = k * 0.42; // 고개가 젖혀진다
+      this.body.rotation.z = k * 0.22 * dir;
+      this.body.rotation.y = k * 0.3 * dir;
+      this.openAmount = k * 0.3;
+      // 가드가 풀리며 팔이 벌어진다
+      this.pose.L.sh = lerp(GUARD.sh, -0.1, k);
+      this.pose.R.sh = lerp(GUARD.sh, -0.1, k);
+      this.pose.L.el = lerp(GUARD.el, -0.9, k);
+      this.pose.R.el = lerp(GUARD.el, -0.9, k);
+      this.legs.L.root.rotation.x = -k * 0.3;
+      this.legs.R.root.rotation.x = k * 0.2;
       this.materials.coverMat.emissive.setRGB(k * 0.5, k * 0.12, k * 0.06);
     });
     a.kind = 'hit';
     return a;
   }
 
-  evade() {
+  // 논파당했다 — 맞은 건 아니고 말문이 막힌 상태
+  flinch() {
     if (this.koed) return;
-    const dir = Math.random() < 0.5 ? 1 : -1;
-    const a = this.play(0.5, (u) => {
+    const a = this.play(0.6, (u) => {
       const k = Math.sin(u * Math.PI);
-      this.body.position.x = dir * k * 0.55;
-      this.body.rotation.z = -dir * k * 0.3;
-      this.body.rotation.y = -dir * k * 0.5;
+      this.body.rotation.x = k * 0.16;
+      this.stanceOffset = -k * 0.16;
+      this.openAmount = k * 0.15;
     });
-    a.kind = 'evade';
+    a.kind = 'flinch';
     return a;
   }
 
   stagger() {
     if (this.koed) return;
     const a = this.play(1.3, (u) => {
-      const decay = 1 - u;
-      this.body.rotation.z = Math.sin(u * 26) * 0.26 * decay;
-      this.body.rotation.x = Math.sin(u * 17) * 0.16 * decay;
-      this.stanceOffset = -Math.sin(u * 11) * 0.22 * decay;
-      this.openAmount = 0.5 * decay;
+      const d = 1 - u;
+      this.body.rotation.z = Math.sin(u * 26) * 0.26 * d;
+      this.body.rotation.x = Math.sin(u * 17) * 0.16 * d;
+      this.stanceOffset = -Math.sin(u * 11) * 0.2 * d;
+      this.openAmount = 0.5 * d;
+      this.legs.L.root.rotation.x = Math.sin(u * 20) * 0.3 * d;
+      this.legs.R.root.rotation.x = -Math.sin(u * 20) * 0.3 * d;
+      this.pose.L.sh = lerp(GUARD.sh, -0.2, d);
+      this.pose.R.sh = lerp(GUARD.sh, -0.2, d);
     });
     a.kind = 'stagger';
     return a;
@@ -302,27 +377,25 @@ export class BookFighter {
 
   knockdown() {
     if (this.koed) return;
-    this.burstPages(24, 1);
+    this.burstPages(20, 1);
     this.down = true;
     const a = this.play(2.6, (u) => {
-      if (u < 0.28) {
-        const k = easeIn(u / 0.28);
-        this.body.rotation.x = k * 1.45;
-        this.body.position.y = this.dims.h / 2 - k * (this.dims.h / 2 - 0.14);
-        this.openAmount = k * 2.4;
-      } else if (u < 0.62) {
-        // 매트에 엎어져 있다
-        this.body.rotation.x = 1.45 + Math.sin(u * 30) * 0.03;
-        this.body.position.y = 0.14;
-        this.openAmount = 2.4;
-      } else {
-        const k = easeOut((u - 0.62) / 0.38);
-        this.body.rotation.x = 1.45 * (1 - k);
-        this.body.position.y = 0.14 + (this.dims.h / 2 - 0.14) * k;
-        this.openAmount = 2.4 * (1 - k) + 0.2 * k;
-      }
+      const back = u < 0.28 ? easeIn(u / 0.28) : u < 0.62 ? 1 : 1 - easeOut((u - 0.62) / 0.38);
+      this.body.rotation.x = back * 1.35;
+      this.hips.position.y = this.dims.legLen - back * (this.dims.legLen - 0.1);
+      this.openAmount = back * 2.2;
+      // 다리가 앞으로 뻗어 널브러진다
+      this.legs.L.root.rotation.x = -back * 1.5;
+      this.legs.R.root.rotation.x = -back * 1.2;
+      this.legs.L.joint.rotation.x = back * 0.9;
+      this.legs.R.joint.rotation.x = back * 0.6;
+      this.pose.L.sh = lerp(GUARD.sh, 0.5, back);
+      this.pose.R.sh = lerp(GUARD.sh, 0.5, back);
+      this.pose.L.el = lerp(GUARD.el, -0.3, back);
+      this.pose.R.el = lerp(GUARD.el, -0.3, back);
     }, () => {
       this.down = false;
+      this.hips.position.y = this.dims.legLen;
     });
     a.kind = 'knockdown';
     return a;
@@ -330,18 +403,21 @@ export class BookFighter {
 
   ko() {
     this.koed = true;
-    this.burstPages(34, 1.4);
+    this.burstPages(30, 1.4);
     this.anims = [];
-    const a = this.play(2.2, (u) => {
+    const a = this.play(2.4, (u) => {
       const k = easeIn(Math.min(1, u / 0.5));
-      this.body.rotation.x = k * 1.52;
-      this.body.position.y = this.dims.h / 2 - k * (this.dims.h / 2 - 0.13);
-      this.openAmount = k * 2.6;
-      this.stanceOffset = -k * 0.3;
-      if (u > 0.55) {
-        const w = (u - 0.55) / 0.45;
-        this.body.rotation.z = Math.sin(w * 8) * 0.05 * (1 - w);
-      }
+      this.body.rotation.x = k * 1.45;
+      this.body.rotation.z = k * 0.25;
+      this.hips.position.y = this.dims.legLen - k * (this.dims.legLen - 0.08);
+      this.openAmount = k * 2.4;
+      this.legs.L.root.rotation.x = -k * 1.7;
+      this.legs.R.root.rotation.x = -k * 1.2;
+      this.legs.L.joint.rotation.x = k * 1.1;
+      this.pose.L.sh = lerp(GUARD.sh, 0.7, k);
+      this.pose.R.sh = lerp(GUARD.sh, 0.5, k);
+      this.pose.L.el = lerp(GUARD.el, -0.1, k);
+      this.pose.R.el = lerp(GUARD.el, -0.2, k);
     });
     a.kind = 'ko';
     this.ring.material.opacity = 0.1;
@@ -352,17 +428,24 @@ export class BookFighter {
     if (this.koed) return;
     const a = this.play(6, (u) => {
       const b = Math.abs(Math.sin(u * Math.PI * 5));
-      this.body.position.y = this.dims.h / 2 + b * 0.42;
-      this.body.rotation.x = -0.22 - b * 0.16;
-      this.openAmount = 1.5 + b * 0.7;
-      this.body.rotation.y = Math.sin(u * Math.PI * 2.2) * 0.5;
+      this.hips.position.y = this.dims.legLen + b * 0.34;
+      this.body.rotation.x = -0.16 - b * 0.12;
+      this.openAmount = 1.2 + b * 0.6;
+      this.body.rotation.y = Math.sin(u * Math.PI * 2.2) * 0.4;
+      // 두 팔을 번쩍
+      this.pose.L.sh = 2.5 + b * 0.3;
+      this.pose.R.sh = 2.5 + b * 0.3;
+      this.pose.L.el = -0.3;
+      this.pose.R.el = -0.3;
+      this.legs.L.root.rotation.x = -b * 0.3;
+      this.legs.R.root.rotation.x = b * 0.3;
     });
     a.kind = 'celebrate';
     return a;
   }
 
   burstPages(count, strength) {
-    const origin = this.root.localToWorld(new THREE.Vector3(0, this.dims.h * 0.55, this.dims.th));
+    const origin = this.body.localToWorld(new THREE.Vector3(0, 0, this.dims.th));
     let used = 0;
     for (const p of this.paper) {
       if (used >= count) break;
@@ -370,10 +453,10 @@ export class BookFighter {
       used++;
       p.life = 1;
       p.mesh.visible = true;
-      p.mesh.position.copy(origin).add(
-        new THREE.Vector3((Math.random() - 0.5) * 0.7, (Math.random() - 0.5) * 0.9, (Math.random() - 0.5) * 0.5)
-      );
-      const dir = new THREE.Vector3(0, 0, this.facing).applyAxisAngle(new THREE.Vector3(0, 1, 0), this.root.rotation.y);
+      p.mesh.position
+        .copy(origin)
+        .add(new THREE.Vector3((Math.random() - 0.5) * 0.7, (Math.random() - 0.5) * 0.9, (Math.random() - 0.5) * 0.5));
+      const dir = new THREE.Vector3(0, 0, 1).applyAxisAngle(new THREE.Vector3(0, 1, 0), this.root.rotation.y);
       p.vel.set(
         (Math.random() - 0.5) * 3.2 * strength - dir.x * 1.6 * strength,
         1.8 + Math.random() * 3 * strength,
@@ -386,7 +469,6 @@ export class BookFighter {
   }
 
   update(dt, time) {
-    // 트랙 진행
     for (let i = this.anims.length - 1; i >= 0; i--) {
       const a = this.anims[i];
       a.t += dt;
@@ -400,32 +482,64 @@ export class BookFighter {
 
     const busy = this.anims.length > 0;
     const t = time + this.phase;
+    const K = (r) => Math.min(1, dt * r);
 
     if (!busy && !this.koed) {
-      // 아이들 — 복싱 스탠스 바운스 + 좌우 스웨이
-      const hurtScale = 1 + this.hurt * 0.5;
-      const bob = Math.sin(t * 3.4) * 0.045 * hurtScale;
-      const sway = Math.sin(t * 1.7) * 0.09;
-      this.body.position.y = this.dims.h / 2 + Math.abs(bob);
-      this.body.position.x += (0 - this.body.position.x) * Math.min(1, dt * 8);
-      this.body.rotation.z += (sway * 0.35 - this.body.rotation.z) * Math.min(1, dt * 6);
-      this.body.rotation.x += (this.hurt * 0.12 - this.body.rotation.x) * Math.min(1, dt * 6);
-      this.body.rotation.y += (sway * 0.5 - this.body.rotation.y) * Math.min(1, dt * 6);
-      this.openAmount += ((0.13 + Math.sin(t * 2.6) * 0.07) - this.openAmount) * Math.min(1, dt * 7);
-      this.stanceOffset += (0 - this.stanceOffset) * Math.min(1, dt * 7);
-      this.materials.coverMat.emissive.lerp(this.baseEmissive, Math.min(1, dt * 5));
+      // 복싱 스탠스 — 무릎으로 통통 튀고 몸이 좌우로 흔들린다
+      const bob = Math.abs(Math.sin(t * 3.6)) * 0.05 * (1 + this.hurt * 0.6);
+      const sway = Math.sin(t * 1.8) * 0.09;
+      this.hips.position.y = lerp(this.hips.position.y, this.dims.legLen + bob, K(10));
+      this.body.rotation.z = lerp(this.body.rotation.z, sway * 0.3, K(6));
+      this.body.rotation.y = lerp(this.body.rotation.y, sway * 0.45, K(6));
+      this.body.rotation.x = lerp(this.body.rotation.x, this.hurt * 0.12, K(6));
+      this.stanceOffset = lerp(this.stanceOffset, 0, K(7));
+      this.pose.L.sh = lerp(this.pose.L.sh, GUARD.sh + Math.sin(t * 3.6) * 0.06, K(8));
+      this.pose.R.sh = lerp(this.pose.R.sh, GUARD.sh - Math.sin(t * 3.6) * 0.06, K(8));
+      this.pose.L.el = lerp(this.pose.L.el, GUARD.el, K(8));
+      this.pose.R.el = lerp(this.pose.R.el, GUARD.el, K(8));
+      // 스텝 — 무릎을 번갈아 굽혀 제자리 스텝을 밟는다
+      this.step += dt * 3.6;
+      this.legs.L.root.rotation.x = lerp(this.legs.L.root.rotation.x, Math.sin(this.step) * 0.16, K(8));
+      this.legs.R.root.rotation.x = lerp(this.legs.R.root.rotation.x, -Math.sin(this.step) * 0.16, K(8));
+      this.legs.L.joint.rotation.x = lerp(this.legs.L.joint.rotation.x, 0.18 + Math.max(0, Math.sin(this.step)) * 0.2, K(8));
+      this.legs.R.joint.rotation.x = lerp(this.legs.R.joint.rotation.x, 0.18 + Math.max(0, -Math.sin(this.step)) * 0.2, K(8));
+      this.materials.coverMat.emissive.lerp(this.baseEmissive, K(5));
     }
 
-    // 링 안에서 앞뒤로 파고들기(스탠스)
+    // 말하기 — 입(앞표지)이 대사 리듬으로 여닫힌다
+    if (this.talking > 0) {
+      this.talking -= dt;
+      const flap = 0.08 + Math.abs(Math.sin(time * 12)) * 0.17;
+      this.openAmount = lerp(this.openAmount, flap, K(14));
+    } else if (!busy && !this.koed) {
+      this.openAmount = lerp(this.openAmount, 0.05 + Math.sin(t * 2.6) * 0.03, K(7));
+    }
+
+    // 팔 자세 적용
+    for (const side of ['L', 'R']) {
+      const a = this.arms[side];
+      const s = side === 'L' ? -1 : 1;
+      a.root.rotation.x = this.pose[side].sh;
+      a.root.rotation.z = s * 0.24;
+      a.joint.rotation.x = this.pose[side].el;
+    }
+
+    // 링 안에서 앞뒤로 파고들기
     const fwd = new THREE.Vector3(0, 0, 1).applyAxisAngle(new THREE.Vector3(0, 1, 0), this.baseRotY || 0);
     this.root.position.x = this.homeX + fwd.x * this.stanceOffset;
     this.root.position.z = this.homeZ + fwd.z * this.stanceOffset;
 
-    // 표지 열림 — 입이자 주먹
     this.frontHinge.rotation.y = -this.openAmount;
-    this.backHinge.rotation.y = this.openAmount * 0.32;
+    this.backHinge.rotation.y = this.openAmount * 0.3;
 
-    // 가름끈 나부낌
+    // 눈 — 아프면 반쯤 감기고, 눈동자가 상대 쪽을 본다
+    const lidDrop = this.koed ? 1 : Math.min(0.8, this.hurt);
+    for (const e of this.eyes) {
+      e.userData.lid.position.y = lerp(e.userData.lid.position.y, 0.14 - lidDrop * 0.16, K(6));
+      e.userData.pupil.position.x = lerp(e.userData.pupil.position.x, e.userData.side * -0.02, K(4));
+    }
+
+    // 가름끈
     const pos = this.ribbon.geometry.attributes.position;
     for (let i = 0; i < pos.count; i++) {
       const y = this.ribbonBase[i * 3 + 1];
@@ -436,9 +550,7 @@ export class BookFighter {
     pos.needsUpdate = true;
 
     this.hurt = Math.max(0, this.hurt - dt * 0.35);
-    this.blob.scale.setScalar(1 - this.stanceOffset * 0.05);
 
-    // 낱장 파티클
     for (const p of this.paper) {
       if (p.life <= 0) continue;
       p.life -= dt * 0.42;
@@ -460,17 +572,15 @@ export class BookFighter {
     }
   }
 
-  // 히트 지점(월드) — 카메라와 이펙트가 쓴다
+  // 말풍선이 붙을 지점 — 머리(책) 위
   headPoint(v = new THREE.Vector3()) {
-    return this.root.localToWorld(v.set(0, this.dims.h * 0.72 * this.scale, 0));
+    return this.body.localToWorld(v.set(0, this.dims.h * 0.62, 0));
   }
   chestPoint(v = new THREE.Vector3()) {
-    return this.root.localToWorld(v.set(0, this.dims.h * 0.45 * this.scale, this.dims.th));
+    return this.body.localToWorld(v.set(0, 0, this.dims.th));
   }
 }
 
-// ── 발췌문 종이 ────────────────────────────────────────────
-// 실제 문장을 텍스처로 구워 상대에게 날린다. 이 게임의 "펀치"는 문장이다.
 export class QuoteSlip {
   constructor(scene) {
     this.scene = scene;
@@ -496,7 +606,6 @@ export class QuoteSlip {
     this.big = big;
     this.active = true;
     this.mesh.visible = true;
-    this.mesh.scale.setScalar(big ? 1.35 : 1);
   }
   update(dt, camera) {
     if (!this.active) return;
@@ -507,7 +616,6 @@ export class QuoteSlip {
     this.mesh.position.copy(p);
     this.mesh.lookAt(camera.position);
     this.mesh.rotateZ(Math.sin(u * 9) * 0.14);
-    // 화면에서 차지하는 크기를 일정하게 — 클로즈업 컷에서 종이가 화면을 다 덮으면 경기가 안 보인다
     const dist = camera.position.distanceTo(p);
     const fit = Math.min(1, Math.max(0.34, dist / 4.5));
     const s = (this.big ? 1.3 : 1) * fit * (u < 0.8 ? 1 : 1 - (u - 0.8) * 4.4);

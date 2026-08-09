@@ -5,6 +5,7 @@
 
 import { Rng } from './rng.js';
 import { deriveStats, rivalryFor } from './books.js';
+import { buildClash, readTime } from './taunts.js';
 
 export const ROUND_SECONDS = 300; // 단판 5분
 
@@ -17,7 +18,7 @@ export const TUNING = {
   INITIATIVE_DIV: 620, // 작을수록 얇은 책(기동)이 유리
   DAMAGE_BASE: 0.5, // 논지 0일 때의 타격 계수
   DAMAGE_LOGIC: 0.72, // 논지 100일 때 더해지는 계수
-  DAMAGE_SCALE: 0.85, // 전체 화력. 낮추면 KO가 줄고 판정이 늘어난다. 0.85에서 KO 56% / 판정 44%.
+  DAMAGE_SCALE: 1.15, // 전체 화력. 낮추면 KO가 줄고 판정이 늘어난다. 1.15에서 KO 58% / 판정 42%.
   DOT_PER_HIT: 1.6, // 불안 누적량. 감쇠가 0.7이라 최대 체감치는 이 값의 약 3배.
   DOT_CAP: 5.5,
   DOT_DECAY: 0.7,
@@ -29,6 +30,7 @@ const MOVES = {
   combo: { key: 'combo', label: '연타', power: 15, cost: 9, acc: 0.78, kr: '연속 인용' },
   heavy: { key: 'heavy', label: '훅', power: 24, cost: 15, acc: 0.62, kr: '핵심 논지' },
   finisher: { key: 'finisher', label: '피니시', power: 38, cost: 26, acc: 0.72, kr: '대표 문장' },
+  riposte: { key: 'riposte', label: '반박', power: 17, cost: 3, acc: 1, kr: '논파 반격' },
   breathe: { key: 'breathe', label: '호흡', power: 0, cost: -18, acc: 1, kr: '뜸 들이기' },
 };
 
@@ -56,9 +58,10 @@ class Fighter {
     this.evadeCharge = false; // 앨리스식 회피 후 강타
     this.finisherUsed = 0;
     this.usedQuotes = new Set();
+    this.usedLines = new Set(); // 설전 대사 재사용 방지
 
     // 스코어카드용 누적
-    this.stats = { landed: 0, thrown: 0, dmg: 0, crit: 0, heavy: 0, evaded: 0 };
+    this.stats = { landed: 0, thrown: 0, dmg: 0, crit: 0, heavy: 0, evaded: 0, rebutted: 0 };
   }
   get alive() {
     return this.hp > 0;
@@ -162,11 +165,7 @@ function traitOnDefend(def, atk, ctx, rng) {
   const t = def.book.authorTrait;
   const fired = [];
   switch (t.kind) {
-    case 'counter': // 손자병법 — 흘리고 반격
-      if (rng.chance(0.26)) {
-        ctx.counter = true;
-        fired.push(t.name);
-      }
+    case 'counter': // 손자병법 — 흘려 되치기. 이제 논파 확률로 흡수됐다(taunts.js buildClash).
       break;
     case 'foxlion': // 군주론 — 피니셔 반감
       if (ctx.move.key === 'finisher') {
@@ -272,104 +271,117 @@ export function simulate(bookA, bookB, seed) {
     let atk = rng.chance(pA) ? A : B;
     let def = atk === A ? B : A;
 
-    const ctx = { mult: 1, beat, clock, move: null };
-    const move = chooseMove(atk, def, ctx, rng);
-    ctx.move = move;
+    const ctx = { mult: 1, beat, clock, move: null, staggered: def.staggered };
+    const opener = chooseMove(atk, def, ctx, rng);
+    ctx.move = opener;
 
     // 호흡 고르기
-    if (move.key === 'breathe') {
-      atk.st = Math.min(atk.stMax, atk.st - move.cost);
+    if (opener.key === 'breathe') {
+      atk.st = Math.min(atk.stMax, atk.st - opener.cost);
       push({
         type: 'breathe',
         by: atk.corner,
         text: `${atk.name}, 페이지를 넘기며 숨을 고릅니다.`,
       });
       if (rng.chance(0.5)) push({ type: 'commentary', text: CALL.gassed(atk.name), tone: 'calm' });
-      t += 1.4;
-      clock -= rng.float(6, 11);
+      t += 1.6;
+      clock -= rng.float(8, 13);
       continue;
     }
 
-    atk.st -= move.cost;
-    atk.stats.thrown++;
-    if (move.key === 'heavy' || move.key === 'finisher') atk.stats.heavy++;
-    if (move.key === 'finisher') atk.finisherUsed++;
+    // ── 설전 ──────────────────────────────────────────────
+    // 이 게임의 한 합은 "도발 → 반박 → 판정 → 주먹" 순이다.
+    // 주먹이 누구에게 들어갈지는 주사위가 아니라 말싸움 결과가 정한다.
+    const clash = buildClash(rng, atk, def, ctx);
 
-    const traitsA = traitOnAttack(atk, def, move, ctx, rng);
-    const traitsD = traitOnDefend(def, atk, ctx, rng);
+    push({
+      type: 'taunt',
+      by: atk.corner,
+      tag: clash.tag,
+      line: clash.taunt,
+      speaker: atk.book.title,
+      target: def.book.title,
+      rival: clash.isRival,
+      hold: readTime(clash.taunt),
+    });
+    t += readTime(clash.taunt);
 
-    // 명중 판정 — 상대 광기(회피) + 내 문체(정확도)
-    const dodge = Math.min(0.4, def.chaos / 100 * 0.26 + (ctx.evadeBonus || 0));
-    const acc = move.acc + atk.style / 100 * 0.1 - (atk.stPct < 0.25 ? 0.12 : 0);
-    const hit = rng.next() < acc * (1 - dodge);
+    push({
+      type: 'reply',
+      by: def.corner,
+      tag: clash.tag,
+      line: clash.reply,
+      speaker: def.book.title,
+      rebutted: clash.rebutted,
+      hold: readTime(clash.reply),
+    });
+    t += readTime(clash.reply);
 
-    const quote = pickQuote(atk, move, rng);
+    // 논파당하면 공수가 뒤집힌다 — 반박에 성공한 쪽이 때린다
+    const win = clash.rebutted ? def : atk;
+    const lose = clash.rebutted ? atk : def;
+    const move = clash.rebutted ? MOVES.riposte : opener;
 
-    if (!hit) {
-      def.stats.evaded++;
-      if (def.book.authorTrait.kind === 'evade') def.evadeCharge = true;
-      push({
-        type: 'strike',
-        by: atk.corner,
-        move: move.key,
-        moveLabel: move.label,
-        moveKr: move.kr,
-        quote,
-        source: atk.book.title,
-        dmg: 0,
-        evaded: true,
-        crit: false,
-        traits: traitsA,
-        hp: { red: A.hp, blue: B.hp },
-        st: { red: A.st, blue: B.st },
-      });
-      if (rng.chance(0.45))
-        push({ type: 'commentary', text: CALL.evade(atk.name, def.name), tone: 'calm' });
+    win.st = Math.max(0, win.st - move.cost);
+    win.stats.thrown++;
+    win.stats.landed++;
+    if (clash.rebutted) lose.stats.rebutted++;
+    if (move.key === 'heavy' || move.key === 'finisher') win.stats.heavy++;
+    if (move.key === 'finisher') win.finisherUsed++;
 
-      // 돈키호테의 헛돌격은 자기 몸이 상한다
-      if (ctx.recoil) {
-        const self = Math.round(rng.float(3, 7));
-        atk.hp -= self;
-        push({
-          type: 'recoil',
-          by: atk.corner,
-          dmg: self,
-          text: `${atk.name}, 풍차에 걸려 스스로 나가떨어집니다!`,
-          hp: { red: A.hp, blue: B.hp },
-        });
-      }
-      t += 1.5;
-      clock -= rng.float(7, 13);
-      continue;
-    }
+    // 특성은 실제로 때리는 쪽 기준으로 다시 계산한다
+    const wctx = { mult: 1, beat, clock, move, staggered: lose.staggered };
+    const traitsA = traitOnAttack(win, lose, move, wctx, rng);
+    traitOnDefend(lose, win, wctx, rng);
 
     // 피해 계산
-    const crit = rng.next() < 0.07 + atk.style / 100 * 0.17 - def.chaos / 100 * 0.04;
-    const critMult = crit ? 1.5 + atk.style / 100 * 0.55 : 1;
+    const crit = rng.next() < 0.07 + win.style / 100 * 0.17 - lose.chaos / 100 * 0.04;
+    const critMult = crit ? 1.5 + win.style / 100 * 0.55 : 1;
     const blockFactor = rng.float(0.55, 1);
-    const mitigation = 1 - Math.min(0.44, (def.legacy / 100) * 0.44 * blockFactor);
-    const gassed = atk.stPct < 0.22 ? 0.66 : 1;
-    const rivalryMult =
-      rivalry && rivalry.favors === atk.book.id ? 1 + rivalry.bonus : 1;
-    const staggerBonus = def.staggered ? 1.3 : 1;
+    const mitigation = 1 - Math.min(0.44, (lose.legacy / 100) * 0.44 * blockFactor);
+    const gassed = win.stPct < 0.22 ? 0.66 : 1;
+    const rivalryMult = rivalry && rivalry.favors === win.book.id ? 1 + rivalry.bonus : 1;
+    const staggerBonus = lose.staggered ? 1.3 : 1;
+    const rivalLine = clash.isRival && !clash.rebutted ? 1.2 : 1;
 
     let dmg =
       move.power *
-      (TUNING.DAMAGE_BASE + (atk.logic / 100) * TUNING.DAMAGE_LOGIC) *
-      ctx.mult *
+      (TUNING.DAMAGE_BASE + (win.logic / 100) * TUNING.DAMAGE_LOGIC) *
+      wctx.mult *
       critMult *
       mitigation *
       gassed *
       rivalryMult *
       staggerBonus *
+      rivalLine *
       rng.float(0.85, 1.15) *
       TUNING.DAMAGE_SCALE;
     dmg = Math.max(1, Math.round(dmg));
 
+    // 아래 공통 처리는 "때린 쪽 = atk, 맞은 쪽 = def"으로 이어진다
+    atk = win;
+    def = lose;
+    Object.assign(ctx, wctx);
+
     def.hp -= dmg;
-    atk.stats.landed++;
     atk.stats.dmg += dmg;
     if (crit) atk.stats.crit++;
+    // 피니시는 설전 대사 대신 그 책의 대표 문장으로 마무리한다 — 클라이맥스니까
+    const quote =
+      move.key === 'finisher' ? atk.book.quotes.finisher.line : clash.rebutted ? clash.reply : clash.taunt;
+
+    // 돈키호테의 헛돌격은 제 몸이 상한다
+    if (wctx.recoil) {
+      const self = Math.round(rng.float(3, 7));
+      atk.hp -= self;
+      push({
+        type: 'recoil',
+        by: atk.corner,
+        dmg: self,
+        text: `${atk.name}, 풍차에 걸려 스스로 나가떨어집니다!`,
+        hp: { red: A.hp, blue: B.hp },
+      });
+    }
 
     // 특성 후처리
     if (ctx.lifesteal) {
@@ -408,12 +420,14 @@ export function simulate(bookA, bookB, seed) {
       finisherName: move.key === 'finisher' ? atk.book.quotes.finisher.name : null,
       quote,
       source: atk.book.title,
+      tag: clash.tag,
+      rebuttal: clash.rebutted,
       dmg,
       crit,
       evaded: false,
       staggered,
       knockdown,
-      traits: traitsA.concat(traitsD.filter((x) => ctx.counter)),
+      traits: traitsA,
       healed: ctx.healed || 0,
       transform: !!ctx.transformNow,
       hp: { red: A.hp, blue: B.hp },
@@ -427,7 +441,7 @@ export function simulate(bookA, bookB, seed) {
     else if (mitigation < 0.68 && rng.chance(0.4))
       push({ type: 'commentary', text: CALL.block(def.name), tone: 'calm' });
 
-    t += move.key === 'finisher' ? 2.6 : crit ? 2.2 : 1.6;
+    t += move.key === 'finisher' ? 2.4 : crit ? 2.0 : 1.5;
 
     if (knockdown && def.hp > 0) {
       push({ type: 'knockdown', who: def.corner, count: def.knockdowns, hp: { red: A.hp, blue: B.hp } });
@@ -441,31 +455,6 @@ export function simulate(bookA, bookB, seed) {
       push({ type: 'stagger', who: def.corner });
       push({ type: 'commentary', text: CALL.stagger(def.name), tone: 'shout' });
       t += 0.8;
-    }
-
-    // 손자병법식 즉시 반격
-    if (ctx.counter && def.hp > 0) {
-      const cd = Math.max(1, Math.round(dmg * 0.45));
-      atk.hp -= cd;
-      atk.staggered = false;
-      push({
-        type: 'strike',
-        by: def.corner,
-        move: 'counter',
-        moveLabel: '반격',
-        moveKr: '흘려 되치기',
-        quote: def.book.quotes.jab[0],
-        source: def.book.title,
-        dmg: cd,
-        crit: false,
-        evaded: false,
-        counter: true,
-        traits: [def.book.authorTrait.name],
-        hp: { red: A.hp, blue: B.hp },
-        st: { red: A.st, blue: B.st },
-      });
-      push({ type: 'commentary', text: CALL.counter(def.name), tone: 'hype' });
-      t += 1.5;
     }
 
     // 지속 피해(불안) 정산
@@ -499,7 +488,7 @@ export function simulate(bookA, bookB, seed) {
       streak = 0;
     }
 
-    clock -= rng.float(8, 15);
+    clock -= rng.float(27, 38);
     if (!calledClockLow && clock <= 60 && clock > 0) {
       calledClockLow = true;
       push({ type: 'commentary', text: CALL.clockLow(), tone: 'calm' });

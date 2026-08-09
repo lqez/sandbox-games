@@ -51,6 +51,17 @@ export class Hud {
       pickBlue: $('#pick-blue'),
       slowmo: $('#slowmo-flag'),
       flash: $('#flash'),
+      debate: $('#debate'),
+      rowTaunt: $('#drow-taunt'),
+      rowReply: $('#drow-reply'),
+      dtCover: $('#dt-cover'),
+      dtWho: $('#dt-who'),
+      dtTag: $('#dt-tag'),
+      dtLine: $('#dt-line'),
+      drCover: $('#dr-cover'),
+      drWho: $('#dr-who'),
+      drVerdict: $('#dr-verdict'),
+      drLine: $('#dr-line'),
     };
     this.coverCache = new Map();
     this.tickerLines = [];
@@ -218,6 +229,34 @@ export class Hud {
   setClock(sec) {
     this.el.clock.textContent = fmtClock(sec);
     this.el.clock.classList.toggle('urgent', sec <= 60);
+  }
+
+  // ── 설전 패널 ───────────────────────────────────────────
+  // 도발과 반박을 같은 화면에 남겨둔다. 한쪽씩 사라지면 언쟁이 아니라 독백으로 읽힌다.
+  showTaunt(ev, book) {
+    const r = this.el.rowTaunt;
+    this.el.rowReply.classList.remove('on');
+    this.el.dtCover.src = this.coverURL(book);
+    this.el.dtWho.textContent = ev.speaker;
+    this.el.dtTag.textContent = '#' + ev.tag + (ev.rival ? ' · 지목' : '');
+    this.el.dtLine.textContent = '「' + ev.line + '」';
+    r.className = 'drow on ' + ev.by;
+  }
+
+  showReply(ev, book) {
+    const r = this.el.rowReply;
+    this.el.rowTaunt.classList.add('dim'); // 방금 한 말은 남기되 흐리게
+    this.el.drCover.src = this.coverURL(book);
+    this.el.drWho.textContent = ev.speaker;
+    this.el.drVerdict.textContent = ev.rebutted ? '논파' : '되받지 못함';
+    this.el.drVerdict.className = 'dverdict ' + (ev.rebutted ? 'win' : 'lose');
+    this.el.drLine.textContent = '「' + ev.line + '」';
+    r.className = 'drow on ' + ev.by;
+  }
+
+  clearDebate() {
+    this.el.rowTaunt.className = 'drow';
+    this.el.rowReply.className = 'drow';
   }
 
   // ── 발췌 자막(로어서드) ─────────────────────────────────

@@ -235,9 +235,43 @@
   .dmg-pop.crit { color: var(--gold); font-size: 17px; }
   @keyframes pop { 0% { opacity: 0; transform: translateY(6px) scale(.7); } 20% { opacity: 1; transform: translateY(0) scale(1.15); } 100% { opacity: 0; transform: translateY(-22px) scale(1); } }
 
+  /* 설전 패널 — 도발/반박을 한 화면에 놓아야 언쟁으로 읽힌다 */
+  #debate {
+    position: fixed; left: 50%; bottom: 74px; z-index: 13;
+    width: min(820px, calc(100vw - 24px));
+    transform: translateX(-50%);
+    display: flex; flex-direction: column; gap: 6px;
+    pointer-events: none;
+  }
+  .drow {
+    display: flex; gap: 10px; align-items: flex-start;
+    background: linear-gradient(100deg, rgba(9,12,20,.95), rgba(9,12,20,.8));
+    border: 1px solid #2b3348; border-left-width: 5px;
+    border-radius: 10px; padding: 8px 13px;
+    backdrop-filter: blur(6px);
+    opacity: 0; transform: translateY(10px);
+    transition: opacity .2s, transform .2s cubic-bezier(.2,.9,.3,1.2), filter .25s;
+  }
+  .drow.on { opacity: 1; transform: translateY(0); }
+  .drow.dim { filter: brightness(.62) saturate(.7); }
+  .drow.red { border-left-color: var(--red); }
+  .drow.blue { border-left-color: var(--blue); }
+  .dcover { width: 30px; height: 44px; object-fit: cover; border-radius: 2px; flex: 0 0 auto; box-shadow: 0 2px 8px #000; }
+  .dbody { min-width: 0; flex: 1; }
+  .dhead { display: flex; align-items: center; gap: 7px; margin-bottom: 2px; }
+  .dhead b { font-size: 11.5px; font-weight: 900; color: #dbe4f2; }
+  .dtag {
+    font-size: 9.5px; font-weight: 900; letter-spacing: .5px; padding: 1px 6px; border-radius: 999px;
+    background: rgba(240,196,99,.16); color: var(--gold); border: 1px solid rgba(240,196,99,.4);
+  }
+  .dverdict { font-size: 10px; font-weight: 900; letter-spacing: .5px; }
+  .dverdict.win { color: #6ee7a0; }
+  .dverdict.lose { color: #ff8b7e; }
+  .dline { font-size: clamp(13px, 3.1vw, 17px); font-weight: 700; line-height: 1.5; color: #fff; text-shadow: 0 2px 8px #000; }
+
   /* 로어서드 — 발췌 자막 */
   #lower-third {
-    position: fixed; left: 50%; bottom: 92px; z-index: 13;
+    position: fixed; left: 50%; bottom: 210px; z-index: 13;
     width: min(760px, calc(100vw - 24px));
     transform: translate(-50%, 26px); opacity: 0;
     transition: opacity .22s, transform .22s cubic-bezier(.2,.9,.3,1.2);
@@ -336,9 +370,11 @@
     #roster { grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); }
     .traits { grid-template-columns: 1fr; }
     /* 세로 화면에서는 로어서드와 해설 티커가 겹친다 — 티커를 자막 위로 올리고 한 줄만 남긴다 */
-    #lower-third { bottom: 74px; }
-    #ticker { width: calc(100vw - 24px); bottom: 176px; }
-    #ticker .tline:nth-child(n+2) { display: none; }
+    #debate { bottom: 62px; gap: 4px; }
+    .drow { padding: 6px 10px; gap: 8px; }
+    .dcover { width: 24px; height: 35px; }
+    #lower-third { bottom: 230px; }
+    #ticker { display: none; }
     #fightbar { bottom: 10px; padding: 5px; }
     #fightbar button { padding: 6px 8px; font-size: 11px; }
     .th img { width: 66px; height: 98px; }
@@ -377,6 +413,23 @@
       <div class="bar"><i id="blue-hp" style="width:100%"></i></div>
       <div class="bar stam"><i id="blue-st" style="width:100%"></i></div>
       <div class="kd" id="blue-kd"></div>
+    </div>
+  </div>
+</div>
+
+<div id="debate">
+  <div class="drow" id="drow-taunt">
+    <img class="dcover" id="dt-cover" alt="">
+    <div class="dbody">
+      <div class="dhead"><b id="dt-who"></b><span class="dtag" id="dt-tag"></span></div>
+      <div class="dline" id="dt-line"></div>
+    </div>
+  </div>
+  <div class="drow" id="drow-reply">
+    <img class="dcover" id="dr-cover" alt="">
+    <div class="dbody">
+      <div class="dhead"><b id="dr-who"></b><span class="dverdict" id="dr-verdict"></span></div>
+      <div class="dline" id="dr-line"></div>
     </div>
   </div>
 </div>

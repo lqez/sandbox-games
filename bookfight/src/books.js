@@ -9,7 +9,9 @@
 //   grit    뚝심  — 스태미나 회복과 그로기 저항.
 // 분량(pages)은 능력치가 아니라 체력/스태미나 총량과 기동력으로 직접 환산된다(deriveStats).
 
-export const BOOKS = [
+import { applyVoices } from './voices.js';
+
+const RAW_BOOKS = [
   {
     id: 'artofwar',
     title: '손자병법',
@@ -578,6 +580,9 @@ export const BOOKS = [
   },
 ];
 
+// 전용 설전 대사와 머리 모양을 얹는다(voices.js). 여기 없는 책은 taunts.js의 템플릿으로 굴러간다.
+export const BOOKS = applyVoices(RAW_BOOKS);
+
 // 상성 — 실제 주제/계보가 부딪히는 조합. 해설자가 경기 전에 짚어준다.
 export const RIVALRIES = [
   { a: 'ownroom', b: 'hamlet', bonus: 0.22, why: '울프가 셰익스피어에게 그의 누이를 묻는다' },
@@ -595,7 +600,12 @@ export const RIVALRIES = [
 // ── 파생 능력치 ──────────────────────────────────────────────
 // 분량은 곧 체급이다. 두꺼우면 맷집과 스태미나 총량이 크지만 느리다.
 // 능력치 총합 기울기 — 두꺼울수록 총합을 깎아 체력 우위를 상쇄한다. 0이면 상쇄 없음.
-export const BALANCE = { SUM_SLOPE: 3.0 };
+export const BALANCE = {
+  SUM_SLOPE: 3.0, // 분량이 늘수록 능력치 총합을 깎는 기울기
+  HP_BASE: 104, // 체력 = HP_BASE + pages^HP_EXP * HP_MUL
+  HP_EXP: 0.26, // 크면 두꺼운 책이 훨씬 단단해진다
+  HP_MUL: 3.8,
+};
 
 export function weightClass(pages) {
   if (pages < 120) return { name: '플라이급', short: 'FLY', color: '#7fd4e8' };
@@ -608,7 +618,7 @@ export function weightClass(pages) {
 export function deriveStats(book) {
   const p = book.pages;
   // 체력: 분량에 따라 늘지만 수확체감. 74p 변신 ≈ 112, 1225p 전쟁과 평화 ≈ 180
-  const hpMax = Math.round(82 + Math.pow(p, 0.42) * 5.0);
+  const hpMax = Math.round(BALANCE.HP_BASE + Math.pow(p, BALANCE.HP_EXP) * BALANCE.HP_MUL);
   // 스태미나: 총량도 분량을 따르되 체력만큼 벌어지지는 않는다
   const stMax = Math.round(70 + Math.pow(p, 0.4) * 3.2);
   // 기동: 얇을수록 빠르다 — 교전에서 선공을 잡을 확률
