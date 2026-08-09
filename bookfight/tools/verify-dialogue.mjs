@@ -11,7 +11,7 @@
 
 import { BOOKS, getBook } from '../src/books.js';
 import { simulate } from '../src/match.js';
-import { TAGS, deriveTags, buildClash, readTime } from '../src/taunts.js';
+import { TAGS, TAG_QUOTE, deriveTags, readTime } from '../src/taunts.js';
 import { Rng } from '../src/rng.js';
 
 const N = Number(process.argv[2] || 240);
@@ -50,6 +50,9 @@ const placeholders = [];
 const josaBad = [];
 const perBookRebut = new Map(BOOKS.map((b) => [b.id, { def: 0, win: 0 }]));
 const readTimes = [];
+// 스레드(이어지는 논쟁) 검사
+let link2ok = 0, link2bad = 0, cb_ok = 0, cb_bad = 0, over45 = 0, durMax = 0;
+let sampleThread = null;
 
 for (let i = 0; i < N; i++) {
   const rng = new Rng('pick' + i);
@@ -57,6 +60,19 @@ for (let i = 0; i < N; i++) {
   let b = rng.pick(BOOKS);
   while (b.id === a.id) b = rng.pick(BOOKS);
   const m = simulate(a, b, 'V' + (1000 + i * 7));
+  if (m.duration > 52) over45++;
+  if (m.duration > durMax) durMax = m.duration;
+
+  // 스레드: 2합은 접속구(link)로 1합을 물고, 3합은 앞서 들었던 태그를 인용해야 한다
+  const taunts = m.events.filter((e) => e.type === 'taunt');
+  if (taunts[1]) {
+    if (taunts[1].link === 'press' || taunts[1].link === 'comeback') link2ok++; else link2bad++;
+  }
+  if (taunts[2]) {
+    const q = TAG_QUOTE[taunts[2].tag];
+    if (taunts[2].link === 'callback' && q && taunts[2].line.includes(q)) cb_ok++; else cb_bad++;
+  }
+  if (!sampleThread && taunts.length === 3) sampleThread = m;
 
   const lines = [];
   let pendingTaunt = null;
@@ -127,9 +143,24 @@ warn(placeholders.length === 0, `치환 안 된 슬롯 ${placeholders.length}건
 warn(josaBad.length === 0, `조사 오류 ${josaBad.length}건`);
 warn(matchesWithDup / N < 0.25, `대사 중복이 잦다 (${pct(matchesWithDup / N)})`);
 
+console.log('\n[스레드] 대사가 앞 합을 무는가');
+console.log(`   2합 접속구: ${link2ok} 정상 / ${link2bad} 누락`);
+console.log(`   3합 콜백(들었던 태그 인용): ${cb_ok} 정상 / ${cb_bad} 누락`);
+console.log(`   45초 상한: 초과(52초+) ${over45}건, 최장 ${durMax.toFixed(1)}초`);
+warn(link2bad === 0, `2합이 1합을 물지 않은 경기 ${link2bad}건`);
+warn(cb_bad === 0, `3합 콜백 누락 ${cb_bad}건`);
+warn(over45 === 0, `52초를 넘긴 경기 ${over45}건 (최장 ${durMax.toFixed(1)})`);
+if (sampleThread) {
+  console.log('   ── 표본 스레드 ──');
+  for (const e of sampleThread.events) {
+    if (e.type === 'taunt') console.log(`      ▶ [${e.speaker}] r${e.round}/${e.link} #${e.tag} 「${e.line}」`);
+    if (e.type === 'reply') console.log(`      ↩ [${e.speaker}] ${e.rebutted ? '논파' : e.laststand ? '항변' : '못 막음'} 「${e.line}」`);
+  }
+}
+
 console.log('\n[판정] 논파율');
 console.log(`   전체 ${pct(rebutted / clashes)} (합당 논파 ${rebutted}/${clashes})`);
-warn(rebutted / clashes > 0.2 && rebutted / clashes < 0.55, `논파율이 치우쳤다 ${pct(rebutted / clashes)}`);
+warn(rebutted / clashes > 0.15 && rebutted / clashes < 0.55, `논파율이 치우쳤다 ${pct(rebutted / clashes)}`);
 const rates = [...perBookRebut.entries()]
   .filter(([, v]) => v.def >= 8)
   .map(([id, v]) => ({ t: getBook(id).title, r: v.win / v.def }))

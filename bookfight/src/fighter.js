@@ -4,7 +4,7 @@
 
 import * as THREE from 'three';
 import { drawCover, drawBackCover, drawSpine, drawPageEdge, drawQuoteSlip } from './cover.js';
-import { makeLimb, makeEyes, makeHair } from './rig.js';
+import { makeLimb, makeFace, makeHair } from './rig.js';
 
 const PAGE_EDGE_TEX = (() => {
   let t = null;
@@ -110,15 +110,16 @@ export class BookFighter {
     this.backHinge.add(back);
     this.body.add(this.backHinge);
 
-    // 눈 — 표지에 붙은 스티커. 앞표지와 함께 열리면 안 되니 body에 직접 단다.
-    const { group: eyeGroup, eyes } = makeEyes(w, h);
-    eyeGroup.position.z = th / 2 + coverT + 0.02;
-    this.body.add(eyeGroup);
-    this.eyes = eyes;
+    // 얼굴 — 표지에 인쇄된 스티커. 앞표지와 함께 열리면 안 되니 body에 직접 단다.
+    const face = makeFace(w, h);
+    face.group.position.z = th / 2 + coverT + 0.012;
+    this.body.add(face.group);
+    this.face = face;
 
     // 머리카락 — 책 윗변에 꽂는다
     const { group: hairGroup, materials: hairMats } = makeHair(book.hair, w, book.cover.accent);
-    hairGroup.position.set(0, h / 2, -0.06);
+    hairGroup.position.set(0, h / 2 - 0.05, -0.02);
+    hairGroup.scale.set(0.88, 0.92, 0.4); // 책은 얇은 판 — 앞뒤로 눌러야 우산이 안 된다
     this.body.add(hairGroup);
     this.hair = hairGroup;
     this.hairMats = hairMats;
@@ -129,11 +130,11 @@ export class BookFighter {
     for (const side of ['L', 'R']) {
       const s = side === 'L' ? -1 : 1;
       const limb = makeLimb({
-        upperLen: 0.4,
-        lowerLen: 0.34,
-        radius: 0.105,
-        endRadius: 0.175,
-        color: 0xf2dcc0,
+        upperLen: 0.42,
+        lowerLen: 0.36,
+        radius: 0.125,
+        endRadius: 0.21,
+        color: 0x2b2724, // 짙은 고무호스 — 살구색 캡슐은 뼈다귀처럼 보였다
         endColor: gloveColor,
       });
       limb.root.position.set(s * (w / 2 + 0.04), -h * 0.12, 0);
@@ -149,10 +150,10 @@ export class BookFighter {
       const limb = makeLimb({
         upperLen: 0.32,
         lowerLen: 0.28,
-        radius: 0.115,
-        endRadius: 0.145,
-        color: 0xf2dcc0,
-        endColor: 0x3a2c22,
+        radius: 0.095,
+        endRadius: 0.15,
+        color: 0x2b2724,
+        endColor: new THREE.Color(book.cover.accent).multiplyScalar(0.72).getHex(),
         boot: true,
       });
       limb.root.position.set(s * w * 0.24, 0, 0);
@@ -305,7 +306,7 @@ export class BookFighter {
       this.body.rotation.x = -k * 0.1;
       this.stanceOffset = k * reach;
       // 입은 공격할 때 크게 벌어진다
-      this.openAmount = Math.max(0, k) * (moveKey === 'finisher' ? 0.75 : big ? 0.5 : 0.32);
+      this.openAmount = Math.max(0, k) * (moveKey === 'finisher' ? 0.9 : 0.08);
       // 뒷발로 밀어낸다
       this.legs[other].root.rotation.x = k * 0.4;
       this.legs[arm].root.rotation.x = -k * 0.22;
@@ -334,7 +335,7 @@ export class BookFighter {
       this.body.rotation.x = k * 0.42; // 고개가 젖혀진다
       this.body.rotation.z = k * 0.22 * dir;
       this.body.rotation.y = k * 0.3 * dir;
-      this.openAmount = k * 0.3;
+      this.openAmount = k * 0.1;
       // 가드가 풀리며 팔이 벌어진다
       this.pose.L.sh = lerp(GUARD.sh, -0.1, k);
       this.pose.R.sh = lerp(GUARD.sh, -0.1, k);
@@ -543,13 +544,16 @@ export class BookFighter {
       this.materials.coverMat.emissive.lerp(this.baseEmissive, K(5));
     }
 
-    // 말하기 — 입(앞표지)이 대사 리듬으로 여닫힌다
+    // 말하기 — 입(스티커)이 대사 리듬으로 벌어진다. 표지 플랩은 피니시·KO 전용.
+    const mouth = this.face.mouth;
     if (this.talking > 0) {
       this.talking -= dt;
-      const flap = 0.08 + Math.abs(Math.sin(time * 12)) * 0.17;
-      this.openAmount = lerp(this.openAmount, flap, K(14));
-    } else if (!busy && !this.koed) {
-      this.openAmount = lerp(this.openAmount, 0.05 + Math.sin(t * 2.6) * 0.03, K(7));
+      mouth.scale.y = lerp(mouth.scale.y, 0.35 + Math.abs(Math.sin(time * 12.5)) * 1.0, K(16));
+    } else {
+      mouth.scale.y = lerp(mouth.scale.y, this.koed ? 0.9 : 0.24, K(8));
+    }
+    if (!busy && !this.koed) {
+      this.openAmount = lerp(this.openAmount, 0.02, K(7));
     }
 
     // 팔 자세 적용
@@ -569,11 +573,19 @@ export class BookFighter {
     this.frontHinge.rotation.y = -this.openAmount;
     this.backHinge.rotation.y = this.openAmount * 0.3;
 
-    // 눈 — 아프면 반쯤 감기고, 눈동자가 상대 쪽을 본다
-    const lidDrop = this.koed ? 1 : Math.min(0.8, this.hurt);
-    for (const e of this.eyes) {
-      e.userData.lid.position.y = lerp(e.userData.lid.position.y, 0.14 - lidDrop * 0.16, K(6));
-      e.userData.pupil.position.x = lerp(e.userData.pupil.position.x, e.userData.side * -0.02, K(4));
+    // 표정 — 눈썹 기울기가 전부다. 공격 중엔 화나고, 아프면 처지고, KO엔 X자 눈.
+    const attacking = this.anims.some((a) => a.kind === 'attack');
+    const browK = this.koed ? 0.15 : attacking ? -0.55 : this.hurt > 0.25 ? 0.45 : 0.06;
+    for (const e of this.face.eyes) {
+      const ud = e.userData;
+      ud.brow.rotation.z = lerp(ud.brow.rotation.z, -ud.side * browK, K(9));
+      ud.brow.position.y = lerp(ud.brow.position.y, attacking ? 0.13 : 0.175, K(9));
+      ud.x.visible = this.koed;
+      ud.ball.visible = !this.koed;
+      ud.pupil.visible = !this.koed;
+      // 아플수록 눈을 찡그린다(세로로 눌림)
+      e.scale.y = lerp(e.scale.y, this.koed ? 1 : 1 - Math.min(0.5, this.hurt * 0.6), K(8));
+      ud.pupil.position.x = lerp(ud.pupil.position.x, ud.side * -0.015, K(4));
     }
 
     // 가름끈

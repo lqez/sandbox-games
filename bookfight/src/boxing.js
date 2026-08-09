@@ -26,9 +26,9 @@ export const VERBAL = {
 export const BOXING_TUNING = {
   COMBO_MIN: 2, // 설전 사이에 오가는 펀치 수
   COMBO_MAX: 5,
-  PUNCH_SECONDS: [0.45, 0.8], // 재생 시간 — 짧아야 리듬이 산다
+  PUNCH_SECONDS: [0.4, 0.65], // 재생 시간 — 짧아야 리듬이 산다
   PUNCH_CLOCK: [3.5, 6.0], // 경기 시계 소모
-  DAMAGE_SCALE: 0.55, // 권투는 기본 박자. 전체 피해의 40%쯤을 담당한다.
+  DAMAGE_SCALE: 0.5, // 권투는 기본 박자 — 깎고, 설전이 꺾는다.
   SLIP_MAX: 0.2, // 광기가 만드는 최대 회피율
   BLOCK_MAX: 0.46, // 관록이 만드는 최대 방어율
   BLOCK_FLOOR: 60, // 이 값 이하의 관록은 가드 보정 0 — 실제 분포 구간에 맞춰 차이를 살린다

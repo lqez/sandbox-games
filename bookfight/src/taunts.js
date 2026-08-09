@@ -21,6 +21,34 @@ export const TAGS = {
   음울: '우울하고 염세적이다',
 };
 
+// ── 스레드(이어지는 논쟁) 재료 ──────────────────────────────
+// 45초 경기의 설전은 3합짜리 하나의 논쟁이다.
+//   1합: 탐색 — A가 B의 약점을 찌른다
+//   2합: 되받기 — 1합의 수비수가 접속구를 달고 반격한다 ("그 말, 그대로 돌려드리지")
+//   3합: 결정타 — 앞서는 쪽이 자기가 들었던 말을 콜백해 끝낸다 ("나더러 길다 하셨소")
+// 접속구와 콜백이 앞 대사를 물기 때문에 아무말 대잔치가 안 된다.
+
+// 태그를 대사 안에서 인용할 때 쓰는 짧은 형태 — 전부 '-다'로 끝나 인용 조사가 붙는다
+export const TAG_QUOTE = {
+  장황함: '길다', 얄팍함: '얇다', 난해함: '어렵다', 유치함: '유치하다', 낡음: '낡았다',
+  통속: '싸구려다', 설교조: '설교나 한다', 편협: '좁다', 허황: '허무맹랑하다', 음울: '어둡다',
+};
+
+const CONNECT = {
+  // 1합에서 얻어맞은 쪽이 2합을 여는 말
+  comeback: ['한 대 맞았다고 끝난 줄 아시오. ', '그 말, 그대로 돌려드리지. ', '방금 것은 빌려둔 걸로 하겠소. '],
+  // 1합을 논파한 쪽이 기세를 몰아가는 말
+  press: ['대답이 그게 전부라면 계속하겠소. ', '아까 그 침묵, 인상 깊었소. ', '말문이 막히신 김에 하나 더. '],
+};
+
+// 3합 — 내가 들었던 공격({인용})을 되받아치며 끝낸다
+const CALLBACK = [
+  '나더러 {인용} 하셨소. 그 말은 마지막 문장으로 갚겠소.',
+  '{인용}고 하셨나. 그 한마디로 당신의 결말이 정해졌소.',
+  '나를 {인용}고 한 그 입으로, 이제 항복을 말해 보시오.',
+];
+const LAST_STAND = ['…그래도 내 문장은 남소.', '아직… 아직이오.', '끝은 독자가 정하는 것이오.'];
+
 // ── 1층: 메타데이터 → 약점 태그 ────────────────────────────
 // books.js가 tags를 직접 적어두면 그걸 쓰고, 없으면 여기서 뽑는다.
 const GENRE_TAGS = [
@@ -314,11 +342,30 @@ export function pickTag(rng, me, you, lastTag) {
 // 한 합의 설전을 만든다. 판정(누가 이겼나)까지 여기서 낸다.
 //   rebutted=true  → 방어측이 논파했다. 반격이 들어간다.
 //   rebutted=false → 공격이 꽂혔다.
-export function buildClash(rng, atk, def, ctx) {
+export function buildClash(rng, atk, def, ctx, thread) {
+  const round = thread ? thread.clashes.length + 1 : 1;
+
+  // ── 3합: 결정타. 내가 수비했던 합의 태그를 콜백해 되받아친다. ──
+  if (round >= 3) {
+    const mine = thread.clashes.find((c) => c.defCorner === atk.corner);
+    const refTag = mine ? mine.tag : thread.clashes[0].tag;
+    const taunt = fill(rng.pick(CALLBACK).replace(/\{인용\}/g, TAG_QUOTE[refTag] || '틀렸다'), atk.book, def.book);
+    const persuade = atk.logic * 0.65 + atk.style * 0.35;
+    const rebut = def.grit * 0.45 + def.chaos * 0.3 + def.legacy * 0.25;
+    // 결정타는 어지간해선 안 뒤집힌다 — 뒤집히면 그게 대반전이고, 그래서 절반으로 죽인다
+    let p = (0.34 + (rebut - persuade) / 300) * 0.5;
+    p = Math.min(0.4, Math.max(0.06, p));
+    const rebutted = rng.chance(p);
+    const reply = rebutted
+      ? choose(rng, defendLines(def.book, atk.book, refTag), def.usedLines, def.book, atk.book)
+      : rng.pick(LAST_STAND);
+    return { round, link: 'callback', tag: refTag, refTag, taunt, reply, rebutted, decisive: true, isRival: false };
+  }
+
+  // ── 1·2합 ──
   const tag = pickTag(rng, atk.book, def.book, atk.lastTag);
   if (!tag) return null;
 
-  // 상성 대진이면 전용 저격을 먼저 쓴다 — 그 경기의 클라이맥스가 되라고 넣어둔 대사다.
   const rivalPool = (atk.book.rivalBarbs && atk.book.rivalBarbs[def.book.id]) || [];
   const rivalFresh = rivalPool.filter((l) => !atk.usedLines.has(l));
   let taunt;
@@ -330,42 +377,39 @@ export function buildClash(rng, atk, def, ctx) {
   } else {
     taunt = choose(rng, attackLines(atk.book, def.book, tag), atk.usedLines, atk.book, def.book);
   }
+
+  // 2합은 1합의 수비수가 연다 — 접속구가 앞 합의 결과를 문다
+  let link = 'open';
+  if (round === 2 && thread && thread.clashes.length) {
+    link = thread.clashes[0].rebutted ? 'press' : 'comeback';
+    taunt = rng.pick(CONNECT[link]) + taunt;
+  }
+
   const reply = choose(rng, defendLines(def.book, atk.book, tag), def.usedLines, def.book, atk.book);
 
-  // 논파 판정.
-  // 중요: 전용 방어 대사를 가졌다는 사실이 승률을 좌우하면 안 된다. 그러면 손으로 쓴 대사가 많은 책이
-  // 그냥 세지고, 검색으로 긁어온 책(전용 대사 0줄)은 이길 방법이 없어진다.
-  // 그래서 전용 대사는 맛만 더하고(+0.06), 실제 판정은 이미 균형이 맞춰진 능력치로 가른다.
-  //
-  // 찌르는 힘과 받아치는 힘은 서로 다른 능력치로 잰다.
-  // 논지가 양쪽을 다 결정하면 논지 높은 책이 피해량과 논파율을 동시에 챙겨 승률이 폭주한다.
-  //   설득력(공격) = 논지 + 문체      — 피해량도 논지가 정하므로 여기 몰아둔다
-  //   반박력(방어) = 뚝심 + 광기 + 관록 — 기존에 놀고 있던 능력치를 여기로 돌린다
   const hasRealDefense = !!(def.book.defends && def.book.defends[tag]);
   const persuade = atk.logic * 0.65 + atk.style * 0.35;
   const rebut = def.grit * 0.45 + def.chaos * 0.3 + def.legacy * 0.25;
   let p = 0.34;
   if (hasRealDefense) p += 0.06;
   p += (rebut - persuade) / 300;
-  // 저자 특성 중 '흘려 받아치는' 쪽은 여기에 붙는다 — 이제 논파가 곧 반격이므로
   const kind = def.book.authorTrait && def.book.authorTrait.kind;
   if (kind === 'counter') p += 0.14;
   if (kind === 'evade') p += 0.12;
-  if (kind === 'foxlion' && ctx.move && ctx.move.key === 'finisher') p += 0.2;
   if (def.groggy) p -= 0.16;
   if (ctx.staggered) p -= 0.12;
-  if (isRival) p -= 0.1; // 전용 저격은 아프다
+  if (isRival) p -= 0.1;
   p = Math.min(0.62, Math.max(0.05, p));
 
   atk.book.__prevTag = atk.lastTag;
   atk.lastTag = tag;
   const rebutted = rng.chance(p);
-  return { tag, taunt, reply, rebutted, hasRealDefense, isRival };
+  return { round, link, tag, taunt, reply, rebutted, hasRealDefense, isRival };
 }
 
 // 읽을 시간 — 글자 수에 비례. 이게 곧 컷 길이가 되고, 경기 템포를 정한다.
 export function readTime(line) {
-  return Math.min(4.8, Math.max(2.5, 1.2 + line.length * 0.055));
+  return Math.min(3.4, Math.max(1.8, 0.8 + line.length * 0.05));
 }
 
 export function tagLabel(tag) {

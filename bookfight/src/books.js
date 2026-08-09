@@ -602,9 +602,9 @@ export const RIVALRIES = [
 // 능력치 총합 기울기 — 두꺼울수록 총합을 깎아 체력 우위를 상쇄한다. 0이면 상쇄 없음.
 export const BALANCE = {
   SUM_SLOPE: 3.0, // 분량이 늘수록 능력치 총합을 깎는 기울기
-  HP_BASE: 104, // 체력 = HP_BASE + pages^HP_EXP * HP_MUL
+  HP_BASE: 70, // 45초 경기용 — KO 85%가 나오는 지점. 판정은 스피드전의 김빠지는 결말이라 드물게 둔다. // 체력 = HP_BASE + pages^HP_EXP * HP_MUL
   HP_EXP: 0.26, // 크면 두꺼운 책이 훨씬 단단해진다
-  HP_MUL: 3.8,
+  HP_MUL: 3.4,
 };
 
 export function weightClass(pages) {

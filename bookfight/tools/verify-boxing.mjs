@@ -19,7 +19,7 @@ import {
 import { Rng } from '../src/rng.js';
 
 const ROUNDS = Number(process.argv[2] || 400);
-const ROUND_SECONDS = 300;
+const BOUT_PUNCHES = 60; // 대사 없는 스트레스 바우트 — 60펀치 또는 KO까지
 const fails = [];
 const warn = (cond, msg) => { if (!cond) fails.push(msg); };
 
@@ -28,14 +28,13 @@ function boxOnly(bookA, bookB, seed) {
   const rng = new Rng(seed);
   const A = new Boxer(bookA, 'red');
   const B = new Boxer(bookB, 'blue');
-  let clock = ROUND_SECONDS;
   let t = 0;
   let punches = 0;
   const stTrace = [];
   let firstA = 0;
   let total = 0;
 
-  while (clock > 0 && A.alive && B.alive && punches < 400) {
+  while (A.alive && B.alive && punches < BOUT_PUNCHES) {
     const aFirst = initiative(A, B, rng, 620);
     const atk = aFirst ? A : B;
     const def = atk === A ? B : A;
@@ -47,7 +46,6 @@ function boxOnly(bookA, bookB, seed) {
     if (r.result === 'hit') checkStagger(def, r.dmg, rng);
     punches++;
     t += rng.float(...BOXING_TUNING.PUNCH_SECONDS);
-    clock -= rng.float(...BOXING_TUNING.PUNCH_CLOCK);
     recover(A, A.d.recover * 0.5);
     recover(B, B.d.recover * 0.5);
     if (punches % 8 === 0) stTrace.push([A.stPct, B.stPct]);
@@ -160,7 +158,7 @@ warn(stEndSum / stEndN > 0.05, '스태미나가 완전히 고갈된다');
 
 console.log('\n[리듬]');
 console.log(`   라운드당 ${avgPunch.toFixed(1)}펀치 · 재생 ${avgTime.toFixed(1)}초 → ${(avgTime / avgPunch).toFixed(2)}초에 한 방`);
-console.log(`   권투만으로 끝난 라운드(KO): ${pct(koCount / ROUNDS)} · 다운 평균 ${(kdSum / ROUNDS).toFixed(2)}회`);
+console.log(`   60펀치 바우트 내 KO: ${pct(koCount / ROUNDS)} · 다운 평균 ${(kdSum / ROUNDS).toFixed(2)}회`);
 warn(avgTime / avgPunch < 1.3, '주먹 간격이 너무 길다 — 리듬이 안 산다');
 
 console.log('\n[능력치가 실제로 작동하는가]');

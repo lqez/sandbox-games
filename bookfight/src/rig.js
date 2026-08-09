@@ -30,24 +30,28 @@ export function makeLimb({ upperLen, lowerLen, radius, endRadius, color, endColo
   joint.add(end);
 
   if (boot) {
-    // 신발 — 앞으로 튀어나온 뭉툭한 상자
-    const shoe = new THREE.Mesh(
-      new THREE.BoxGeometry(endRadius * 1.7, endRadius * 1.25, endRadius * 3.1),
-      new THREE.MeshStandardMaterial({ color: endColor, roughness: 0.55 })
-    );
-    shoe.position.set(0, -endRadius * 0.5, endRadius * 0.7);
-    shoe.castShadow = true;
-    end.add(shoe);
+    // 신발 — 상자 + 둥근 앞코. 앞코가 있어야 만화 신발로 읽힌다.
+    const m = new THREE.MeshStandardMaterial({ color: endColor, roughness: 0.5 });
+    const base = new THREE.Mesh(new THREE.BoxGeometry(endRadius * 1.7, endRadius * 1.15, endRadius * 2.4), m);
+    base.position.set(0, -endRadius * 0.55, endRadius * 0.45);
+    base.castShadow = true;
+    end.add(base);
+    const toe = new THREE.Mesh(new THREE.SphereGeometry(endRadius * 0.95, 12, 10), m);
+    toe.position.set(0, -endRadius * 0.6, endRadius * 1.5);
+    toe.scale.set(0.9, 0.75, 1);
+    toe.castShadow = true;
+    end.add(toe);
   } else {
     // 글러브 — 구 + 엄지
-    const glove = new THREE.Mesh(
-      new THREE.SphereGeometry(endRadius, 12, 10),
-      new THREE.MeshStandardMaterial({ color: endColor, roughness: 0.5 })
-    );
-    glove.scale.set(1, 0.94, 1.12);
+    const gm = new THREE.MeshStandardMaterial({ color: endColor, roughness: 0.42 });
+    const glove = new THREE.Mesh(new THREE.SphereGeometry(endRadius, 14, 12), gm);
+    glove.scale.set(1, 0.95, 1.15);
     glove.position.y = -endRadius * 0.55;
     glove.castShadow = true;
     end.add(glove);
+    const thumb = new THREE.Mesh(new THREE.SphereGeometry(endRadius * 0.42, 10, 8), gm);
+    thumb.position.set(0, -endRadius * 0.45, endRadius * 0.75);
+    end.add(thumb);
     const cuff = new THREE.Mesh(
       new THREE.CylinderGeometry(radius * 1.25, radius * 1.25, radius * 1.1, 10),
       new THREE.MeshStandardMaterial({ color: 0xf4efe2, roughness: 0.8 })
@@ -58,35 +62,45 @@ export function makeLimb({ upperLen, lowerLen, radius, endRadius, color, endColo
   return { root, joint, end };
 }
 
-// 만화 눈 — 표지 위에 붙은 스티커 같은 흰자 + 검은자.
-// 시선을 상대 쪽으로 조금 몰아 두면 대치감이 산다.
-export function makeEyes(w, h) {
+// 얼굴 — 표지 위에 인쇄된 스티커처럼 붙는 평면 눈·눈썹·입.
+// 구체 눈알을 책 위에 얹으면 분리된 부속처럼 보였다. 평면 원판이 만화 표정을 만든다.
+// MeshBasicMaterial(조명 무시)이라 어느 조명에서도 스티커처럼 또렷하다.
+export function makeFace(w, h) {
   const g = new THREE.Group();
-  const white = new THREE.MeshStandardMaterial({ color: 0xfdfdfa, roughness: 0.35 });
-  const black = new THREE.MeshBasicMaterial({ color: 0x14110d });
+  const BLACK = new THREE.MeshBasicMaterial({ color: 0x17130f });
+  const WHITE = new THREE.MeshBasicMaterial({ color: 0xfffdf4 });
   const eyes = [];
   for (const s of [-1, 1]) {
     const e = new THREE.Group();
-    const ball = new THREE.Mesh(new THREE.SphereGeometry(0.125, 14, 12), white);
-    ball.scale.set(1, 1.1, 0.7);
-    ball.castShadow = true;
-    e.add(ball);
-    const pupil = new THREE.Mesh(new THREE.SphereGeometry(0.058, 10, 8), black);
-    pupil.position.z = 0.078;
-    pupil.scale.set(1, 1.15, 0.6);
-    e.add(pupil);
-    // 눈꺼풀 — 아플 때 반쯤 감긴다
-    const lid = new THREE.Mesh(new THREE.SphereGeometry(0.132, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2), white);
-    lid.material = new THREE.MeshStandardMaterial({ color: 0xe8d9c0, roughness: 0.6 });
-    lid.scale.set(1, 1.1, 0.72);
-    lid.position.y = 0.13;
-    e.add(lid);
-    e.position.set(s * w * 0.235, h * 0.47, 0.02);
-    e.userData = { pupil, lid, side: s };
+    const rim = new THREE.Mesh(new THREE.CircleGeometry(0.135, 20), BLACK);
+    const ball = new THREE.Mesh(new THREE.CircleGeometry(0.117, 20), WHITE);
+    ball.position.z = 0.004;
+    const pupil = new THREE.Mesh(new THREE.CircleGeometry(0.06, 12), BLACK);
+    pupil.position.set(0, -0.012, 0.008);
+    // KO용 X자 눈
+    const xg = new THREE.Group();
+    for (const a of [0.785, -0.785]) {
+      const bar = new THREE.Mesh(new THREE.PlaneGeometry(0.19, 0.042), BLACK);
+      bar.rotation.z = a;
+      bar.position.z = 0.008;
+      xg.add(bar);
+    }
+    xg.visible = false;
+    // 눈썹 — 표정의 전부. 기울기만 바꿔도 화남/아픔이 된다.
+    const brow = new THREE.Mesh(new THREE.PlaneGeometry(0.22, 0.05), BLACK);
+    brow.position.set(0, 0.175, 0.006);
+    e.add(rim, ball, pupil, xg, brow);
+    e.position.set(s * w * 0.21, h * 0.2, 0);
+    e.userData = { ball, pupil, x: xg, brow, side: s };
     g.add(e);
     eyes.push(e);
   }
-  return { group: g, eyes };
+  // 입 — 말할 때 세로로 벌어진다. 평소엔 가는 미소 선.
+  const mouth = new THREE.Mesh(new THREE.CircleGeometry(0.105, 20), BLACK);
+  mouth.position.set(0, h * 0.0, 0.004);
+  mouth.scale.set(1.2, 0.24, 1);
+  g.add(mouth);
+  return { group: g, eyes, mouth };
 }
 
 // ── 머리 모양 ───────────────────────────────────────────────

@@ -50,6 +50,82 @@ const SHOTS = {
     },
   },
 
+  // 타이트 싱글 — 2합 설전용. 전경 없이 화자만 깨끗하게.
+  dlgTight: {
+    dur: [2.4, 3.2],
+    weight: 0,
+    fn: (c) => {
+      const dir = c.focus.clone().sub(c.other).setY(0).normalize();
+      const perp = new THREE.Vector3(-dir.z, 0, dir.x).multiplyScalar(c.side * 1.3);
+      return {
+        pos: c.focus.clone().addScaledVector(dir, -2.5).add(perp).setY(c.focus.y + 0.5),
+        target: c.focus.clone().setY(c.focus.y + 0.3),
+        fov: 26 - c.u * 1.5,
+      };
+    },
+  },
+
+  // 슬로 푸시 — 3합 결정타용. 정면에서 천천히 밀고 들어간다.
+  dlgPush: {
+    dur: [2.6, 3.4],
+    weight: 0,
+    fn: (c) => {
+      const dir = c.focus.clone().sub(c.other).setY(0).normalize();
+      const perp = new THREE.Vector3(-dir.z, 0, dir.x).multiplyScalar(c.side * 0.7);
+      return {
+        pos: c.focus.clone().addScaledVector(dir, -(3.2 - c.u * 0.9)).add(perp).setY(c.focus.y + 0.35),
+        target: c.focus.clone().setY(c.focus.y + 0.25),
+        fov: 28 - c.u * 4,
+      };
+    },
+  },
+
+  // 텐션 아크 — 결정타 직전. 두 선수 사이를 눈높이로 천천히 도는 반원.
+  arc: {
+    dur: [2.0, 2.4],
+    weight: 0,
+    fn: (c) => {
+      const a = c.side * (1.3 - c.u * 2.6);
+      const r = 5.2 - c.u * 0.8;
+      return {
+        pos: V().set(Math.cos(a) * r, 1.5 + c.u * 0.9, Math.sin(a) * r),
+        target: c.mid.clone().setY(2.0),
+        fov: 30,
+      };
+    },
+  },
+
+  // 임팩트 — 큰 타격 순간의 크래시 줌. 빠르게 조이며 들어간다.
+  impact: {
+    dur: [1.1, 1.5],
+    weight: 0,
+    fn: (c) => {
+      const dir = c.focus.clone().sub(c.other).setY(0).normalize();
+      const perp = new THREE.Vector3(-dir.z, 0, dir.x).multiplyScalar(c.side * 1.4);
+      const zoom = Math.min(1, c.u * 2.6); // 앞의 40%에서 확 조인다
+      return {
+        pos: c.focus.clone().addScaledVector(dir, -2.4).add(perp).setY(c.focus.y + 0.4),
+        target: c.focus.clone().setY(c.focus.y),
+        fov: 44 - zoom * 15,
+      };
+    },
+  },
+
+  // 인서트 — 글러브·얼굴 디테일. 러시 사이에 잠깐.
+  insert: {
+    dur: [0.9, 1.3],
+    weight: 0.5,
+    fn: (c) => {
+      const dir = c.focus.clone().sub(c.other).setY(0).normalize();
+      const perp = new THREE.Vector3(-dir.z, 0, dir.x).multiplyScalar(c.side * 0.9);
+      return {
+        pos: c.focus.clone().addScaledVector(dir, -1.5).add(perp).setY(c.focus.y - 0.3 + c.u * 0.5),
+        target: c.focus.clone().setY(c.focus.y - 0.1),
+        fov: 21,
+      };
+    },
+  },
+
   // 케이지사이드 와이드 — 기본 컷. 천천히 옆으로 흐른다.
   wide: {
     dur: [2.4, 3.6],
@@ -305,19 +381,27 @@ export class Director {
     if (this.free) return;
     switch (ev.type) {
       case 'taunt':
-        // 도발 — 말하는 쪽으로. 발언 길이만큼 컷을 유지한다.
-        this.cut('dialogue', { focus: ev.by, dur: ev.hold, side: this.lineSide });
+      case 'reply': {
+        // 라운드마다 커버리지가 다르다 — 1합 어깨너머, 2합 타이트 싱글, 3합 슬로 푸시.
+        // 매 합이 같은 그림이면 카메라가 뻔해진다.
+        const shot = ev.round >= 3 ? 'dlgPush' : ev.round === 2 ? 'dlgTight' : 'dialogue';
+        this.cut(shot, { focus: ev.by, dur: ev.hold, side: this.lineSide });
         break;
-      case 'reply':
-        // 반박 — 반대편으로 넘긴다(리버스 숏). 같은 side를 써야 180도 선이 안 깨진다.
-        this.cut('dialogue', { focus: ev.by, dur: ev.hold, side: this.lineSide });
+      }
+      case 'final':
+        // 결정타 직전 — 눈높이 반원 아크로 숨을 고른다
+        this.cut('arc', { dur: 2.1, side: this.lineSide });
         break;
-      case 'punch':
-        // 주먹 하나하나에 컷을 붙이면 그게 곧 산만함이다. 컷이 충분히 익었을 때만 넘긴다.
-        if (this.shotT > 3.6 && this.rand() < 0.5) {
-          this.cut(this.pickAmbient(), { focus: ev.by === 'red' ? 'blue' : 'red' });
+      case 'punch': {
+        // 큰 게 꽂히면 크래시 줌. 잔 펀치는 컷이 익었을 때만 넘긴다(주먹마다 끊으면 산만함).
+        const hitCorner = ev.by === 'red' ? 'blue' : 'red';
+        if ((ev.crit || ev.staggered || (ev.result === 'hit' && ev.dmg >= 8)) && this.shotT > 0.9) {
+          this.cut('impact', { focus: hitCorner });
+        } else if (this.shotT > 2.8 && this.rand() < 0.55) {
+          this.cut(this.pickAmbient(), { focus: hitCorner });
         }
         break;
+      }
       case 'strike': {
         const hitCorner = ev.by === 'red' ? 'blue' : 'red';
         if (ev.move === 'finisher') this.cut('lowAngle', { focus: ev.by, dur: 2.6 });

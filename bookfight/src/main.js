@@ -332,6 +332,14 @@ class Game {
         break;
       }
 
+      case 'final': {
+        this.hud.banner('마지막 공방', '여기서 갈립니다', 'bell', 1700);
+        this.director.onEvent(ev);
+        Audio.roar(0.7);
+        this.excitement = 1;
+        break;
+      }
+
       case 'commentary':
         this.hud.commentary(ev.text, ev.tone);
         if (ev.tone === 'shout') Audio.roar(0.7);

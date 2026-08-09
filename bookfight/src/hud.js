@@ -163,7 +163,7 @@ export class Hud {
         <div class="th-mid">
           <div class="vs">VS</div>
           <div class="seedline">SEED <b>${seed}</b></div>
-          <div class="roundline">1 RD · 5:00 · 단판</div>
+          <div class="roundline">1 RD · 0:45 · 초단판</div>
         </div>
         <div class="th blue">
           <img src="${this.coverURL(b)}" alt="">
@@ -228,7 +228,7 @@ export class Hud {
 
   setClock(sec) {
     this.el.clock.textContent = fmtClock(sec);
-    this.el.clock.classList.toggle('urgent', sec <= 60);
+    this.el.clock.classList.toggle('urgent', sec <= 10);
   }
 
   // ── 설전 패널 ───────────────────────────────────────────
@@ -376,7 +376,9 @@ export class Hud {
         ${statRow('명중률', pct(red.stats), pct(blue.stats))}
         ${statRow('누적 피해', red.stats.dmg, blue.stats.dmg)}
         ${statRow('치명타', red.stats.crit, blue.stats.crit)}
-        ${statRow('회피', red.stats.evaded, blue.stats.evaded)}
+        ${statRow('설전 정타', red.stats.verbal, blue.stats.verbal)}
+        ${statRow('논파당함', red.stats.rebutted, blue.stats.rebutted)}
+        ${statRow('회피', red.stats.slipped, blue.stats.slipped)}
         ${statRow('다운', red.knockdowns, blue.knockdowns)}
         ${statRow('남은 체력', `${red.hpEnd}/${red.hpMax}`, `${blue.hpEnd}/${blue.hpMax}`)}
       </div>
