@@ -61,6 +61,25 @@ const composerRT = new THREE.WebGLRenderTarget(
   window.innerWidth * DPR, window.innerHeight * DPR,
   { type: THREE.HalfFloatType, samples: IS_MOBILE ? 2 : 4 }
 );
+// 적응형 해상도: 프레임이 느려지면 픽셀비를 낮춰 끊김을 막는다
+let quality = 1, qFrames = 0, qAccum = 0, qCooldown = 2;
+function updateQuality(dt) {
+  qCooldown -= dt;
+  qAccum += dt; qFrames++;
+  if (qFrames < 45) return;
+  const avg = qAccum / qFrames;
+  qAccum = 0; qFrames = 0;
+  if (qCooldown > 0) return;
+  let next = quality;
+  if (avg > 0.026 && quality > 0.55) next = Math.max(0.55, quality - 0.15);
+  else if (avg < 0.0135 && quality < 1) next = Math.min(1, quality + 0.1);
+  if (next !== quality) {
+    quality = next;
+    renderer.setPixelRatio(DPR * quality);
+    composer.setPixelRatio(DPR * quality);
+    qCooldown = 2;
+  }
+}
 const composer = new EffectComposer(renderer, composerRT);
 composer.addPass(new RenderPass(scene, camera));
 const bloom = new UnrealBloomPass(
@@ -98,6 +117,7 @@ window.addEventListener('resize', () => {
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
   composer.setSize(window.innerWidth, window.innerHeight);
+  bloom.setSize(window.innerWidth / 2, window.innerHeight / 2);
 });
 
 // 포트레이트 보정: 세로 화면에선 수직 FOV를 키워 좌우 시야 확보
@@ -206,7 +226,7 @@ function selectBike(i) {
 function newGame(seed) {
   if (world) world.dispose();
   track = buildTrack(seed);
-  world = buildWorld(track, scene, renderer);
+  world = buildWorld(track, scene, renderer, { mobile: IS_MOBILE });
   if (!cam) cam = new DroneCam(camera);
   Object.assign(game, {
     phase: 'intro', s: 2, v: 0, y: 2, vy: 0, accel: 0, airborne: false,
@@ -330,6 +350,7 @@ function evaluateLanding(groundSlope) {
     gained = Math.round(gained * 0.6);
     game.v *= 0.75;
     audio.sketchy();
+    cam.kick(Math.min(0.8, 0.4 + game.airTime * 0.25));
     if (game.airTime > 0.45) popup('SKETCHY… +' + gained, 'warn');
   } else {
     if (game.airTime > 0.45) {
@@ -337,7 +358,8 @@ function evaluateLanding(groundSlope) {
       popup('CLEAN +' + (150 + airPts), 'good');
       audio.land();
     }
-    cam.kick(0.25);
+    // 착지 충격: 체공이 길수록 크게 흔들린다
+    cam.kick(Math.min(0.7, 0.28 + game.airTime * 0.22));
   }
   game.stunt += Math.max(0, gained);
   game.bestAir = Math.max(game.bestAir, game.airTime);
@@ -537,7 +559,7 @@ function takeOff(held, slope, cos) {
       game.airBank += perfect ? 150 : 80;
       popup(perfect ? 'PERFECT POP +150' : 'CLEAN POP +80', perfect ? 'perfect' : 'good');
       audio.pop();
-      cam.kick(0.2);
+      cam.kick(0.38);
     } else if (held) {
       game.pitchVel = 1.25 / spec.stability;
       popup('TOO MUCH GAS!', 'warn');
@@ -744,6 +766,7 @@ function frame(nowMs) {
     camera.updateProjectionMatrix();
   }
 
+  updateQuality(dt);
   world.update(time, bikePos, game.s);
   audio.engine(game.v, input.held && game.phase === 'run' && !game.crashed, game.airborne, game.phase === 'run');
   updateHUD(time);
@@ -790,6 +813,7 @@ window.__bike = {
     placeBike();
     cam.snapTo(bikePos, bikeDir);
   },
+  camera: () => camera,
   lips: () => track.lips.map((l) => ({ s: Math.round(l.s), size: l.size })),
   runups: () => track.checkpoints.map((cp) => {
     const lip = track.lips.find((l) => l.s > cp);

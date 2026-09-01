@@ -8,7 +8,7 @@ export const SUN_DIR = new THREE.Vector3(0.32, 0.46, 0.83).normalize();
 
 const CHUNK_LEN = 70;
 const CULL_BEHIND = 85;    // 저속 망원 카메라(후방 15.5m)가 뒤 지형을 보므로 여유 있게
-const CULL_AHEAD = 560;
+const CULL_AHEAD = 420;
 
 // ---------- 텍스처 (모듈 전역 캐시 — 코스 리빌드에도 유지) ----------
 let TEX = null;
@@ -93,7 +93,9 @@ void main(){
   vec3 deep = vec3(0.008, 0.22, 0.30);
   vec3 teal = vec3(0.03, 0.42, 0.46);
   vec3 glass = vec3(0.13, 0.62, 0.58);
-  float patches = noise(uv * 0.045 + 7.0);
+  // 아주 저주파 색 패치는 해시 노이즈 대신 해석적 파형으로 (필레이트 절감)
+  float patches = 0.5 + 0.34 * sin(uv.x * 0.029 + 1.7) * cos(uv.y * 0.024 - 0.6)
+                      + 0.12 * sin(uv.y * 0.013 + 2.9);
   vec3 col = mix(deep, teal, smoothstep(0.3, 0.75, patches));
   col = mix(col, glass, smoothstep(0.84, 0.99, patches) * 0.32);
   col = mix(col, glass * 0.9, smoothstep(0.66, 0.92, n1) * 0.14);
@@ -155,7 +157,7 @@ function mergeGeoms(geoms) {
   return out;
 }
 
-export function buildWorld(track, scene, renderer) {
+export function buildWorld(track, scene, renderer, opts = {}) {
   const group = new THREE.Group();
   const rnd = mulberry32(track.seed ^ 0x9e3779b9);
   const S = track.samples, N = S.length;
@@ -802,7 +804,7 @@ export function buildWorld(track, scene, renderer) {
   group.add(hemi);
   const sun = new THREE.DirectionalLight(0xfff2dd, 2.65);
   sun.castShadow = true;
-  sun.shadow.mapSize.set(2048, 2048);
+  sun.shadow.mapSize.set(opts.mobile ? 1024 : 2048, opts.mobile ? 1024 : 2048);
   sun.shadow.camera.left = -16; sun.shadow.camera.right = 16;
   sun.shadow.camera.top = 16; sun.shadow.camera.bottom = -16;
   sun.shadow.camera.near = 2; sun.shadow.camera.far = 120;
