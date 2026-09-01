@@ -286,7 +286,10 @@ export function buildBike(specIdx) {
   }
 
   model.add(rider);
-  group.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+  // 그림자 패스 드로우콜 절감: 실루엣을 만드는 대형 파트만 캐스팅
+  for (const part of [tank, seat, torso, pack, helmet, hipsMesh]) part.castShadow = true;
+  wheelF.children[0].castShadow = true;
+  wheelR.children[0].castShadow = true;
 
   // ---- 포즈 블렌딩 ----
   const current = {};

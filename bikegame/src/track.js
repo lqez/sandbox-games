@@ -40,7 +40,7 @@ export function buildTrack(seed) {
     const w = wiggle ? (rnd() - 0.5) * 0.014 : 0;
     for (let i = 0; i < n; i++) {
       const t = i / n;
-      push(DECK + Math.sin(t * 17 + seed) * 0.06, true, T.DIRT, 0, w * Math.sin(t * Math.PI * 2));
+      push(DECK + Math.sin(t * 17 + seed) * 0.02, true, T.DIRT, 0, w * Math.sin(t * Math.PI * 2));
     }
   }
 

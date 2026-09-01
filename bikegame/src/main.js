@@ -38,8 +38,11 @@ const TRICKS = {
 
 // ---------- 렌더러 / 후처리 ----------
 const app = document.getElementById('app');
-const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+const IS_MOBILE = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
+// AA는 컴포저 MSAA 타깃으로 처리 — 캔버스 MSAA는 컴포저 경유 시 낭비
+const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
+const DPR = Math.min(window.devicePixelRatio, IS_MOBILE ? 1.5 : 2);
+renderer.setPixelRatio(DPR);
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -52,10 +55,15 @@ scene.fog = new THREE.Fog(0xcfeef7, 320, 1500);
 const camera = new THREE.PerspectiveCamera(82, window.innerWidth / window.innerHeight, 0.1, 3200);
 
 // 블룸: 태양 디스크 + 수면 윤슬 하이라이트가 HDR 임계 초과분만 번지게
-const composer = new EffectComposer(renderer);
+// MSAA 샘플을 지정한 HDR 타깃으로 지오메트리 AA 확보
+const composerRT = new THREE.WebGLRenderTarget(
+  window.innerWidth * DPR, window.innerHeight * DPR,
+  { type: THREE.HalfFloatType, samples: IS_MOBILE ? 2 : 4 }
+);
+const composer = new EffectComposer(renderer, composerRT);
 composer.addPass(new RenderPass(scene, camera));
 const bloom = new UnrealBloomPass(
-  new THREE.Vector2(window.innerWidth, window.innerHeight), 0.38, 0.35, 0.9
+  new THREE.Vector2(window.innerWidth / 2, window.innerHeight / 2), 0.38, 0.35, 0.9
 );
 composer.addPass(bloom);
 composer.addPass(new OutputPass());
@@ -135,12 +143,17 @@ const input = setupInput(app, {
     game.releasedS = game.s;
   },
   onGesture(g) {
-    if (game.phase !== 'run' || !game.airborne || game.crashed || game.trick) return;
+    // false 반환 = 미수락 → 입력측이 버퍼를 리셋하고 계속 감시 (이륙 직전 스와이프 구제)
+    if (game.phase !== 'run' || !game.airborne || game.crashed || game.trick) return false;
     const t = TRICKS[g];
-    if (!t) return;
+    if (!t) return false;
     game.trick = { ...t, t: 0 };
     if (t.kind === 'flip') game.trick.dur = spec.flipDur;
     audio.trick();
+    return true;
+  },
+  isGestureContext() {
+    return game.phase === 'run' && game.airborne && !game.crashed;
   },
 });
 
@@ -168,6 +181,7 @@ function newGame(seed) {
     trick: null, whipYaw: 0, airBank: 0, airTrickNames: [],
     stunt: 0, tricksDone: 0, bestAir: 0, raceTime: 0,
     crashed: false, crashTimer: 0, riderFly: null,
+    crashS: null, crashSplashed: false,
     releasedAt: -999, releasedS: -999, speedHist: [], finishTimer: 0,
   });
   game.seed = seed;
@@ -176,6 +190,8 @@ function newGame(seed) {
   cam.snapTo(bikePos, bikeDir);
   elResults.classList.remove('show');
   elIntro.classList.add('show');
+  elTime.textContent = '0.0';
+  elScore.textContent = '0';
 }
 
 function startRun() {
@@ -197,7 +213,10 @@ function placeBike() {
 
 function respawn() {
   let cp = track.checkpoints[0];
-  for (const c of track.checkpoints) if (c <= game.s + 1) cp = c;
+  const base = game.crashS ?? game.s; // 슬라이드로 넘어간 진행은 인정하지 않음
+  for (const c of track.checkpoints) if (c <= base + 1) cp = c;
+  game.crashS = null;
+  game.crashSplashed = false;
   game.s = cp;
   game.v = 15;
   game.y = track.groundAt(cp) ?? 2;
@@ -217,6 +236,8 @@ function respawn() {
 function doCrash(splashed) {
   if (game.crashed) return;
   game.crashed = true;
+  game.crashS = game.s;          // 리스폰 기준: 크래시 발생 지점
+  game.crashSplashed = splashed;
   game.crashTimer = 1.5;
   game.trick = null;
   game.airBank = 0; game.airTrickNames = [];
@@ -280,7 +301,8 @@ function evaluateLanding(groundSlope) {
   game.stunt += Math.max(0, gained);
   game.bestAir = Math.max(game.bestAir, game.airTime);
   game.airBank = 0; game.airTrickNames = [];
-  game.landWindow = 1.1;
+  // 착지 순간 스로틀을 쥐고 있을 때만 윌리 파워 윈도우 발동
+  game.landWindow = input.held ? 1.1 : 0;
   game.wheelie = Math.max(0, d) * 0.55;
   particles.dust(bikePos.x, bikePos.y, bikePos.z, 10);
   game.pitchVel = 0;
@@ -299,7 +321,18 @@ function step(dt) {
     game.y += game.vy * dt;
     const g = track.groundAt(game.s);
     if (g !== null && game.y < g) { game.y = g; game.vy = 0; }
-    if (game.y < 0.1) { game.y = 0.1; game.vy = 0; }
+    if (game.y < 0.1) {
+      game.y = 0.1; game.vy = 0;
+      if (g === null) {
+        // 갭 위 수면: 활주 정지 + 최초 1회 스플래시
+        game.v = 0;
+        if (!game.crashSplashed) {
+          game.crashSplashed = true;
+          particles.splash(bikePos.x, bikePos.z, 40);
+          audio.splash();
+        }
+      }
+    }
     game.pitch += game.crashSpin.x * dt;
     game.roll += game.crashSpin.z * dt;
     if (game.riderFly) {
@@ -338,6 +371,7 @@ function step(dt) {
       const targetPitch = Math.atan(newSlope);
       game.pitch += (targetPitch - game.pitch) * Math.min(1, 12 * dt);
       game.landWindow = Math.max(0, game.landWindow - dt);
+      if (!held) game.landWindow = 0; // 한 번 떼면 윈도우 종료 (재가속은 안전)
       if (held && game.landWindow > 0) {
         game.wheelie += (2.3 + game.v * 0.02) / spec.stability * dt;
       } else if (held && game.v < spec.vmax * 0.55) {
@@ -358,6 +392,7 @@ function step(dt) {
     // ---- 공중 ----
     game.airTime += dt;
     game.s += game.airVX * dt;
+    const prevY = game.y;
     game.vy -= G * dt;
     game.y += game.vy * dt;
 
@@ -395,7 +430,12 @@ function step(dt) {
     }
 
     const g2 = track.groundAt(game.s);
-    if (g2 !== null && game.y <= g2 + 0.02 && game.vy <= 0.5) {
+    // 착지: 하강 접촉 / 이번 프레임 하향 교차(상승 중 램프 측면) / 터널링 폴백
+    if (g2 !== null && (
+      (game.y <= g2 + 0.02 && game.vy <= 0.5) ||
+      (prevY >= g2 && game.y < g2) ||
+      (game.y < g2 - 0.5)
+    )) {
       game.y = g2;
       game.airborne = false;
       evaluateLanding(track.slopeAt(game.s));
@@ -403,10 +443,6 @@ function step(dt) {
     } else if (g2 === null && game.y < 0.25) {
       doCrash(true);
       return;
-    } else if (g2 !== null && game.y < g2 - 0.5) {
-      game.y = g2;
-      game.airborne = false;
-      evaluateLanding(track.slopeAt(game.s));
     }
   }
 
@@ -503,7 +539,7 @@ function updateHUD(time) {
     elTime.textContent = game.raceTime.toFixed(1);
     elScore.textContent = game.stunt.toLocaleString();
   }
-  elWarn.classList.toggle('show', game.wheelie > 0.45 && !game.crashed);
+  elWarn.classList.toggle('show', game.phase === 'run' && game.wheelie > 0.45 && !game.crashed);
 
   let barShown = false;
   if (game.phase === 'run' && !game.airborne && !game.crashed) {
@@ -612,10 +648,13 @@ function frame(nowMs) {
   }
 
   world.update(time, bikePos, game.s);
-  audio.engine(game.v, input.held && game.phase === 'run' && !game.crashed, game.airborne);
+  audio.engine(game.v, input.held && game.phase === 'run' && !game.crashed, game.airborne, game.phase === 'run');
   updateHUD(time);
   composer.render();
 }
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) audio.suspend(); else audio.resume();
+});
 
 newGame(game.seed);
 requestAnimationFrame(frame);

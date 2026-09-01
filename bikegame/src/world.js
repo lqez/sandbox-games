@@ -67,16 +67,16 @@ void main(){
   vec3 glass = vec3(0.28, 0.82, 0.78);
   float patches = noise(uv * 0.045 + 7.0);
   vec3 col = mix(deep, teal, smoothstep(0.3, 0.75, patches));
-  col = mix(col, glass, smoothstep(0.72, 0.95, noise(uv * 0.08 - 3.0)) * 0.5);
-  col = mix(col, glass * 0.9, smoothstep(0.6, 0.9, noise(uv * 0.5 + 11.0)) * 0.25);
+  col = mix(col, glass, smoothstep(0.82, 0.98, patches) * 0.5);
+  col = mix(col, glass * 0.92, smoothstep(0.62, 0.9, n1) * 0.22);
   // 슐릭 프레넬: 정면은 물 본색, 그레이징은 하늘 반사 지배
   float cosV = max(dot(view, nrm), 0.0);
   float fres = 0.025 + 0.975 * pow(1.0 - cosV, 5.0);
-  vec3 skyRef = mix(vec3(0.20, 0.60, 0.78), vec3(0.07, 0.42, 0.86), clamp(view.y * 1.6, 0.0, 1.0));
+  vec3 skyRef = mix(vec3(0.12, 0.50, 0.72), vec3(0.06, 0.40, 0.85), clamp(view.y * 1.6, 0.0, 1.0));
   // 태양 방향 그레이징엔 따뜻한 톤 가미
   float sunSide = pow(max(dot(normalize(vec3(-view.x, 0.0, -view.z)), normalize(vec3(sunDir.x, 0.0, sunDir.z))), 0.0), 3.0);
   skyRef = mix(skyRef, vec3(0.9, 0.88, 0.76), sunSide * 0.3);
-  col = mix(col, skyRef, clamp(fres * 0.75, 0.0, 0.45));
+  col = mix(col, skyRef, clamp(fres * 0.72, 0.0, 0.42));
   vec3 refl = reflect(-view, nrm);
   float sr = max(dot(refl, sunDir), 0.0);
   float spec = pow(sr, 160.0);
@@ -183,7 +183,7 @@ export function buildWorld(track, scene) {
   const cLip = new THREE.Color(0xf2ede2);
   const cSand = new THREE.Color(0xe6c48d), cGrassCol = new THREE.Color(0xa3a862);
   const cWet = new THREE.Color(0xd6c194), cNavy = new THREE.Color(0x1d3f78);
-  const cShallow = new THREE.Color(0x6fd6cf);
+  const cShallow = new THREE.Color(0x49c8bd);
   const cUnder = new THREE.Color(0x58cabc); // 수중 모래(터콰이즈 투과)
 
   // ---------- 청크 시스템 ----------
@@ -217,9 +217,9 @@ export function buildWorld(track, scene) {
                    mix(hash(i + vec2(0,1)), hash(i + vec2(1,1)), f.x), f.y);
       }
       void main(){
-        float n = noise(vWorld.xz * 0.55 + vec2(time * 0.35, -time * 0.25));
-        float n2 = noise(vWorld.xz * 1.7 - time * 0.5);
-        float a = vFade * smoothstep(0.35, 0.75, n * 0.65 + n2 * 0.35) * 0.75;
+        float n = noise(vWorld.xz * 0.8 + vec2(time * 0.35, -time * 0.25));
+        float n2 = noise(vWorld.xz * 2.2 - time * 0.5);
+        float a = vFade * smoothstep(0.4, 0.8, n * 0.65 + n2 * 0.35) * 0.5;
         gl_FragColor = vec4(0.96, 1.0, 0.99, a);
       }`,
   });
@@ -255,21 +255,30 @@ export function buildWorld(track, scene) {
     return g;
   }
 
-  // 리본(주행면) 단면
+  // 리본(주행면) 단면 — 4열: 가장자리 + 타이어 라인용 중앙 밴드
+  function smoothN(x) {
+    return 0.5 + 0.28 * Math.sin(x * 0.061) + 0.22 * Math.sin(x * 0.017 + 2.1);
+  }
   function ribbonRow(i) {
     const s = S[i];
     const lat = lateral(i);
     const fl = s.type === T.FLOAT;
     const half = fl ? 2.1 : 2.6;
     const out = [];
-    for (const side of [-1, 1]) {
+    const isLip = lipSet.has(i);
+    const blend = smoothN(i);
+    for (const off of [-half, -0.95, 0.95, half]) {
+      const side = Math.sign(off);
       // 코너 바깥쪽(회전중심 반대편) 에지를 올려 뱅크 표현
-      const lift = (s.berm * side < 0) ? 0.55 * Math.abs(s.berm) : 0;
+      const lift = (s.berm * side < 0 && Math.abs(off) > 1) ? 0.55 * Math.abs(s.berm) : 0;
       let c;
       if (fl) c = cPly;
-      else c = ((Math.sin(i * 12.9898) * 43758.5453) % 1 + 1) % 1 < 0.5 ? cDirt : cDirtDark;
-      if (lipSet.has(i)) c = cLip;
-      out.push([s.x + lat.x * half * side, s.y + 0.02 + lift, s.z + lat.z * half * side, c]);
+      else {
+        c = cDirt.clone().lerp(cDirtDark, blend);
+        if (Math.abs(off) < 1.5) c.multiplyScalar(0.92); // 타이어 자국 밴드
+      }
+      if (isLip) c = cLip;
+      out.push([s.x + lat.x * off, s.y + 0.02 + lift, s.z + lat.z * off, c]);
     }
     return out;
   }
@@ -304,10 +313,10 @@ export function buildWorld(track, scene) {
     const cIn = new THREE.Color(1, 1, 1);       // r=fade 용도로도 사용
     const cOut = new THREE.Color(0, 1, 1);
     return [
-      [s.x - lat.x * (w + 2.6), 0.09, s.z - lat.z * (w + 2.6), cOut],
-      [s.x - lat.x * (w + 0.7), 0.09, s.z - lat.z * (w + 0.7), cIn],
-      [s.x + lat.x * (w + 0.7), 0.09, s.z + lat.z * (w + 0.7), cIn],
-      [s.x + lat.x * (w + 2.6), 0.09, s.z + lat.z * (w + 2.6), cOut],
+      [s.x - lat.x * (w + 2.2), 0.09, s.z - lat.z * (w + 2.2), cOut],
+      [s.x - lat.x * (w + 1.0), 0.09, s.z - lat.z * (w + 1.0), cIn],
+      [s.x + lat.x * (w + 1.0), 0.09, s.z + lat.z * (w + 1.0), cIn],
+      [s.x + lat.x * (w + 2.2), 0.09, s.z + lat.z * (w + 2.2), cOut],
     ];
   }
   function shallowRow(i, w) {
@@ -359,7 +368,7 @@ export function buildWorld(track, scene) {
         const side = rnd() < 0.5 ? -1 : 1;
         const off = (3.2 + rnd() * Math.max(0.5, w * 0.55 - 3.2)) * side;
         const m = new THREE.Matrix4();
-        const sc = 0.9 + rnd() * 1.1;
+        const sc = 0.6 + rnd() * 0.55;
         m.makeRotationY(rnd() * Math.PI);
         m.scale(new THREE.Vector3(sc, sc * (0.8 + rnd() * 0.5), sc));
         m.setPosition(s.x + lat.x * off, s.y - 0.32, s.z + lat.z * off);
@@ -398,7 +407,7 @@ export function buildWorld(track, scene) {
     const isFloat = S[i0].type === T.FLOAT || S[Math.min(i1 - 1, i0 + 6)].type === T.FLOAT;
     const geoms = [];
     const rowsFine = rowsOf(i0, i1, 2);   // 1m
-    geoms.push(makeStrip(rowsFine, ribbonRow, 2));
+    geoms.push(makeStrip(rowsFine, ribbonRow, 4));
     let shallowG = null, foamG = null;
     if (isFloat) {
       geoms.push(makeStrip(rowsFine, stripeRow, 2));
@@ -407,7 +416,8 @@ export function buildWorld(track, scene) {
       const rowsCoarse = rowsOf(i0, i1, 4); // 2m
       const widths = new Map();
       for (const i of rowsCoarse) {
-        widths.set(i, 6 + 5 * Math.abs(Math.sin(i * 0.05 + track.seed)) + rnd() * 2);
+        // 행간 연속성 유지 (저주파 사인 조합 — 지그재그 방지)
+        widths.set(i, 6.5 + 4.5 * Math.abs(Math.sin(i * 0.045 + track.seed)) + 1.2 * Math.sin(i * 0.013 + 1.7));
       }
       geoms.push(makeStrip(rowsCoarse, (i) => islandRow(i, widths.get(i)), 6));
       shallowG = makeStrip(rowsCoarse, (i) => shallowRow(i, widths.get(i)), 2);
@@ -437,12 +447,12 @@ export function buildWorld(track, scene) {
     // 마른 관목: 부채꼴 잎 6장 (밝은 올리브/카키)
     const geoms = [];
     for (let k = 0; k < 6; k++) {
-      const p = new THREE.PlaneGeometry(0.16, 0.75);
-      p.translate(0, 0.34, 0);
-      const tiltm = new THREE.Matrix4().makeRotationX(-0.5 - rnd() * 0.4);
+      const p = new THREE.PlaneGeometry(0.11, 0.6);
+      p.translate(0, 0.26, 0);
+      const tiltm = new THREE.Matrix4().makeRotationX(-0.45 - rnd() * 0.35);
       p.applyMatrix4(tiltm);
       p.rotateY((k / 6) * Math.PI * 2 + rnd());
-      geoms.push(tintGeom(p, k % 2 ? 0xd8cd8a : 0xbdb772, 0.28, rnd));
+      geoms.push(tintGeom(p, k % 2 ? 0xc9bd7e : 0xb0a866, 0.22, rnd));
     }
     return mergeGeoms(geoms);
   }
@@ -476,8 +486,9 @@ export function buildWorld(track, scene) {
     crown.translate(1.1, 4.5, 0);
     return crown;
   }
-  function makeInstanced(geom, mats, opts, shadow) {
-    const mat = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide, ...opts });
+  function makeInstanced(geom, mats, opts, shadow, unlit) {
+    const Mat = unlit ? THREE.MeshBasicMaterial : THREE.MeshLambertMaterial;
+    const mat = new Mat({ vertexColors: true, side: THREE.DoubleSide, ...opts });
     const im = new THREE.InstancedMesh(geom, mat, Math.max(1, mats.length));
     for (let i = 0; i < mats.length; i++) im.setMatrixAt(i, mats[i]);
     im.count = mats.length;
@@ -556,16 +567,16 @@ export function buildWorld(track, scene) {
 
   // 원경: 트리라인 + 오프코스 작은 섬
   {
-    const treeMat = new THREE.MeshLambertMaterial({ color: 0x4a6b3e });
+    const treeMat = new THREE.MeshLambertMaterial({ color: 0x6d8a70 });
     let cx = 0, cz = 0;
     const cnt = Math.ceil(N / 40);
     for (let i = 0; i < N; i += 40) { cx += S[i].x; cz += S[i].z; }
     cx /= cnt; cz /= cnt;
-    for (let k = 0; k < 9; k++) {
-      const a = (k / 9) * Math.PI * 2 + rnd();
-      const dist = 760 + rnd() * 280;
-      const strip = new THREE.Mesh(new THREE.BoxGeometry(300 + rnd() * 220, 5 + rnd() * 6, 12), treeMat);
-      strip.position.set(cx + Math.sin(a) * dist, 1.5, cz + Math.cos(a) * dist);
+    for (let k = 0; k < 7; k++) {
+      const a = (k / 7) * Math.PI * 2 + rnd();
+      const dist = 880 + rnd() * 320;
+      const strip = new THREE.Mesh(new THREE.BoxGeometry(130 + rnd() * 110, 3.5 + rnd() * 3.5, 12), treeMat);
+      strip.position.set(cx + Math.sin(a) * dist, 1.2, cz + Math.cos(a) * dist);
       strip.rotation.y = -a + Math.PI / 2 + (rnd() - 0.5);
       group.add(strip);
     }
@@ -589,7 +600,7 @@ export function buildWorld(track, scene) {
     }
   }
 
-  if (grassMats.length) group.add(makeInstanced(grassGeom(), grassMats, {}, false));
+  if (grassMats.length) group.add(makeInstanced(grassGeom(), grassMats, {}, false, true));
   if (palmMats.length) {
     group.add(makeInstanced(palmTrunkGeom(), palmMats.map((m) => m.clone()), { side: THREE.FrontSide }, true));
     group.add(makeInstanced(palmCrownGeom(), palmMats.map((m) => m.clone()), {}, false));
@@ -629,6 +640,8 @@ export function buildWorld(track, scene) {
     dispose() {
       scene.remove(group);
       group.traverse((o) => {
+        if (o.isInstancedMesh) o.dispose();      // instanceMatrix GPU 버퍼
+        if (o.isLight) o.dispose();              // 그림자 렌더타깃
         if (o.geometry) o.geometry.dispose();
         if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => m.dispose());
       });

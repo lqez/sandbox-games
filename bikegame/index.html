@@ -161,6 +161,14 @@
     .howto { font-size: 11px; line-height: 1.6; }
     .overlay { gap: 8px; }
   }
+  @media (orientation: portrait) {
+    #speedPanel {
+      width: 96px; top: auto; transform: none;
+      bottom: calc(96px + env(safe-area-inset-bottom));
+    }
+    #speedGraph { width: 80px; height: 48px; }
+    #jumpbar { width: 78vw; }
+  }
 </style>
 </head>
 <body>

@@ -80,8 +80,10 @@ export function createAudio() {
 
   return {
     unlock() { ensure(); if (ctx && ctx.state === 'suspended') ctx.resume(); },
+    suspend() { if (ctx && ctx.state === 'running') ctx.suspend(); },
+    resume() { if (ctx && ctx.state === 'suspended') ctx.resume(); },
     setEngine(p) { profile = { ...profile, ...p }; applyProfile(); },
-    engine(speed, throttle, airborne) {
+    engine(speed, throttle, airborne, running = true) {
       if (!started) return;
       const rpm = airborne && throttle ? 1.25 : speed / 27;
       const f = profile.base + rpm * profile.mult + (throttle ? profile.base * 0.35 : 0);
@@ -89,9 +91,9 @@ export function createAudio() {
       const f2 = profile.det >= 1 ? f * profile.det : f * 2 + profile.det * 10;
       osc2.frequency.setTargetAtTime(f2, ctx.currentTime, 0.06);
       engineFilter.frequency.setTargetAtTime(profile.filter + rpm * profile.filterMult, ctx.currentTime, 0.08);
-      const g = (throttle ? 0.055 : 0.02 + rpm * 0.012) * profile.gain;
+      const g = running ? (throttle ? 0.055 : 0.02 + rpm * 0.012) * profile.gain : 0;
       engineGain.gain.setTargetAtTime(g, ctx.currentTime, 0.09);
-      noiseGain.gain.setTargetAtTime(airborne ? 0.0 : Math.min(0.03, speed * 0.0013), ctx.currentTime, 0.12);
+      noiseGain.gain.setTargetAtTime(running && !airborne ? Math.min(0.03, speed * 0.0013) : 0, ctx.currentTime, 0.12);
     },
     pop() { blip(300, 0.25, 'sine', 0.14, 500); noiseBurst(0.18, 1800, 0.1); },
     trick() { blip(660, 0.12, 'square', 0.06, 220); },

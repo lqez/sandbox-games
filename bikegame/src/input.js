@@ -14,17 +14,27 @@ export function setupInput(el, cb) {
 
   function now() { return performance.now() / 1000; }
 
-  function setHeld(v) {
+  function setHeld(v, silent) {
     if (state.held === v) return;
     state.held = v;
     if (v) { state.heldSince = now(); cb.onHold && cb.onHold(); }
-    else { state.releasedAt = now(); cb.onRelease && cb.onRelease(); }
+    else {
+      state.releasedAt = now();
+      if (!silent) cb.onRelease && cb.onRelease(); // silent = 취소 등 의도 없는 릴리즈
+    }
   }
 
   function down(id, x, y) {
-    pointers.set(id, { pts: [{ x, y, t: now() }], fired: false });
-    anyDown++;
-    setHeld(true);
+    // 공중(제스처 컨텍스트)에서 시작한 터치는 트릭 전용 — 스로틀에 합산하지 않음
+    const throttle = !(cb.isGestureContext && cb.isGestureContext());
+    pointers.set(id, { pts: [{ x, y, t: now() }], fired: false, throttle });
+    if (throttle) { anyDown++; setHeld(true); }
+  }
+  function fireGesture(p, g) {
+    // onGesture가 false를 돌려주면(지상 등 미수락) 버퍼를 리셋하고 계속 감시
+    const consumed = cb.onGesture ? cb.onGesture(g) !== false : true;
+    if (consumed) p.fired = true;
+    else p.pts = [p.pts[p.pts.length - 1]];
   }
   function move(id, x, y) {
     const p = pointers.get(id);
@@ -35,17 +45,35 @@ export function setupInput(el, cb) {
     if (p.pts.length > 90) p.pts.shift();
     if (!p.fired) {
       const g = classify(p.pts);
-      if (g) { p.fired = true; cb.onGesture && cb.onGesture(g); }
+      if (g) fireGesture(p, g);
     }
   }
   function up(id) {
     const p = pointers.get(id);
     if (p && !p.fired) {
       const g = classify(p.pts, true);
-      if (g) cb.onGesture && cb.onGesture(g);
+      if (g) fireGesture(p, g);
     }
-    if (pointers.delete(id)) anyDown = Math.max(0, anyDown - 1);
-    if (anyDown === 0) setHeld(false);
+    removePointer(id);
+  }
+  function cancel(id) {
+    // iOS 시스템 제스처 등: 트릭/릴리즈 의도 없이 조용히 제거
+    const p = pointers.get(id);
+    if (!p) return;
+    pointers.delete(id);
+    if (p.throttle) {
+      anyDown = Math.max(0, anyDown - 1);
+      if (anyDown === 0) setHeld(false, true);
+    }
+  }
+  function removePointer(id) {
+    const p = pointers.get(id);
+    if (!p) return;
+    pointers.delete(id);
+    if (p.throttle) {
+      anyDown = Math.max(0, anyDown - 1);
+      if (anyDown === 0) setHeld(false);
+    }
   }
 
   // ---- 제스처 분류 ----
@@ -84,8 +112,8 @@ export function setupInput(el, cb) {
     const corners = countCorners(pts);
     if (corners >= 2 && pathLen > 150 && straight < 0.72) return 'zigzag';
 
-    // 직선 스와이프: 충분히 곧고 (final 이거나 충분히 길면 즉시)
-    if (straight > 0.82 && (final || pathLen > 85)) {
+    // 직선 스와이프: 충분히 곧고, 원/지그재그 진행 중이 아닐 때만 조기 발화
+    if (straight > 0.82 && (final || (pathLen > 85 && Math.abs(turn) < 0.6 && corners === 0))) {
       if (Math.abs(dx) > Math.abs(dy)) return dx > 0 ? 'right' : 'left';
       return dy > 0 ? 'down' : 'up';
     }
@@ -124,7 +152,7 @@ export function setupInput(el, cb) {
   });
   el.addEventListener('pointermove', (e) => move(e.pointerId, e.clientX, e.clientY));
   el.addEventListener('pointerup', (e) => up(e.pointerId));
-  el.addEventListener('pointercancel', (e) => up(e.pointerId));
+  el.addEventListener('pointercancel', (e) => cancel(e.pointerId));
   el.addEventListener('contextmenu', (e) => e.preventDefault());
 
   // 데스크톱 보조: Space = 홀드, 화살표 = 트릭, Z = 지그재그, C = 원형, V = 슈퍼맨

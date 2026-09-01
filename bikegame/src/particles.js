@@ -48,7 +48,7 @@ export function createParticles(scene) {
   }
 
   return {
-    dust(x, y, z, count) { spawn(x, y, z, count || 6, 3.2, 1.6, 0xd9bb85); },
+    dust(x, y, z, count) { spawn(x, y, z, count || 6, 3.2, 1.6, 0xc7a877); },
     splash(x, z, count) { spawn(x, 0.15, z, count || 40, 5.5, 5.2, 0xd6f2f2); },
     update(dt) {
       for (let i = 0; i < MAX; i++) {
