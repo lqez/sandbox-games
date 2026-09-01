@@ -47,7 +47,7 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.05;
+renderer.toneMappingExposure = 1.0;
 app.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
@@ -63,7 +63,7 @@ const composerRT = new THREE.WebGLRenderTarget(
 const composer = new EffectComposer(renderer, composerRT);
 composer.addPass(new RenderPass(scene, camera));
 const bloom = new UnrealBloomPass(
-  new THREE.Vector2(window.innerWidth / 2, window.innerHeight / 2), 0.38, 0.35, 0.9
+  new THREE.Vector2(window.innerWidth / 2, window.innerHeight / 2), 0.42, 0.35, 1.0
 );
 composer.addPass(bloom);
 composer.addPass(new OutputPass());
@@ -173,7 +173,7 @@ function selectBike(i) {
 function newGame(seed) {
   if (world) world.dispose();
   track = buildTrack(seed);
-  world = buildWorld(track, scene);
+  world = buildWorld(track, scene, renderer);
   if (!cam) cam = new DroneCam(camera);
   Object.assign(game, {
     phase: 'intro', s: 2, v: 0, y: 2, vy: 0, airborne: false,
@@ -645,6 +645,19 @@ function frame(nowMs) {
       crashed: game.crashed, finished: false,
     });
     applyFov(cam.fov);
+  }
+
+  // 디버그: 클로즈업 카메라 (스크린샷 검수용)
+  if (window.__closeup) {
+    const a = performance.now() / 4000;
+    camera.position.set(
+      bikePos.x + Math.sin(a) * 2.8,
+      bikePos.y + 1.0,
+      bikePos.z + Math.cos(a) * 2.8
+    );
+    camera.lookAt(bikePos.x, bikePos.y + 0.72, bikePos.z);
+    camera.fov = 42;
+    camera.updateProjectionMatrix();
   }
 
   world.update(time, bikePos, game.s);
