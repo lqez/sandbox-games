@@ -290,8 +290,9 @@ function respawn() {
   cam.snapTo(bikePos, bikeDir);
 }
 
-function doCrash(splashed) {
+function doCrash(splashed, reason) {
   if (game.crashed) return;
+  game.lastCrash = { s: Math.round(game.s), v: +game.v.toFixed(1), reason: reason || (splashed ? 'water' : '?'), airTime: +game.airTime.toFixed(2) };
   game.crashed = true;
   game.crashS = game.s;          // 리스폰 기준: 크래시 발생 지점
   game.crashSplashed = splashed;
@@ -332,7 +333,7 @@ function evaluateLanding(groundSlope) {
   let trickPenalty = 0;
   if (game.trick) {
     const prog = game.trick.t / game.trick.dur;
-    if (prog < 0.55) { doCrash(false); return; }
+    if (prog < 0.55) { doCrash(false, 'trick-incomplete'); return; }
     // 거의 돌았으면 남은 회전을 스냅으로 맞춰주고 감점만
     if (prog < 0.92) trickPenalty = 1;
     if (game.trick.kind === 'flip') game.pitch = slopeAngle;
@@ -341,7 +342,7 @@ function evaluateLanding(groundSlope) {
     d = 0;
   }
   const whipAmt = Math.abs(game.whipYaw) + Math.abs(game.roll) * 0.7;
-  if (Math.abs(d) > LAND_CRASH || whipAmt > 0.95) { doCrash(false); return; }
+  if (Math.abs(d) > LAND_CRASH || whipAmt > 0.95) { doCrash(false, Math.abs(d) > LAND_CRASH ? 'landing-angle' : 'whip'); return; }
 
   const airPts = Math.round(game.airTime * 120);
   const sketchy = Math.abs(d) > LAND_SKETCHY || whipAmt > 0.5 || trickPenalty;
@@ -465,7 +466,7 @@ function step(dt) {
         game.wheelie -= 3.0 * dt;
       }
       game.wheelie = Math.max(0, game.wheelie);
-      if (game.wheelie > WHEELIE_CRASH) { doCrash(false); return; }
+      if (game.wheelie > WHEELIE_CRASH) { doCrash(false, 'wheelie'); return; }
       if (game.wheelie > 0.45) game.stunt += Math.round(40 * dt);
       game.roll += (0 - game.roll) * Math.min(1, 8 * dt);
       game.whipYaw += (0 - game.whipYaw) * Math.min(1, 8 * dt);
@@ -513,6 +514,14 @@ function step(dt) {
     } else {
       game.pitchVel *= Math.exp(-0.6 * spec.stability * dt);
       game.pitch += game.pitchVel * dt;
+      // 트릭이 아닌 과회전(스로틀 물고 립 이탈 등)은 상한을 둬서, 착지가
+      // 무거운 스케치 판정이 될지언정 영구히 못 넘는 벽이 되지 않게 한다.
+      let p = game.pitch;
+      while (p > Math.PI) p -= Math.PI * 2;
+      while (p < -Math.PI) p += Math.PI * 2;
+      if (p > 1.0) { game.pitch = 1.0; game.pitchVel = Math.min(game.pitchVel, 0); }
+      else if (p < -1.0) { game.pitch = -1.0; game.pitchVel = Math.max(game.pitchVel, 0); }
+      else game.pitch = p;
       game.whipYaw += (0 - game.whipYaw) * Math.min(1, 3 * dt);
       game.roll += (0 - game.roll) * Math.min(1, 3 * dt);
     }
@@ -529,7 +538,7 @@ function step(dt) {
       evaluateLanding(track.slopeAt(game.s));
       if (!game.crashed) game.vy = 0;
     } else if (g2 === null && game.y < 0.25) {
-      doCrash(true);
+      doCrash(true, 'water');
       return;
     }
   }
@@ -791,7 +800,7 @@ window.__bike = {
       airborne: game.airborne, crashed: game.crashed,
       stunt: game.stunt, time: game.raceTime,
       trackLen: track.length, finishS: track.finishS,
-      spec: spec.id, lipDist, airTime: game.airTime,
+      spec: spec.id, lipDist, airTime: game.airTime, lastCrash: game.lastCrash,
       predictedAir: game.predictedAir, trick: !!game.trick,
       waitResume: game.waitResume,
       drawCalls: renderer.info.render.calls,
