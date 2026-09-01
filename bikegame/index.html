@@ -65,6 +65,17 @@
   }
   #jumpbar.inzone { background: rgba(30, 90, 60, 0.55); }
 
+  #btnRestart {
+    position: fixed; top: calc(12px + env(safe-area-inset-top)); left: 50%;
+    transform: translateX(-50%);
+    padding: 6px 14px; font-size: 12px; font-weight: 700; letter-spacing: 1px;
+    color: #fff; background: rgba(8, 40, 56, 0.4);
+    border: 1px solid rgba(255, 255, 255, 0.35); border-radius: 16px;
+    cursor: pointer; display: none;
+  }
+  #btnRestart.show { display: block; }
+  #btnRestart:active { background: rgba(8, 40, 56, 0.7); }
+
   #warn {
     position: fixed; left: 50%; transform: translateX(-50%);
     bottom: calc(80px + env(safe-area-inset-bottom));
@@ -178,6 +189,7 @@
   <div class="box"><div class="label">TIME</div><div class="val" id="time">0.0</div></div>
   <div class="box"><div class="label">STUNT</div><div class="val" id="score">0</div></div>
 </div>
+<button id="btnRestart" class="hudText" title="처음부터">↺ 처음부터</button>
 
 <div id="speedPanel" class="hudText">
   <div class="label">SPEED</div>

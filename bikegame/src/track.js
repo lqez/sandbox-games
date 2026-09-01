@@ -158,6 +158,21 @@ export function buildTrack(seed) {
   const finishS = sNow() + 14;
   flat(46, false);
 
+  // ---- 체크포인트 도움닫기 보장 ----
+  // 리스폰 후 다음 립까지 최소 30m를 확보해, 이어서 달릴 때 속도가 충분하도록 한다.
+  const MIN_RUNUP = 30;
+  for (let k = 0; k < checkpoints.length; k++) {
+    const cp = checkpoints[k];
+    let nextLip = null;
+    for (const lip of lips) if (lip.s > cp) { nextLip = lip.s; break; }
+    if (nextLip === null || nextLip - cp >= MIN_RUNUP) continue;
+    const prevLimit = k > 0 ? checkpoints[k - 1] + 5 : 2;
+    let ci = Math.floor(Math.max(prevLimit, nextLip - MIN_RUNUP) / DS);
+    while (ci > 4 && samples[ci] && !samples[ci].solid) ci--; // 갭 위 금지 → 더 뒤로
+    const cand = ci * DS;
+    if (samples[ci] && samples[ci].solid && cand >= prevLimit - 0.01) checkpoints[k] = cand;
+  }
+
   // ---- 파생 데이터 ----
   const N = samples.length;
   const dirs = new Float32Array(N * 2);

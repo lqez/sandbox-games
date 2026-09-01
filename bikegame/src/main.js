@@ -89,6 +89,7 @@ const particles = createParticles(scene);
 const $ = (id) => document.getElementById(id);
 const elTime = $('time'), elScore = $('score');
 const elJumpbar = $('jumpbar'), elNeedle = $('needle');
+const elBtnRestart = $('btnRestart');
 const elPopups = $('popups'), elWarn = $('warn');
 const elIntro = $('intro'), elResults = $('results'), elFlash = $('flash');
 const speedCanvas = $('speedGraph');
@@ -218,7 +219,7 @@ function respawn() {
   game.crashS = null;
   game.crashSplashed = false;
   game.s = cp;
-  game.v = 15;
+  game.v = 17; // 롤링 스타트: 이어서 달릴 수 있는 충분한 속도
   game.y = track.groundAt(cp) ?? 2;
   game.vy = 0;
   game.airborne = false; game.airTime = 0;
@@ -540,6 +541,7 @@ function updateHUD(time) {
     elScore.textContent = game.stunt.toLocaleString();
   }
   elWarn.classList.toggle('show', game.phase === 'run' && game.wheelie > 0.45 && !game.crashed);
+  elBtnRestart.classList.toggle('show', game.phase === 'run');
 
   let barShown = false;
   if (game.phase === 'run' && !game.airborne && !game.crashed) {
@@ -591,8 +593,14 @@ document.querySelectorAll('.bikeCard').forEach((c, i) => {
 $('startBtn').addEventListener('click', (e) => { e.stopPropagation(); startRun(); });
 $('btnRetry').addEventListener('click', (e) => { e.stopPropagation(); newGame(game.seed); });
 $('btnNew').addEventListener('click', (e) => { e.stopPropagation(); newGame((Math.random() * 0xffffffff) >>> 0); });
-for (const id of ['startBtn', 'btnRetry', 'btnNew']) {
+$('btnRestart').addEventListener('click', (e) => {
+  e.stopPropagation();
+  newGame(game.seed);   // 같은 코스를 처음부터
+  startRun();
+});
+for (const id of ['startBtn', 'btnRetry', 'btnNew', 'btnRestart']) {
   $(id).addEventListener('pointerdown', (e) => e.stopPropagation());
+  $(id).addEventListener('pointerup', (e) => e.stopPropagation());
 }
 
 // ---------- 메인 루프 ----------
@@ -691,6 +699,10 @@ window.__bike = {
   },
   start: startRun,
   selectBike,
+  runups: () => track.checkpoints.map((cp) => {
+    const lip = track.lips.find((l) => l.s > cp);
+    return { cp: Math.round(cp), toLip: lip ? Math.round(lip.s - cp) : null };
+  }),
   gesture: (g) => {
     if (game.phase === 'run' && game.airborne && !game.crashed && !game.trick && TRICKS[g]) {
       game.trick = { ...TRICKS[g], t: 0 };

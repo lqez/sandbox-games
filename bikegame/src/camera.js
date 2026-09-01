@@ -74,25 +74,35 @@ export class DroneCam {
       this.pos.addScaledVector(this.vel, dt);
       this.rollTarget = n1 * 0.008;
     } else {
-      let back, up, side, fovBase;
+      // 속도 정규화: 저속 0 → 고속 1
+      const speedT = Math.min(1, Math.max(0, (ctx.speed - 6) / 18));
+      let back, up, side, fovBase, noiseAmp;
       if (this.mode === MODE.LOW) {
-        back = 6.5; up = 1.15; side = 3.6; fovBase = 72;
+        back = 6.5; up = 1.15; side = 3.6; fovBase = 68 + speedT * 10; noiseAmp = 1;
+      } else if (ctx.airborne) {
+        // 에어: 살짝 빠지고 낮게 깔리는 중간 화각 — 하늘 배경으로 실루엣 강조
+        back = 9.5; up = 2.2; side = 2.6; fovBase = 56 + speedT * 12; noiseAmp = 0.6;
       } else {
-        back = 8.2; up = 3.1; side = 1.9; fovBase = 78;
+        // 저속 = 멀리서 망원 압축 / 고속 = 바짝 붙은 광각 FPV
+        back = 14.5 - speedT * 8.0;   // 14.5m → 6.5m
+        up = 3.9 - speedT * 1.2;      // 3.9m → 2.7m
+        side = 1.1 + speedT * 1.4;
+        fovBase = 40 + speedT * 46;   // 40° → 86°
+        noiseAmp = 0.25 + speedT * 0.75; // 망원일 땐 드론 흔들림 억제
       }
       const swing = side * (0.6 + 0.4 * Math.sin(this.noiseT * 0.35)) + ctx.turnRate * -14;
       this._desired.set(
-        bikePos.x - dir.x * back + lat.x * swing + n1 * 0.35,
-        Math.max(bikePos.y + up + n2 * 0.25, 0.8),
-        bikePos.z - dir.z * back + lat.z * swing + n1 * 0.3
+        bikePos.x - dir.x * back + lat.x * swing + n1 * 0.35 * noiseAmp,
+        Math.max(bikePos.y + up + n2 * 0.25 * noiseAmp, 0.8),
+        bikePos.z - dir.z * back + lat.z * swing + n1 * 0.3 * noiseAmp
       );
-      // 에어 중엔 드론이 살짝 아래로 따라붙으며 하늘을 크게 보여줌
-      if (ctx.airborne) this._desired.y = Math.max(bikePos.y * 0.72 + 2.2, 1.2);
+      // 에어 중엔 드론이 바이크보다 낮게 따라붙으며 하늘을 크게 보여줌
+      if (ctx.airborne) this._desired.y = Math.max(bikePos.y * 0.72 + 2.0, 1.2);
       const stiff = ctx.airborne ? 5.5 : 8.5;
       this.vel.lerp(this._desired.clone().sub(this.pos).multiplyScalar(stiff), 1 - Math.exp(-9 * dt));
       this.pos.addScaledVector(this.vel, dt);
-      this.targetFov = fovBase + Math.min(16, ctx.speed * 0.62) + (ctx.airborne ? 4 : 0);
-      this.rollTarget = ctx.turnRate * 9 + n2 * 0.012;
+      this.targetFov = fovBase;
+      this.rollTarget = ctx.turnRate * 9 + n2 * 0.012 * noiseAmp;
     }
 
     // ---- 룩앳 / 롤 / FOV / 셰이크 ----
