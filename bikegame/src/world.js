@@ -7,7 +7,7 @@ import { DS, T, mulberry32 } from './track.js';
 export const SUN_DIR = new THREE.Vector3(0.32, 0.46, 0.83).normalize();
 
 const CHUNK_LEN = 70;
-const CULL_BEHIND = 45;
+const CULL_BEHIND = 110;   // 저속 망원 카메라가 뒤 지형을 길게 보므로 넉넉히
 const CULL_AHEAD = 560;
 
 // ---------- 텍스처 (모듈 전역 캐시 — 코스 리빌드에도 유지) ----------
@@ -492,8 +492,69 @@ export function buildWorld(track, scene, renderer) {
         const c1 = Math.min(j, c0 + chunkSamples + 1);
         buildChunk(c0, c1);
       }
+      // 런 양 끝을 모래 언덕으로 테이퍼 (절단면 노출 방지) — 플로트는 헐 캡 보유
+      const isFloatRun = S[i].type === T.FLOAT || S[Math.min(j - 1, i + 6)].type === T.FLOAT;
+      if (!isFloatRun) {
+        buildCap(i, -1);
+        buildCap(j - 1, +1);
+      }
       i = j;
     }
+  }
+
+  // 런 경계 바깥으로 지형을 연장해 물속까지 자연스럽게 가라앉는 노즈/테일
+  function buildCap(iB, sign) {
+    const s0 = S[iB];
+    const dirx = track.dirs[iB * 2], dirz = track.dirs[iB * 2 + 1];
+    const lat = { x: dirz, z: -dirx };
+    const w = 6.5 + 4.5 * Math.abs(Math.sin(iB * 0.045 + track.seed)) + 1.2 * Math.sin(iB * 0.013 + 1.7);
+    const deck = s0.y;
+    const capLen = 6 + deck * 3.2; // 높은 착지 램프일수록 길게 흘러내림
+    let steps = [0, 0.12, 0.25, 0.4, 0.56, 0.75, 1].map((t) => t * capLen);
+    if (sign < 0) steps = steps.slice().reverse(); // 와인딩 유지(노멀 위쪽)
+    const pos = [], col = [], uv = [];
+    const grassy = (Math.sin(iB * 0.055 + track.seed * 3) + Math.sin(iB * 0.021 + 1.3)) * 0.25 + 0.5;
+    for (const d of steps) {
+      const k = d / capLen;
+      const ks = k * k * (3 - 2 * k);
+      const cx = s0.x + sign * dirx * d;
+      const cz = s0.z + sign * dirz * d;
+      const wRow = w * (1 - 0.4 * ks);
+      for (const off of islandCols(wRow)) {
+        const a = Math.abs(off);
+        let y = islandProfileY(a, wRow, deck, iB, off);
+        y = y * (1 - ks) + (-1.7) * ks;
+        const x = cx + lat.x * off, z = cz + lat.z * off;
+        let c;
+        if (y < -0.1) c = cUnderTint;
+        else if (a > wRow + 0.8) c = cWetTint;
+        else if (a > 3.2 && a < wRow * 0.85) {
+          // 섬 본체와 동일한 풀 패치 틴트 (경계 이음새 방지), 끝으로 갈수록 소멸
+          const gf = Math.max(0, Math.sin((a - 3.2) / (wRow * 0.85 - 3.2) * Math.PI)) * grassy * (1 - ks);
+          c = cWhite.clone().lerp(cGrassTint, Math.min(0.85, gf * 1.1));
+        } else c = ks > 0.3 ? cWetTint : cWhite;
+        pos.push(x, y, z);
+        col.push(c.r, c.g, c.b);
+        uv.push(x / 9, z / 9);
+      }
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+    g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+    g.setIndex(stripIndices(steps.length, 14));
+    g.computeVertexNormals();
+    const mesh = new THREE.Mesh(g, sandMat);
+    mesh.receiveShadow = true;
+    const cg = new THREE.Group();
+    cg.add(mesh);
+    group.add(cg);
+    const sB = iB * DS;
+    chunks.push({
+      group: cg,
+      s0: sign < 0 ? sB - capLen : sB,
+      s1: sign < 0 ? sB : sB + capLen,
+    });
   }
 
   function buildChunk(i0, i1) {
