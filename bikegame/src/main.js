@@ -4,6 +4,7 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { buildTrack, T } from './track.js';
 import { buildWorld } from './world.js';
 import { buildBike, BIKE_SPECS } from './bike.js';
@@ -51,8 +52,8 @@ renderer.toneMappingExposure = 1.0;
 app.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
-scene.fog = new THREE.Fog(0xcfeef7, 320, 1500);
-const camera = new THREE.PerspectiveCamera(82, window.innerWidth / window.innerHeight, 0.1, 3200);
+scene.fog = new THREE.Fog(0xc2e6f0, 340, 1550);
+const camera = new THREE.PerspectiveCamera(82, window.innerWidth / window.innerHeight, 0.08, 3200);
 
 // 블룸: 태양 디스크 + 수면 윤슬 하이라이트가 HDR 임계 초과분만 번지게
 // MSAA 샘플을 지정한 HDR 타깃으로 지오메트리 AA 확보
@@ -67,6 +68,30 @@ const bloom = new UnrealBloomPass(
 );
 composer.addPass(bloom);
 composer.addPass(new OutputPass());
+// 그레이드 패스: 톤매핑 후 디스플레이 공간에서 컨트라스트/채도 보정 (허연 화면 방지)
+const gradePass = new ShaderPass({
+  uniforms: {
+    tDiffuse: { value: null },
+    contrast: { value: 1.14 },
+    saturation: { value: 1.12 },
+  },
+  vertexShader: /* glsl */`
+    varying vec2 vUv;
+    void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+  fragmentShader: /* glsl */`
+    uniform sampler2D tDiffuse;
+    uniform float contrast;
+    uniform float saturation;
+    varying vec2 vUv;
+    void main(){
+      vec4 c = texture2D(tDiffuse, vUv);
+      c.rgb = (c.rgb - 0.5) * contrast + 0.5;
+      float l = dot(c.rgb, vec3(0.299, 0.587, 0.114));
+      c.rgb = mix(vec3(l), c.rgb, saturation);
+      gl_FragColor = clamp(c, 0.0, 1.0);
+    }`,
+});
+composer.addPass(gradePass);
 
 window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
@@ -650,8 +675,14 @@ function frame(nowMs) {
     const cross = bikeDir.x * dirNear.z - bikeDir.z * dirNear.x;
     const turnRate = (-cross / 4) * game.v;
     track.dirAt(game.s + 9, dirAhead); // 코너 안쪽을 미리 보는 룩어헤드
+    // 카메라 후방 구간의 지면보다 최소 1.3m 위 유지 (램프/듄 관통 클리핑 방지)
+    let camMinY = 0.8;
+    for (const d of [2, 5, 8, 11, 14, 17]) {
+      const g = track.groundAt(game.s - d);
+      if (g !== null && g + 1.3 > camMinY) camMinY = g + 1.3;
+    }
     cam.update({
-      bikePos, dir: bikeDir, dirAhead, speed: game.v,
+      bikePos, dir: bikeDir, dirAhead, speed: game.v, minY: camMinY,
       airborne: game.airborne, airTime: game.airTime,
       predictedAir: game.airborne ? game.predictedAir : 0,
       floatZone: track.typeAt(game.s) === T.FLOAT,

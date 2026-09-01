@@ -108,6 +108,12 @@ export class DroneCam {
       this.rollTarget = Math.max(-0.65, Math.min(0.65, ctx.turnRate * 1.15)) + n2 * 0.012 * noiseAmp;
     }
 
+    // 지형 클리어런스: 카메라가 뒤쪽 램프/듄 내부로 파고들지 않게
+    if (ctx.minY !== undefined && this.pos.y < ctx.minY) {
+      this.pos.y = ctx.minY;
+      if (this.vel.y < 0) this.vel.y = 0;
+    }
+
     // ---- 룩앳 / 롤 / FOV / 셰이크 ----
     const lookAhead = this.mode === MODE.LONG ? 0 : 4.5;
     const ld = ctx.dirAhead || dir; // 코너 진행 방향을 미리 팬

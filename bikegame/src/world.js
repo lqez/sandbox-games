@@ -181,7 +181,7 @@ export function buildWorld(track, scene, renderer) {
   const waterUniforms = {
     time: { value: 0 },
     sunDir: { value: SUN_DIR },
-    fogColor: { value: new THREE.Color(0xbfe8f2) },
+    fogColor: { value: new THREE.Color(0xb5e0ee) },
   };
   const water = new THREE.Mesh(
     new THREE.PlaneGeometry(2400, 2400, 96, 96),
@@ -208,13 +208,13 @@ export function buildWorld(track, scene, renderer) {
 
   // ---------- 머티리얼 ----------
   const sandMat = new THREE.MeshStandardMaterial({
-    map: tex.sand, vertexColors: true, roughness: 1, metalness: 0, envMapIntensity: 0.35,
+    map: tex.sand, vertexColors: true, roughness: 1, metalness: 0, envMapIntensity: 0.18,
   });
   const dirtMat = new THREE.MeshStandardMaterial({
-    map: tex.dirt, roughness: 1, metalness: 0, envMapIntensity: 0.3,
+    map: tex.dirt, roughness: 1, metalness: 0, envMapIntensity: 0.15,
   });
   const plyMat = new THREE.MeshStandardMaterial({
-    map: tex.plywood, roughness: 0.75, metalness: 0, envMapIntensity: 0.5,
+    map: tex.plywood, roughness: 0.75, metalness: 0, envMapIntensity: 0.3,
   });
   const navyMat = new THREE.MeshStandardMaterial({
     color: 0x1d3f78, roughness: 0.65, metalness: 0.05, envMapIntensity: 0.5,
@@ -701,9 +701,10 @@ export function buildWorld(track, scene, renderer) {
   }
 
   // ---------- 조명 ----------
-  const hemi = new THREE.HemisphereLight(0xcfe8f5, 0xd8c194, 0.55);
+  // 직사광 비중을 키워 명암 대비 강화 (허옇게 뜨는 것 방지)
+  const hemi = new THREE.HemisphereLight(0xcfe8f5, 0xcbb489, 0.38);
   group.add(hemi);
-  const sun = new THREE.DirectionalLight(0xfff2dd, 2.4);
+  const sun = new THREE.DirectionalLight(0xfff2dd, 2.65);
   sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048);
   sun.shadow.camera.left = -16; sun.shadow.camera.right = 16;
