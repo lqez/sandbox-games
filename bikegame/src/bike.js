@@ -7,19 +7,19 @@ export const BIKE_SPECS = [
   {
     id: 'mx450', name: 'MX 450', desc: '4행정 밸런스 · 안정적',
     body: 0x39b8c9, accent: 0xf2f4f2, rim: 0xb9bcc4,
-    accel: 9.5, vmax: 26, flipDur: 0.85, stability: 1.0,
+    accel: 14.5, vmax: 26, flipDur: 0.85, stability: 1.0,
     engine: { wave: 'sawtooth', base: 44, mult: 115, filter: 240, filterMult: 850, gain: 1.0, det: 0.5 },
   },
   {
     id: 'st250', name: '250 2-STROKE', desc: '2행정 경량 · 순간 가속',
     body: 0xe8442c, accent: 0xfff5ee, rim: 0xd8d8d8,
-    accel: 11.2, vmax: 25, flipDur: 0.78, stability: 0.85,
+    accel: 17.5, vmax: 25, flipDur: 0.78, stability: 0.9,
     engine: { wave: 'square', base: 68, mult: 185, filter: 420, filterMult: 1500, gain: 0.62, det: 7 },
   },
   {
     id: 'emoto', name: 'E-MOTO', desc: '전기 토크 · 저소음',
     body: 0x23262b, accent: 0x8dff57, rim: 0x3fe0d8,
-    accel: 12.6, vmax: 24.5, flipDur: 0.9, stability: 1.15,
+    accel: 19.5, vmax: 24.5, flipDur: 0.9, stability: 1.15,
     engine: { wave: 'triangle', base: 160, mult: 430, filter: 1400, filterMult: 2400, gain: 0.34, det: 2.01 },
   },
 ];

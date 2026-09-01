@@ -17,12 +17,12 @@ import { createParticles } from './particles.js';
 const G = 14;
 const DRAG = 3.0;
 const V_CREEP = 4;
-const POP_WINDOW = 14;
-const POP_PERFECT = 6;
+const POP_WINDOW = 22;      // 릴리즈 유효 구간 (넉넉하게)
+const POP_PERFECT = 10;
 const BAR_RANGE = 45;
-const WHEELIE_CRASH = 1.05;
-const LAND_SKETCHY = 0.40;
-const LAND_CRASH = 0.85;
+const WHEELIE_CRASH = 1.45;
+const LAND_SKETCHY = 0.58;
+const LAND_CRASH = 1.25;
 const TIME_BONUS_RATE = 120;   // 파 대비 초당 보너스
 const PACE_SPEED = 15.5;       // 파 타임 기준 평균 속도
 
@@ -122,6 +122,10 @@ const speedCanvas = $('speedGraph');
 const sctx = speedCanvas.getContext('2d');
 const elSpeedNum = $('speedNum');
 
+// 점프 게이지 존을 물리 상수와 동기화 (드리프트 방지)
+$('zoneGreen').style.left = ((1 - POP_WINDOW / BAR_RANGE) * 100).toFixed(1) + '%';
+$('zonePerfect').style.left = ((1 - POP_PERFECT / BAR_RANGE) * 100).toFixed(1) + '%';
+
 function popup(text, cls) {
   const d = document.createElement('div');
   d.className = 'popup ' + (cls || '');
@@ -148,7 +152,7 @@ const dirAhead = new THREE.Vector3(0, 0, 1);
 
 const game = {
   phase: 'intro',
-  s: 2, v: 0, y: 2, vy: 0,
+  s: 2, v: 0, y: 2, vy: 0, accel: 0,
   airVX: 0, airborne: false,
   airTime: 0, predictedAir: 0,
   pitch: 0, pitchVel: 0, roll: 0,
@@ -205,7 +209,7 @@ function newGame(seed) {
   world = buildWorld(track, scene, renderer);
   if (!cam) cam = new DroneCam(camera);
   Object.assign(game, {
-    phase: 'intro', s: 2, v: 0, y: 2, vy: 0, airborne: false,
+    phase: 'intro', s: 2, v: 0, y: 2, vy: 0, accel: 0, airborne: false,
     airTime: 0, pitch: 0, pitchVel: 0, roll: 0, wheelie: 0, landWindow: 0,
     trick: null, whipYaw: 0, airBank: 0, airTrickNames: [],
     stunt: 0, tricksDone: 0, bestAir: 0, raceTime: 0,
@@ -257,7 +261,8 @@ function respawn() {
   game.airBank = 0; game.airTrickNames = [];
   game.crashed = false; game.riderFly = null;
   game.waitResume = true; // 터치해야 그 시점부터 재가속
-  game.resumeArmed = false;
+  // 크래시 도중 이미 손을 뗐다면 바로 다음 터치에 반응 (대기 상태에 갇히지 않게)
+  game.resumeArmed = !input.held;
   game.v = 0;
   bikeM.rider.position.set(0, 0, 0);
   bikeM.rider.rotation.set(0, 0, 0);
@@ -304,22 +309,26 @@ function evaluateLanding(groundSlope) {
   let d = game.pitch - slopeAngle;
   while (d > Math.PI) d -= Math.PI * 2;
   while (d < -Math.PI) d += Math.PI * 2;
-  const whipAmt = Math.abs(game.whipYaw) + Math.abs(game.roll) * 0.7;
   let trickPenalty = 0;
   if (game.trick) {
     const prog = game.trick.t / game.trick.dur;
-    if (prog < 0.8) { doCrash(false); return; }
-    if (prog < 0.97) trickPenalty = 1;
+    if (prog < 0.55) { doCrash(false); return; }
+    // 거의 돌았으면 남은 회전을 스냅으로 맞춰주고 감점만
+    if (prog < 0.92) trickPenalty = 1;
+    if (game.trick.kind === 'flip') game.pitch = slopeAngle;
+    game.roll = 0; game.whipYaw = 0;
     game.trick = null;
+    d = 0;
   }
-  if (Math.abs(d) > LAND_CRASH || whipAmt > 0.6) { doCrash(false); return; }
+  const whipAmt = Math.abs(game.whipYaw) + Math.abs(game.roll) * 0.7;
+  if (Math.abs(d) > LAND_CRASH || whipAmt > 0.95) { doCrash(false); return; }
 
   const airPts = Math.round(game.airTime * 120);
-  const sketchy = Math.abs(d) > LAND_SKETCHY || whipAmt > 0.3 || trickPenalty;
+  const sketchy = Math.abs(d) > LAND_SKETCHY || whipAmt > 0.5 || trickPenalty;
   let gained = game.airBank + airPts;
   if (sketchy) {
-    gained = Math.round(gained * 0.5);
-    game.v *= 0.55;
+    gained = Math.round(gained * 0.6);
+    game.v *= 0.75;
     audio.sketchy();
     if (game.airTime > 0.45) popup('SKETCHY… +' + gained, 'warn');
   } else {
@@ -397,10 +406,17 @@ function step(dt) {
 
   if (!game.airborne) {
     // ---- 지상 ----
-    if (held) game.v += spec.accel * (1 - game.v / spec.vmax) * dt;
-    else game.v -= DRAG * dt;
+    const vPrev = game.v;
+    if (held) {
+      // 고속에서만 완만히 죄어드는 커브 — 중저속 구간은 토크가 그대로 살아있다
+      const t = game.v / spec.vmax;
+      game.v += spec.accel * (1 - t * t * t) * dt;
+    } else {
+      game.v -= DRAG * dt;
+    }
     game.v -= slope * 4.5 * dt;
     game.v = Math.max(V_CREEP, Math.min(spec.vmax, game.v));
+    game.accel += ((game.v - vPrev) / dt - game.accel) * Math.min(1, 9 * dt);
 
     const cos = 1 / Math.sqrt(1 + slope * slope);
     game.s += game.v * cos * dt;
@@ -418,23 +434,28 @@ function step(dt) {
       game.landWindow = Math.max(0, game.landWindow - dt);
       if (!held) game.landWindow = 0; // 한 번 떼면 윈도우 종료 (재가속은 안전)
       if (held && game.landWindow > 0) {
-        game.wheelie += (2.3 + game.v * 0.02) / spec.stability * dt;
-      } else if (held && game.v < spec.vmax * 0.55) {
-        game.wheelie = Math.min(game.wheelie + 1.2 * dt, 0.16);
+        game.wheelie += (1.7 + game.v * 0.02) / spec.stability * dt;
+      } else if (held) {
+        // 가속 중엔 토크로 앞바퀴가 들리는 정도가 커진다 (가속 체감)
+        const lift = Math.min(0.34, Math.max(0, game.accel) * 0.055);
+        game.wheelie += (lift - game.wheelie) * Math.min(1, 5 * dt);
       } else {
         game.wheelie -= 3.0 * dt;
       }
       game.wheelie = Math.max(0, game.wheelie);
       if (game.wheelie > WHEELIE_CRASH) { doCrash(false); return; }
-      if (game.wheelie > 0.3) game.stunt += Math.round(40 * dt);
+      if (game.wheelie > 0.45) game.stunt += Math.round(40 * dt);
       game.roll += (0 - game.roll) * Math.min(1, 8 * dt);
       game.whipYaw += (0 - game.whipYaw) * Math.min(1, 8 * dt);
-      if (game.v > 15 && Math.random() < dt * 8) {
+      // 가속할수록 뒷바퀴가 흙을 뿌린다
+      const dustRate = (game.v > 12 ? 6 : 0) + Math.max(0, game.accel) * 5;
+      if (dustRate > 0 && Math.random() < dt * dustRate) {
         particles.dust(bikePos.x, bikePos.y - 0.2, bikePos.z, 2);
       }
     }
   } else {
     // ---- 공중 ----
+    game.accel += (0 - game.accel) * Math.min(1, 4 * dt); // 화각 punch 감쇠
     game.airTime += dt;
     game.s += game.airVX * dt;
     const prevY = game.y;
@@ -518,10 +539,10 @@ function takeOff(held, slope, cos) {
       audio.pop();
       cam.kick(0.2);
     } else if (held) {
-      game.pitchVel = 1.85 / spec.stability;
+      game.pitchVel = 1.25 / spec.stability;
       popup('TOO MUCH GAS!', 'warn');
     } else {
-      game.pitchVel = 0.45;
+      game.pitchVel = 0.4;
     }
     game.predictedAir = 2 * game.vy / G + (nearLip.size === 'big' ? 0.55 : 0.25);
   } else {
@@ -700,7 +721,7 @@ function frame(nowMs) {
       if (g !== null && g + 1.3 > camMinY) camMinY = g + 1.3;
     }
     cam.update({
-      bikePos, dir: bikeDir, dirAhead, speed: game.v, minY: camMinY,
+      bikePos, dir: bikeDir, dirAhead, speed: game.v, accel: game.accel, minY: camMinY,
       airborne: game.airborne, airTime: game.airTime,
       predictedAir: game.airborne ? game.predictedAir : 0,
       floatZone: track.typeAt(game.s) === T.FLOAT,

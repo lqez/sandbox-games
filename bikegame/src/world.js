@@ -7,7 +7,7 @@ import { DS, T, mulberry32 } from './track.js';
 export const SUN_DIR = new THREE.Vector3(0.32, 0.46, 0.83).normalize();
 
 const CHUNK_LEN = 70;
-const CULL_BEHIND = 110;   // 저속 망원 카메라가 뒤 지형을 길게 보므로 넉넉히
+const CULL_BEHIND = 85;    // 저속 망원 카메라(후방 15.5m)가 뒤 지형을 보므로 여유 있게
 const CULL_AHEAD = 560;
 
 // ---------- 텍스처 (모듈 전역 캐시 — 코스 리빌드에도 유지) ----------

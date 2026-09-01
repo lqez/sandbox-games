@@ -19,6 +19,7 @@ export class DroneCam {
     this.anchor = new THREE.Vector3();  // 망원 고정 위치
     this.anchorDrift = new THREE.Vector3();
     this.longTimer = 0;
+    this.lookAheadDist = 8;
     this.noiseT = Math.random() * 100;
     this.shake = 0;
     this._tmp = new THREE.Vector3();
@@ -28,7 +29,7 @@ export class DroneCam {
   snapTo(bikePos, dir) {
     this.pos.set(
       bikePos.x - dir.x * 9 + dir.z * 2,
-      bikePos.y + 3.4,
+      bikePos.y + 8.0,
       bikePos.z - dir.z * 9 - dir.x * 2
     );
     this.vel.set(0, 0, 0);
@@ -76,20 +77,25 @@ export class DroneCam {
     } else {
       // 속도 정규화: 저속 0 → 고속 1
       const speedT = Math.min(1, Math.max(0, (ctx.speed - 6) / 18));
+      // 가속 반응: 밟으면 드론이 잠깐 뒤로 밀리며 화각이 확 열린다
+      const accel = Math.max(-4, Math.min(8, ctx.accel || 0));
       let back, up, side, fovBase, noiseAmp;
       if (this.mode === MODE.LOW) {
-        back = 6.5; up = 1.15; side = 3.6; fovBase = 68 + speedT * 10; noiseAmp = 1;
+        back = 7.5; up = 5.2; side = 3.6; fovBase = 68 + speedT * 10; noiseAmp = 1;
       } else if (ctx.airborne) {
-        // 에어: 살짝 빠지고 낮게 깔리는 중간 화각 — 하늘 배경으로 실루엣 강조
-        back = 9.5; up = 2.2; side = 2.6; fovBase = 56 + speedT * 12; noiseAmp = 0.6;
+        // 에어: 높은 곳에서 내려다보며 착지 지점까지 함께 보여줌
+        back = 10.5; up = 6.0; side = 2.6; fovBase = 56 + speedT * 12; noiseAmp = 0.6;
       } else {
-        // 저속 = 멀리서 망원 압축(바이크 크게) / 고속 = 바짝 붙은 광각 FPV
-        back = 15.5 - speedT * 9.0;   // 15.5m → 6.5m
-        up = 3.4 - speedT * 0.7;      // 3.4m → 2.7m
+        // 저속 = 높이 떠서 망원 압축 / 고속 = 낮게 붙은 광각 FPV
+        back = 15.5 - speedT * 6.5;   // 15.5m → 9.0m
+        up = 7.4 - speedT * 1.5;      // 7.4m → 5.9m
         side = 1.1 + speedT * 1.4;
-        fovBase = 30 + speedT * 56;   // 30° → 86°
+        fovBase = 32 + speedT * 54;   // 32° → 86°
         noiseAmp = 0.25 + speedT * 0.75; // 망원일 땐 드론 흔들림 억제
       }
+      back += Math.max(-1.2, accel * 0.32);        // 가속하면 바이크가 앞으로 튀어나감
+      fovBase += Math.max(-5, accel * 1.6);        // 스로틀 punch로 화각이 벌어짐
+      if (accel > 2.5) this.shake = Math.max(this.shake, 0.16); // 엔진 진동
       // 코너: 회전율에 비례해 바깥쪽으로 크게 스윙 (최대 ±3.5m)
       const turnSwing = Math.max(-3.5, Math.min(3.5, ctx.turnRate * -6));
       const swing = side * (0.6 + 0.4 * Math.sin(this.noiseT * 0.35)) + turnSwing;
@@ -98,14 +104,16 @@ export class DroneCam {
         Math.max(bikePos.y + up + n2 * 0.25 * noiseAmp, 0.8),
         bikePos.z - dir.z * back + lat.z * swing + n1 * 0.3 * noiseAmp
       );
-      // 에어 중엔 드론이 바이크보다 낮게 따라붙으며 하늘을 크게 보여줌
-      if (ctx.airborne) this._desired.y = Math.max(bikePos.y * 0.72 + 2.0, 1.2);
+      // 에어 중엔 드론이 상승분을 절반만 따라가 점프 높이가 화면에 드러남
+      if (ctx.airborne) this._desired.y = Math.max(bikePos.y * 0.55 + 5.4, 3.0);
       const stiff = ctx.airborne ? 5.5 : 8.5;
       this.vel.lerp(this._desired.clone().sub(this.pos).multiplyScalar(stiff), 1 - Math.exp(-9 * dt));
       this.pos.addScaledVector(this.vel, dt);
       this.targetFov = fovBase;
-      // 업벡터 뱅킹: 코너 회전율에 비례해 FPV 드론처럼 크게 기울임 (최대 ±0.65rad)
-      this.rollTarget = Math.max(-0.65, Math.min(0.65, ctx.turnRate * 1.15)) + n2 * 0.012 * noiseAmp;
+      // 높은 시점에서 지평선이 프레임 안에 남도록, 망원일수록 멀리 조준
+      this.lookAheadDist = this.mode === MODE.LOW ? 9 : (ctx.airborne ? 8 : 16 - speedT * 10);
+      // 업벡터 뱅킹: 높은 시점에서는 과하면 어지러우므로 최대 ±0.34rad
+      this.rollTarget = Math.max(-0.34, Math.min(0.34, ctx.turnRate * 0.72)) + n2 * 0.012 * noiseAmp;
     }
 
     // 지형 클리어런스: 카메라가 뒤쪽 램프/듄 내부로 파고들지 않게
@@ -115,7 +123,7 @@ export class DroneCam {
     }
 
     // ---- 룩앳 / 롤 / FOV / 셰이크 ----
-    const lookAhead = this.mode === MODE.LONG ? 0 : 4.5;
+    const lookAhead = this.mode === MODE.LONG ? 0 : (this.lookAheadDist || 8);
     const ld = ctx.dirAhead || dir; // 코너 진행 방향을 미리 팬
     this.lookPos.lerp(
       this._tmp.set(
