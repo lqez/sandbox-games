@@ -86,6 +86,20 @@
   #warn.show { opacity: 1; }
   @keyframes warnPulse { 50% { transform: translateX(-50%) scale(1.12); } }
 
+  #resume {
+    position: fixed; left: 50%; top: 44%; transform: translate(-50%, -50%);
+    text-align: center; pointer-events: none;
+    opacity: 0; transition: opacity 0.2s;
+  }
+  #resume.show { opacity: 1; }
+  #resume .big {
+    font-size: clamp(24px, 6vw, 38px); font-weight: 900; font-style: italic;
+    letter-spacing: 2px; color: #7ffbe9;
+    animation: resumePulse 1s infinite;
+  }
+  #resume .sub { font-size: 13px; margin-top: 6px; opacity: 0.9; }
+  @keyframes resumePulse { 50% { transform: scale(1.07); opacity: 0.75; } }
+
   #popups { position: fixed; inset: 0; pointer-events: none; overflow: hidden; }
   .popup {
     position: absolute; top: 34%;
@@ -205,6 +219,10 @@
 </div>
 
 <div id="warn">WHEELIE!</div>
+<div id="resume" class="hudText">
+  <div class="big">PUSH TO RESUME</div>
+  <div class="sub">누르고 있으면 재가속!</div>
+</div>
 <div id="popups"></div>
 <div id="flash"></div>
 

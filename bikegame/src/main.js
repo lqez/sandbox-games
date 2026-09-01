@@ -115,6 +115,7 @@ const $ = (id) => document.getElementById(id);
 const elTime = $('time'), elScore = $('score');
 const elJumpbar = $('jumpbar'), elNeedle = $('needle');
 const elBtnRestart = $('btnRestart');
+const elResume = $('resume');
 const elPopups = $('popups'), elWarn = $('warn');
 const elIntro = $('intro'), elResults = $('results'), elFlash = $('flash');
 const speedCanvas = $('speedGraph');
@@ -209,7 +210,7 @@ function newGame(seed) {
     trick: null, whipYaw: 0, airBank: 0, airTrickNames: [],
     stunt: 0, tricksDone: 0, bestAir: 0, raceTime: 0,
     crashed: false, crashTimer: 0, riderFly: null,
-    crashS: null, crashSplashed: false,
+    crashS: null, crashSplashed: false, waitResume: false, resumeArmed: false,
     releasedAt: -999, releasedS: -999, speedHist: [], finishTimer: 0,
   });
   game.seed = seed;
@@ -255,6 +256,9 @@ function respawn() {
   game.trick = null; game.whipYaw = 0;
   game.airBank = 0; game.airTrickNames = [];
   game.crashed = false; game.riderFly = null;
+  game.waitResume = true; // 터치해야 그 시점부터 재가속
+  game.resumeArmed = false;
+  game.v = 0;
   bikeM.rider.position.set(0, 0, 0);
   bikeM.rider.rotation.set(0, 0, 0);
   placeBike();
@@ -339,6 +343,19 @@ function evaluateLanding(groundSlope) {
 // ---------- 물리 스텝 ----------
 function step(dt) {
   if (game.phase !== 'run') return;
+  // 리스폰 대기: 새로 터치하기 전까지 정지 + 타이머도 정지
+  // (크래시 내내 누르고 있던 손은 무시 — 한 번 떼고 다시 눌러야 재가속)
+  if (game.waitResume) {
+    if (!input.held) game.resumeArmed = true;
+    if (game.resumeArmed && input.held) {
+      game.waitResume = false;
+      game.resumeArmed = false;
+      game.v = 8; // 재가속 킥
+    } else {
+      updateBikeVisual(dt);
+      return;
+    }
+  }
   game.raceTime += dt;
 
   if (game.crashed) {
@@ -569,6 +586,7 @@ function updateHUD(time) {
   }
   elWarn.classList.toggle('show', game.phase === 'run' && game.wheelie > 0.45 && !game.crashed);
   elBtnRestart.classList.toggle('show', game.phase === 'run');
+  elResume.classList.toggle('show', game.phase === 'run' && game.waitResume);
 
   let barShown = false;
   if (game.phase === 'run' && !game.airborne && !game.crashed) {
@@ -731,6 +749,7 @@ window.__bike = {
       trackLen: track.length, finishS: track.finishS,
       spec: spec.id, lipDist, airTime: game.airTime,
       predictedAir: game.predictedAir, trick: !!game.trick,
+      waitResume: game.waitResume,
       drawCalls: renderer.info.render.calls,
       turn: (() => {
         track.dirAt(game.s + 4, dirNear);
@@ -740,6 +759,17 @@ window.__bike = {
   },
   start: startRun,
   selectBike,
+  crash: () => { if (game.phase === 'run') doCrash(false); },
+  warp: (s, v) => {
+    game.s = Math.min(s, track.finishS - 5);
+    game.y = track.groundAt(game.s) ?? 2;
+    game.v = v ?? 18;
+    game.vy = 0; game.airborne = false; game.crashed = false;
+    game.waitResume = false; game.pitch = 0; game.roll = 0;
+    placeBike();
+    cam.snapTo(bikePos, bikeDir);
+  },
+  lips: () => track.lips.map((l) => ({ s: Math.round(l.s), size: l.size })),
   runups: () => track.checkpoints.map((cp) => {
     const lip = track.lips.find((l) => l.s > cp);
     return { cp: Math.round(cp), toLip: lip ? Math.round(lip.s - cp) : null };

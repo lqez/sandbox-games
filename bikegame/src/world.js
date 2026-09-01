@@ -90,20 +90,20 @@ void main(){
   float n2 = noise(uv * 0.9 - time * 0.4);
   float n3 = noise(uv * 2.3 + vec2(time * 0.8, -time * 0.6));
   vec3 nrm = normalize(vec3((n1 - 0.5) * 0.6 + (n3 - 0.5) * 0.25, 1.0, (n2 - 0.5) * 0.6 + (n3 - 0.5) * 0.25));
-  vec3 deep = vec3(0.03, 0.44, 0.54);
-  vec3 teal = vec3(0.10, 0.64, 0.68);
-  vec3 glass = vec3(0.28, 0.82, 0.78);
+  vec3 deep = vec3(0.008, 0.22, 0.30);
+  vec3 teal = vec3(0.03, 0.42, 0.46);
+  vec3 glass = vec3(0.13, 0.62, 0.58);
   float patches = noise(uv * 0.045 + 7.0);
   vec3 col = mix(deep, teal, smoothstep(0.3, 0.75, patches));
-  col = mix(col, glass, smoothstep(0.82, 0.98, patches) * 0.5);
-  col = mix(col, glass * 0.92, smoothstep(0.62, 0.9, n1) * 0.22);
+  col = mix(col, glass, smoothstep(0.84, 0.99, patches) * 0.32);
+  col = mix(col, glass * 0.9, smoothstep(0.66, 0.92, n1) * 0.14);
   // 슐릭 프레넬: 정면은 물 본색, 그레이징은 하늘 반사 지배
   float cosV = max(dot(view, nrm), 0.0);
   float fres = 0.025 + 0.975 * pow(1.0 - cosV, 5.0);
-  vec3 skyRef = mix(vec3(0.12, 0.50, 0.72), vec3(0.06, 0.40, 0.85), clamp(view.y * 1.6, 0.0, 1.0));
+  vec3 skyRef = mix(vec3(0.07, 0.36, 0.55), vec3(0.04, 0.30, 0.68), clamp(view.y * 1.6, 0.0, 1.0));
   float sunSide = pow(max(dot(normalize(vec3(-view.x, 0.0, -view.z)), normalize(vec3(sunDir.x, 0.0, sunDir.z))), 0.0), 3.0);
-  skyRef = mix(skyRef, vec3(0.9, 0.88, 0.76), sunSide * 0.3);
-  col = mix(col, skyRef, clamp(fres * 0.72, 0.0, 0.42));
+  skyRef = mix(skyRef, vec3(0.75, 0.7, 0.58), sunSide * 0.3);
+  col = mix(col, skyRef, clamp(fres * 0.65, 0.0, 0.34));
   vec3 refl = reflect(-view, nrm);
   float sr = max(dot(refl, sunDir), 0.0);
   float spec = pow(sr, 160.0);
@@ -112,7 +112,9 @@ void main(){
   col += vec3(1.0, 0.96, 0.82) * pow(sr, 14.0) * 0.24;
   float dist = length(cameraPosition - vWorld);
   col = mix(col, fogColor, smoothstep(480.0, 1600.0, dist));
-  gl_FragColor = vec4(col, 1.0);
+  // 반투명: 아래 미러 반사/수중 지형이 물빛에 물들어 비쳐 보이게
+  float alpha = clamp(0.64 + fres * 0.26, 0.0, 0.93);
+  gl_FragColor = vec4(col, alpha);
 }`;
 
 // ---------- 지오메트리 병합 (position/normal/color/uv) ----------
@@ -187,11 +189,19 @@ export function buildWorld(track, scene, renderer) {
     new THREE.PlaneGeometry(2400, 2400, 96, 96),
     new THREE.ShaderMaterial({
       vertexShader: WATER_VERT, fragmentShader: WATER_FRAG,
-      uniforms: waterUniforms, fog: false,
+      uniforms: waterUniforms, fog: false, transparent: true,
     })
   );
   water.rotation.x = -Math.PI / 2;
   group.add(water);
+  // 시베드: 깊은 물의 어두운 바닥 (물 알파 아래 배경)
+  const seabed = new THREE.Mesh(
+    new THREE.PlaneGeometry(2600, 2600),
+    new THREE.MeshBasicMaterial({ color: 0x042832 })
+  );
+  seabed.rotation.x = -Math.PI / 2;
+  seabed.position.y = -2.6;
+  group.add(seabed);
 
   // ---------- 헬퍼 ----------
   const latV = new THREE.Vector3();
@@ -230,6 +240,9 @@ export function buildWorld(track, scene, renderer) {
     color: 0x4a382a, roughness: 0.95, metalness: 0,
     polygonOffset: true, polygonOffsetFactor: -1,
   });
+  // 미러 반사용 (수면 아래 y=-y 복제, 물 알파 너머로 비침)
+  const mirrorPlyMat = new THREE.MeshBasicMaterial({ map: tex.plywood, color: 0x9fc4bd, side: THREE.DoubleSide });
+  const mirrorNavyMat = new THREE.MeshBasicMaterial({ color: 0x27527a, side: THREE.DoubleSide });
   const foamMat = new THREE.ShaderMaterial({
     uniforms: { time: waterUniforms.time },
     transparent: true, depthWrite: false, fog: false, vertexColors: true,
@@ -302,8 +315,9 @@ export function buildWorld(track, scene, renderer) {
     const slopeEnd = w + 2.5;
     if (a <= 2.7) return deck - 0.02;
     if (a >= slopeEnd) {
+      // 수중 에이프런을 깊게 그려 저고도에서 단면이 뚝 잘려 보이지 않게
       const k = Math.min(1, (a - slopeEnd) / 3.6);
-      return -0.45 - k * 0.85;
+      return -0.5 - k * 1.8;
     }
     const k = (a - 2.7) / (slopeEnd - 2.7);
     const base = -0.45 + (deck + 0.43) * 0.5 * (1 + Math.cos(Math.PI * k));
@@ -387,7 +401,7 @@ export function buildWorld(track, scene, renderer) {
         const s = S[i];
         const lat = lateral(i);
         pos.push(s.x + lat.x * 2.1 * side, s.y + 0.03, s.z + lat.z * 2.1 * side);
-        pos.push(s.x + lat.x * 2.1 * side, -0.35, s.z + lat.z * 2.1 * side);
+        pos.push(s.x + lat.x * 2.1 * side, -1.9, s.z + lat.z * 2.1 * side); // 흘수 깊게
         col.push(1, 1, 1, 1, 1, 1);
         uv.push(i * DS / 4, 1, i * DS / 4, 0);
       }
@@ -499,6 +513,12 @@ export function buildWorld(track, scene, renderer) {
       cg.add(stripe);
       const skirt = new THREE.Mesh(skirtGeom(rowsOf(i0, i1, 4)), navyMat);
       cg.add(skirt);
+      // 수면 반사 (지오메트리 공유, y 미러)
+      const mirror = new THREE.Group();
+      mirror.scale.y = -1;
+      mirror.add(new THREE.Mesh(ribbon.geometry, mirrorPlyMat));
+      mirror.add(new THREE.Mesh(skirt.geometry, mirrorNavyMat));
+      cg.add(mirror);
     } else {
       const widths = new Map();
       for (const i of rowsFine) {
@@ -596,6 +616,13 @@ export function buildWorld(track, scene, renderer) {
     contain.rotation.y = Math.atan2(tmpDir.x, tmpDir.z);
     contain.castShadow = true;
     group.add(contain);
+    // 컨테이너 수면 반사
+    const containMirror = new THREE.Mesh(contain.geometry,
+      new THREE.MeshBasicMaterial({ color: 0x1a3a5c, side: THREE.DoubleSide }));
+    containMirror.position.set(contain.position.x, -contain.position.y, contain.position.z);
+    containMirror.rotation.y = contain.rotation.y;
+    containMirror.scale.y = -1;
+    group.add(containMirror);
     const lat = new THREE.Vector3(tmpDir.z, 0, -tmpDir.x);
     const metal = new THREE.MeshStandardMaterial({ color: 0xd8dce2, metalness: 0.8, roughness: 0.35 });
     const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 8, 12), metal);
@@ -696,8 +723,16 @@ export function buildWorld(track, scene, renderer) {
     const frondMat = new THREE.MeshLambertMaterial({
       map: tex.frond, alphaTest: 0.35, side: THREE.DoubleSide,
     });
-    group.add(makeInstanced(palmTrunkGeom(), palmMats.map((m) => m.clone()), barkMat, true));
-    group.add(makeInstanced(palmCrownGeom(), palmMats.map((m) => m.clone()), frondMat, false));
+    const trunkG = palmTrunkGeom(), crownG = palmCrownGeom();
+    group.add(makeInstanced(trunkG, palmMats.map((m) => m.clone()), barkMat, true));
+    group.add(makeInstanced(crownG, palmMats.map((m) => m.clone()), frondMat, false));
+    // 야자수 수면 반사
+    const mirrorFlip = new THREE.Matrix4().makeScale(1, -1, 1);
+    const mirroredMats = palmMats.map((m) => mirrorFlip.clone().multiply(m));
+    group.add(makeInstanced(trunkG, mirroredMats,
+      new THREE.MeshBasicMaterial({ color: 0x5a746b, side: THREE.DoubleSide }), false));
+    group.add(makeInstanced(crownG, mirroredMats.map((m) => m.clone()),
+      new THREE.MeshBasicMaterial({ map: tex.frond, alphaTest: 0.35, color: 0x548f7e, side: THREE.DoubleSide }), false));
   }
 
   // ---------- 조명 ----------
@@ -722,6 +757,7 @@ export function buildWorld(track, scene, renderer) {
     update(time, focus, bikeS) {
       waterUniforms.time.value = time;
       water.position.x = focus.x; water.position.z = focus.z;
+      seabed.position.x = focus.x; seabed.position.z = focus.z;
       sky.position.copy(focus);
       sun.position.set(focus.x + SUN_DIR.x * 60, focus.y + SUN_DIR.y * 60, focus.z + SUN_DIR.z * 60);
       sun.target.position.copy(focus);
