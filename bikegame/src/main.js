@@ -117,6 +117,8 @@ let specIdx = 0;
 const bikePos = new THREE.Vector3();
 const bikeDir = new THREE.Vector3(0, 0, 1);
 const tmpV = new THREE.Vector3();
+const dirNear = new THREE.Vector3();
+const dirAhead = new THREE.Vector3(0, 0, 1);
 
 const game = {
   phase: 'intro',
@@ -643,9 +645,13 @@ function frame(nowMs) {
     camera.lookAt(bikePos.x, bikePos.y + 1, bikePos.z);
     applyFov(56);
   } else {
-    const turnRate = track.bermAt(game.s) * 0.045 * game.v * 0.04;
+    // 실제 트랙 곡률 기반 회전율 (rad/s): 코너에서 카메라가 적극적으로 반응
+    track.dirAt(game.s + 4, dirNear);
+    const cross = bikeDir.x * dirNear.z - bikeDir.z * dirNear.x;
+    const turnRate = (-cross / 4) * game.v;
+    track.dirAt(game.s + 9, dirAhead); // 코너 안쪽을 미리 보는 룩어헤드
     cam.update({
-      bikePos, dir: bikeDir, speed: game.v,
+      bikePos, dir: bikeDir, dirAhead, speed: game.v,
       airborne: game.airborne, airTime: game.airTime,
       predictedAir: game.airborne ? game.predictedAir : 0,
       floatZone: track.typeAt(game.s) === T.FLOAT,
@@ -695,6 +701,10 @@ window.__bike = {
       spec: spec.id, lipDist, airTime: game.airTime,
       predictedAir: game.predictedAir, trick: !!game.trick,
       drawCalls: renderer.info.render.calls,
+      turn: (() => {
+        track.dirAt(game.s + 4, dirNear);
+        return (-(bikeDir.x * dirNear.z - bikeDir.z * dirNear.x) / 4) * game.v;
+      })(),
     };
   },
   start: startRun,

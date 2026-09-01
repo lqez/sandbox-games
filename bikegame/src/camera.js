@@ -83,14 +83,16 @@ export class DroneCam {
         // 에어: 살짝 빠지고 낮게 깔리는 중간 화각 — 하늘 배경으로 실루엣 강조
         back = 9.5; up = 2.2; side = 2.6; fovBase = 56 + speedT * 12; noiseAmp = 0.6;
       } else {
-        // 저속 = 멀리서 망원 압축 / 고속 = 바짝 붙은 광각 FPV
-        back = 14.5 - speedT * 8.0;   // 14.5m → 6.5m
-        up = 3.9 - speedT * 1.2;      // 3.9m → 2.7m
+        // 저속 = 멀리서 망원 압축(바이크 크게) / 고속 = 바짝 붙은 광각 FPV
+        back = 15.5 - speedT * 9.0;   // 15.5m → 6.5m
+        up = 3.4 - speedT * 0.7;      // 3.4m → 2.7m
         side = 1.1 + speedT * 1.4;
-        fovBase = 40 + speedT * 46;   // 40° → 86°
+        fovBase = 30 + speedT * 56;   // 30° → 86°
         noiseAmp = 0.25 + speedT * 0.75; // 망원일 땐 드론 흔들림 억제
       }
-      const swing = side * (0.6 + 0.4 * Math.sin(this.noiseT * 0.35)) + ctx.turnRate * -14;
+      // 코너: 회전율에 비례해 바깥쪽으로 크게 스윙 (최대 ±3.5m)
+      const turnSwing = Math.max(-3.5, Math.min(3.5, ctx.turnRate * -6));
+      const swing = side * (0.6 + 0.4 * Math.sin(this.noiseT * 0.35)) + turnSwing;
       this._desired.set(
         bikePos.x - dir.x * back + lat.x * swing + n1 * 0.35 * noiseAmp,
         Math.max(bikePos.y + up + n2 * 0.25 * noiseAmp, 0.8),
@@ -102,16 +104,18 @@ export class DroneCam {
       this.vel.lerp(this._desired.clone().sub(this.pos).multiplyScalar(stiff), 1 - Math.exp(-9 * dt));
       this.pos.addScaledVector(this.vel, dt);
       this.targetFov = fovBase;
-      this.rollTarget = ctx.turnRate * 9 + n2 * 0.012 * noiseAmp;
+      // 업벡터 뱅킹: 코너 회전율에 비례해 FPV 드론처럼 크게 기울임 (최대 ±0.65rad)
+      this.rollTarget = Math.max(-0.65, Math.min(0.65, ctx.turnRate * 1.15)) + n2 * 0.012 * noiseAmp;
     }
 
     // ---- 룩앳 / 롤 / FOV / 셰이크 ----
     const lookAhead = this.mode === MODE.LONG ? 0 : 4.5;
+    const ld = ctx.dirAhead || dir; // 코너 진행 방향을 미리 팬
     this.lookPos.lerp(
       this._tmp.set(
-        bikePos.x + dir.x * lookAhead,
+        bikePos.x + ld.x * lookAhead,
         bikePos.y + 0.9,
-        bikePos.z + dir.z * lookAhead
+        bikePos.z + ld.z * lookAhead
       ),
       1 - Math.exp(-(this.mode === MODE.LONG ? 16 : 10) * dt)
     );
