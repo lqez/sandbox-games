@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>BIKEGAME — 코스탈 스턴트 라이드</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🏍</text></svg>">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; overflow: hidden; }
+  body {
+    font-family: 'Segoe UI', 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif;
+    background: #7fc6dd;
+    touch-action: none;
+    overscroll-behavior: none;
+    -webkit-user-select: none; user-select: none;
+    color: #fff;
+  }
+  #app { position: fixed; inset: 0; }
+  #app canvas { display: block; }
+
+  /* ---------- HUD ---------- */
+  .hudText { text-shadow: 0 1px 6px rgba(10, 40, 60, 0.55); }
+  #hud {
+    position: fixed; top: calc(10px + env(safe-area-inset-top)); left: 0; right: 0;
+    display: flex; justify-content: space-between;
+    padding: 0 16px; pointer-events: none;
+  }
+  #hud .box { text-align: center; }
+  #hud .label { font-size: 10px; letter-spacing: 2px; opacity: 0.85; }
+  #hud .val { font-size: 26px; font-weight: 800; font-style: italic; }
+
+  #speedPanel {
+    position: fixed; left: 10px; top: 50%; transform: translateY(-50%);
+    width: 120px; padding: 8px 8px 6px;
+    background: rgba(8, 40, 56, 0.35); border-radius: 10px;
+    backdrop-filter: blur(2px);
+    pointer-events: none;
+  }
+  #speedPanel .label { font-size: 9px; letter-spacing: 1.5px; opacity: 0.8; }
+  #speedGraph { width: 104px; height: 64px; display: block; margin-top: 3px; }
+  #speedNumWrap { font-size: 18px; font-weight: 800; font-style: italic; margin-top: 2px; }
+  #speedNumWrap small { font-size: 9px; font-weight: 400; opacity: 0.75; margin-left: 3px; }
+
+  #jumpbar {
+    position: fixed; left: 50%; transform: translateX(-50%);
+    bottom: calc(46px + env(safe-area-inset-bottom));
+    width: min(66vw, 340px); height: 14px;
+    background: rgba(8, 40, 56, 0.4); border-radius: 8px;
+    opacity: 0; transition: opacity 0.25s; pointer-events: none;
+  }
+  #jumpbar.show { opacity: 1; }
+  #jumpbar .zone {
+    position: absolute; top: 0; bottom: 0; border-radius: 8px;
+  }
+  #jumpbar .zone.green { left: 68.9%; right: 0; background: rgba(90, 230, 160, 0.45); }
+  #jumpbar .zone.perfect { left: 86.7%; right: 0; background: rgba(90, 230, 160, 0.85); }
+  #jumpbar #needle {
+    position: absolute; top: -4px; bottom: -4px; width: 4px; margin-left: -2px;
+    background: #fff; border-radius: 2px; box-shadow: 0 0 6px rgba(255,255,255,0.9);
+  }
+  #jumpbar .hint {
+    position: absolute; top: -18px; left: 0; right: 0; text-align: center;
+    font-size: 10px; letter-spacing: 2px; opacity: 0.9;
+  }
+  #jumpbar.inzone { background: rgba(30, 90, 60, 0.55); }
+
+  #warn {
+    position: fixed; left: 50%; transform: translateX(-50%);
+    bottom: calc(80px + env(safe-area-inset-bottom));
+    font-size: 20px; font-weight: 900; font-style: italic; color: #ffd23e;
+    opacity: 0; transition: opacity 0.12s; pointer-events: none;
+    animation: warnPulse 0.4s infinite;
+  }
+  #warn.show { opacity: 1; }
+  @keyframes warnPulse { 50% { transform: translateX(-50%) scale(1.12); } }
+
+  #popups { position: fixed; inset: 0; pointer-events: none; overflow: hidden; }
+  .popup {
+    position: absolute; top: 34%;
+    transform: translateX(-50%);
+    font-size: 24px; font-weight: 900; font-style: italic;
+    text-shadow: 0 2px 8px rgba(10, 40, 60, 0.6);
+    animation: popRise 1.35s ease-out forwards;
+    white-space: nowrap;
+  }
+  .popup.trick { color: #7ffbe9; font-size: 28px; }
+  .popup.good { color: #9dff9d; }
+  .popup.perfect { color: #ffe97a; font-size: 30px; }
+  .popup.warn { color: #ffb04d; }
+  .popup.bad { color: #ff6d5a; font-size: 30px; }
+  @keyframes popRise {
+    0% { opacity: 0; margin-top: 24px; }
+    12% { opacity: 1; margin-top: 0; }
+    75% { opacity: 1; }
+    100% { opacity: 0; margin-top: -46px; }
+  }
+
+  #flash {
+    position: fixed; inset: 0; background: #fff; opacity: 0;
+    transition: opacity 0.35s; pointer-events: none;
+  }
+
+  /* ---------- 오버레이 ---------- */
+  .overlay {
+    position: fixed; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 14px;
+    background: linear-gradient(180deg, rgba(8, 45, 70, 0.55), rgba(8, 45, 70, 0.75));
+    opacity: 0; pointer-events: none; transition: opacity 0.35s;
+    padding: 20px; text-align: center;
+  }
+  .overlay.show { opacity: 1; pointer-events: auto; }
+  .overlay h1 {
+    font-size: clamp(34px, 9vw, 54px); font-weight: 900; font-style: italic;
+    letter-spacing: 2px;
+    text-shadow: 0 3px 0 rgba(10, 40, 60, 0.5);
+  }
+  .overlay h1 span { color: #3fe0d8; }
+  .overlay .sub { font-size: 13px; opacity: 0.9; margin-top: -8px; }
+
+  #bikePick { display: flex; gap: 10px; margin: 6px 0 2px; }
+  .bikeCard {
+    width: min(28vw, 130px); padding: 10px 8px;
+    background: rgba(255, 255, 255, 0.1);
+    border: 2px solid rgba(255, 255, 255, 0.35); border-radius: 12px;
+    cursor: pointer; transition: all 0.12s;
+  }
+  .bikeCard .dot { width: 18px; height: 18px; border-radius: 50%; margin: 0 auto 6px; }
+  .bikeCard h3 { font-size: 13px; font-style: italic; }
+  .bikeCard p { font-size: 10px; opacity: 0.85; margin-top: 3px; line-height: 1.4; }
+  .bikeCard.active { background: rgba(63, 224, 216, 0.22); border-color: #3fe0d8; transform: translateY(-3px); }
+
+  .howto {
+    font-size: 12px; line-height: 1.9; opacity: 0.95;
+    background: rgba(8, 40, 56, 0.4); border-radius: 12px; padding: 10px 18px;
+  }
+  .howto b { color: #7ffbe9; }
+
+  .btn {
+    padding: 13px 42px; font-size: 18px; font-weight: 800; font-style: italic;
+    color: #063; background: #7dfacb; border: none; border-radius: 30px;
+    box-shadow: 0 4px 0 rgba(10, 60, 50, 0.45); cursor: pointer;
+    letter-spacing: 1px;
+  }
+  .btn:active { transform: translateY(3px); box-shadow: 0 1px 0 rgba(10, 60, 50, 0.45); }
+  .btn.ghost { background: rgba(255,255,255,0.2); color: #fff; box-shadow: 0 4px 0 rgba(10,40,60,0.35); }
+
+  /* ---------- 결과 ---------- */
+  #results .card {
+    background: rgba(8, 40, 56, 0.55); border-radius: 16px; padding: 20px 30px;
+    min-width: min(78vw, 320px);
+  }
+  #results .row { display: flex; justify-content: space-between; gap: 30px; font-size: 15px; padding: 5px 0; }
+  #results .row .k { opacity: 0.8; }
+  #results .row.total { border-top: 2px solid rgba(255,255,255,0.3); margin-top: 8px; padding-top: 12px; font-size: 22px; font-weight: 900; font-style: italic; color: #7ffbe9; }
+  #results .tricksLine { font-size: 11px; opacity: 0.75; margin-top: 6px; }
+  #results .btns { display: flex; gap: 12px; margin-top: 6px; }
+
+  @media (orientation: landscape) and (max-height: 500px) {
+    #speedPanel { width: 100px; }
+    .howto { font-size: 11px; line-height: 1.6; }
+    .overlay { gap: 8px; }
+  }
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<div id="hud" class="hudText">
+  <div class="box"><div class="label">TIME</div><div class="val" id="time">0.0</div></div>
+  <div class="box"><div class="label">STUNT</div><div class="val" id="score">0</div></div>
+</div>
+
+<div id="speedPanel" class="hudText">
+  <div class="label">SPEED</div>
+  <canvas id="speedGraph" width="104" height="64"></canvas>
+  <div id="speedNumWrap"><span id="speedNum">0</span><small>km/h</small></div>
+</div>
+
+<div id="jumpbar">
+  <div class="hint hudText">RELEASE TO JUMP</div>
+  <div class="zone green"></div>
+  <div class="zone perfect"></div>
+  <div id="needle" style="left:0%"></div>
+</div>
+
+<div id="warn">WHEELIE!</div>
+<div id="popups"></div>
+<div id="flash"></div>
+
+<div id="intro" class="overlay show">
+  <h1>BIKE<span>GAME</span></h1>
+  <p class="sub">섬과 섬을 잇는 해안 스턴트 코스 — 랜덤 생성 · 30~40초 승부</p>
+  <div id="bikePick">
+    <div class="bikeCard active">
+      <div class="dot" style="background:#39b8c9"></div>
+      <h3>MX 450</h3><p>4행정 밸런스<br>안정적</p>
+    </div>
+    <div class="bikeCard">
+      <div class="dot" style="background:#e8442c"></div>
+      <h3>250 2-STROKE</h3><p>2행정 경량<br>순간 가속·민감</p>
+    </div>
+    <div class="bikeCard">
+      <div class="dot" style="background:#8dff57"></div>
+      <h3>E-MOTO</h3><p>전기 토크<br>저소음·묵직</p>
+    </div>
+  </div>
+  <div class="howto">
+    <b>누르고 있는 동안 가속</b> — 램프 끝 게이지 초록 구간에서 <b>손을 떼면 점프</b><br>
+    공중 스와이프: <b>↑백플립 ↓프런트플립 ←→윕 ◯배럴롤 Z시저 V슈퍼맨</b><br>
+    <b>가속한 채 착지하면 윌리 → 크래시!</b> 착지 직전엔 손을 떼세요
+  </div>
+  <button class="btn" id="startBtn">출발!</button>
+</div>
+
+<div id="results" class="overlay">
+  <h1 style="font-size:clamp(26px,7vw,40px)">FINISH!</h1>
+  <div class="card">
+    <div class="row"><span class="k">기록</span><span id="resTime">0.0s</span></div>
+    <div class="row"><span class="k">스턴트 점수</span><span id="resStunt">0</span></div>
+    <div class="row"><span class="k">타임 보너스</span><span id="resBonus">+0</span></div>
+    <div class="row total"><span class="k">TOTAL</span><span id="resTotal">0</span></div>
+    <div class="tricksLine">트릭 <span id="resTricks"></span></div>
+  </div>
+  <div class="btns">
+    <button class="btn ghost" id="btnRetry">같은 코스</button>
+    <button class="btn" id="btnNew">새 코스!</button>
+  </div>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "./lib/three.module.js",
+    "three/addons/postprocessing/EffectComposer.js": "./lib/post/EffectComposer.js",
+    "three/addons/postprocessing/RenderPass.js": "./lib/post/RenderPass.js",
+    "three/addons/postprocessing/UnrealBloomPass.js": "./lib/post/UnrealBloomPass.js",
+    "three/addons/postprocessing/OutputPass.js": "./lib/post/OutputPass.js"
+  }
+}
+</script>
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
