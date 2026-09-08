@@ -6,10 +6,10 @@
       132.0,
       174.2
     ],
-    "triangles": 83780,
+    "triangles": 83884,
     "watertight": true,
     "connected_bodies": 1,
-    "file_bytes": 4189084,
+    "file_bytes": 4194284,
     "external_sashes": false,
     "ac_brackets": false,
     "compatibility": "all 40 households: full sash / empty rack"
@@ -21,10 +21,10 @@
       132.0,
       174.2
     ],
-    "triangles": 125062,
+    "triangles": 125166,
     "watertight": true,
     "connected_bodies": 1,
-    "file_bytes": 6253184,
+    "file_bytes": 6258384,
     "external_sashes": true,
     "ac_brackets": false,
     "compatibility": "all 40 households: full sash / empty rack"
@@ -36,10 +36,10 @@
       132.0,
       174.2
     ],
-    "triangles": 91358,
+    "triangles": 91462,
     "watertight": true,
     "connected_bodies": 1,
-    "file_bytes": 4567984,
+    "file_bytes": 4573184,
     "external_sashes": false,
     "ac_brackets": true,
     "compatibility": "all 40 households: full sash / empty rack"
@@ -51,12 +51,38 @@
       132.0,
       174.2
     ],
-    "triangles": 135374,
+    "triangles": 135478,
     "watertight": true,
     "connected_bodies": 1,
-    "file_bytes": 6768784,
+    "file_bytes": 6773984,
     "external_sashes": true,
     "ac_brackets": true,
     "compatibility": "all 40 households: full sash / empty rack"
+  },
+  {
+    "four_color_viewer_mesh": {
+      "file": "base_material.stl",
+      "triangles": 83884,
+      "materials": {
+        "concrete": 20216,
+        "metal": 62012,
+        "glass": 1162,
+        "accent": 494
+      }
+    },
+    "four_color_3mf": {
+      "file": "jugong_10f_four_color.3mf",
+      "unit": "millimeter",
+      "objects": 1,
+      "triangles": 83884,
+      "material_slots": 4,
+      "material_triangles": {
+        "concrete": 20216,
+        "metal": 62012,
+        "glass": 1162,
+        "accent": 494
+      },
+      "file_bytes": 873406
+    }
   }
 ]

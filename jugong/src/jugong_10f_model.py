@@ -24,13 +24,19 @@ Run: python jugong_10f_model.py --output jugong_10f.stl
      python jugong_10f_model.py --show-balcony-sashes --show-ac-brackets
      python jugong_10f_model.py --all-variants --output jugong_10f.stl
 STL is a fused solid and cannot store layer state. Use the accompanying viewer
-for per-household visibility, JSON/URL state, and a 3MF assembly download.
+for per-household visibility, JSON/URL state, and a four-material 3MF download.
+The four fixed slots are aged concrete, metal frames/guards, dark glazing, and
+roof/entrance/later-addition accent. Palette colors are replaceable; geometry
+assignment and the maximum slot count are not.
 """
 from pathlib import Path
 import argparse
 import json
 import re
+import struct
 import unicodedata
+import zipfile
+from xml.sax.saxutils import escape, quoteattr
 import numpy as np
 import manifold3d as md
 import trimesh
@@ -43,6 +49,17 @@ ROOF=LEVELS[-1]+15.0
 FRONT=-53.75
 REAR=53.75
 MIN_FRAME=.45
+
+# Four fixed print-material slots.  Colors may be replaced by the user, but
+# the slot count and the geometric assignment stay stable for slicers.
+MATERIALS=(
+    dict(key='concrete',name='노후 콘크리트·도장 외벽',color='#B7B09C',roughness=.88),
+    dict(key='metal',name='창호·난간 금속',color='#6E7773',roughness=.58),
+    dict(key='glass',name='유리·어두운 개구부',color='#334348',roughness=.28),
+    dict(key='accent',name='출입구·옥상·후대 부착물',color='#8A4F37',roughness=.72),
+)
+MATERIAL_INDEX={item['key']:i for i,item in enumerate(MATERIALS)}
+DEFAULT_PALETTE=tuple(item['color'] for item in MATERIALS)
 
 # The published floor arrangement establishes four dwellings per floor, but no
 # authoritative dong-by-dong unit-number schedule has been found.  These stable
@@ -74,7 +91,22 @@ def subtract(body,cuts):
 class Solids(list):
     def __init__(self, values=()):
         super().__init__(values)
-        self.window_details=[]
+        self.materials=['concrete']*len(self)
+        self.window_details=None
+    def append(self, value, material='concrete'):
+        super().append(value)
+        self.materials.append(material)
+    def add(self, value, material):
+        self.append(value,material)
+
+
+def add_material(parts,shape,material):
+    if isinstance(parts,Solids):parts.add(shape,material)
+    else:parts.append(shape)
+
+
+def materialized(shape,index):
+    return shape.set_properties(1,lambda _position,_old:[float(index)])
 
 
 class Facade:
@@ -96,9 +128,9 @@ def frame(parts,fac,u0,u1,z0,z1,depth,panes=2,outer=.65,inner=.45,glaze=True):
     b=fac.b
     # Main perimeter projects farther than the individual sliding leaves.
     for a,c in ((u0,u0+outer),(u1-outer,u1)):
-        parts.append(b(a,c,depth-.95,depth,z0,z1))
+        add_material(parts,b(a,c,depth-.95,depth,z0,z1),'metal')
     for e,f in ((z0,z0+outer),(z1-outer,z1)):
-        parts.append(b(u0,u1,depth-.95,depth,e,f))
+        add_material(parts,b(u0,u1,depth-.95,depth,e,f),'metal')
     left=u0+outer-.12;right=u1-outer+.12
     bottom=z0+outer-.12;top=z1-outer+.12
     w=(right-left)/panes
@@ -107,13 +139,13 @@ def frame(parts,fac,u0,u1,z0,z1,depth,panes=2,outer=.65,inner=.45,glaze=True):
         # Alternating tracks make the individual overlapping leaves legible.
         p=depth-.16-(.27 if i%2 else 0)
         for x,y in ((a,a+inner),(c-inner,c)):
-            parts.append(b(x,y,p-.65,p,bottom,top))
+            add_material(parts,b(x,y,p-.65,p,bottom,top),'metal')
         for e,f in ((bottom,bottom+inner),(top-inner,top)):
-            parts.append(b(a,c,p-.65,p,e,f))
+            add_material(parts,b(a,c,p-.65,p,e,f),'metal')
         if glaze:
-            parts.append(b(a+.18,c-.18,depth-1.12,depth-.70,bottom+.18,top-.18))
+            add_material(parts,b(a+.18,c-.18,depth-1.12,depth-.70,bottom+.18,top-.18),'glass')
     # Two narrow, visibly separate bottom tracks.
-    parts.append(b(u0,u1,depth-.55,depth+.18,z0-.13,z0+.29))
+    add_material(parts,b(u0,u1,depth-.55,depth+.18,z0-.13,z0+.29),'metal')
 
 
 def wall_window(parts,cuts,fac,u,w,z,h=7.0,panes=2):
@@ -121,16 +153,16 @@ def wall_window(parts,cuts,fac,u,w,z,h=7.0,panes=2):
     cuts.append(fac.b(a+.50,c-.50,-1.75,.35,z+.48,z+h-.48))
     target=parts.window_details
     frame(target,fac,a,c,z,z+h,.36,panes=panes,outer=.60,glaze=False)
-    target.append(fac.b(a+.44,c-.44,-1.90,-.34,z+.42,z+h-.42))
+    target.add(fac.b(a+.44,c-.44,-1.90,-.34,z+.42,z+h-.42),'glass')
 
 
 def guard(parts,fac,a,c,depth,z0,z1,posts=True):
-    parts.append(fac.b(a,c,depth-.40,depth+.24,z1-.58,z1))
-    parts.append(fac.b(a,c,depth-.36,depth+.18,z0,z0+.43))
+    add_material(parts,fac.b(a,c,depth-.40,depth+.24,z1-.58,z1),'metal')
+    add_material(parts,fac.b(a,c,depth-.36,depth+.18,z0,z0+.43),'metal')
     if posts:
         n=max(2,round((c-a)/1.7))
         for u in np.linspace(a+.22,c-.22,n):
-            parts.append(fac.b(u-.24,u+.24,depth-.32,depth+.15,z0-.10,z1-.10))
+            add_material(parts,fac.b(u-.24,u+.24,depth-.32,depth+.15,z0-.10,z1-.10),'metal')
 
 
 def juliet(parts,cuts,fac,u,z,width=8.1):
@@ -170,9 +202,9 @@ def balcony(parts,cuts,households,fac,start,line):
         parts.append(fac.b(split-.36,split+.33,5.45,7.66,z-.05,z+4.65))
         guard(parts,fac,split+.18,c-.32,7.42,z+1.7,z+5.28)
         # Side return guard, looking through an open balcony from an oblique view.
-        parts.append(fac.b(c-.56,c+.02,.12,7.45,z+4.74,z+5.30))
+        parts.add(fac.b(c-.56,c+.02,.12,7.45,z+4.74,z+5.30),'metal')
         for d in np.linspace(.5,7.1,5):
-            parts.append(fac.b(c-.50,c-.02,d-.23,d+.23,z+1.62,z+5.13))
+            parts.add(fac.b(c-.50,c-.02,d-.23,d+.23,z+1.62,z+5.13),'metal')
         # Original sliding room windows are on the recessed structural wall.
         wall_window(parts,cuts,fac,(b+split)/2,12.2,z+.7,h=11.6,panes=3)
         wall_window(parts,cuts,fac,(split+c)/2,15.7,z+.65,h=11.65,panes=4)
@@ -218,6 +250,7 @@ def build_layers():
     parts=Solids([box(-51.5,51.5,-53.75,-9.75,BASE-.1,ROOF),
            box(-44,44,2.25,53.75,BASE-.1,ROOF),
            box(-28.5,28.5,-9.90,2.40,BASE-.1,ROOF)])
+    parts.window_details=Solids()
     cuts=[]
     households={}
     for floor in range(1,FLOORS+1):
@@ -260,7 +293,7 @@ def build_layers():
             parts.append(core.hull(pts))
         # Paired entrance doors and a projecting flat canopy.
         wall_window(parts,cuts,core,-3.75,8.9,landing+.1,h=10.4,panes=2)
-        parts.append(core.b(-10.0,2.50,-.20,16.6,landing+10.65,landing+11.65))
+        parts.add(core.b(-10.0,2.50,-.20,16.6,landing+10.65,landing+11.65),'accent')
         for i,z in enumerate(LEVELS[1:],1):
             wall_window(parts,cuts,core,-3.75,7.4,z+4.25,h=5.0,panes=3)
         # Large, restrained blank wall panel joints belong to the B wing side.
@@ -270,6 +303,11 @@ def build_layers():
             # Stop short of horizontal seams to avoid zero-width boolean edges.
             for z in LEVELS[1:-1]:
                 cuts.append(sf.b(u,u+.28,-.25,.10,z+.52,z+13.55))
+        # Broad repair fields translate the photographed faded patching and
+        # rain streaks into nozzle-safe relief, rather than a fragile bitmap.
+        for floor,u,w,h in ((3,-46.0,4.6,8.0),(6,-41.2,5.4,10.0),(9,-47.5,3.8,7.0)):
+            z=LEVELS[floor-1]+2.1
+            parts.append(sf.b(u,u+w,-.12,.30,z,z+h))
     # Rear is a continuous facade, with NO large balcony or door stack.
     back=Facade(-REAR,180)
     for z in LEVELS:
@@ -286,17 +324,17 @@ def build_layers():
            (42.8,44,2.25,53.75),(-44,44,52.55,53.75)]
     for a,b,c,d in edges:parts.append(box(a,b,c,d,ROOF-.12,ROOF+5.9))
     # Original two-level lift/stair plant volume; exact equipment layout is inferred.
-    parts.append(box(-18.9,18.9,-20.4,14.6,ROOF-.15,ROOF+23.5))
-    parts.append(box(-19.45,19.45,-20.95,15.15,ROOF+23.20,ROOF+24.3))
+    parts.add(box(-18.9,18.9,-20.4,14.6,ROOF-.15,ROOF+23.5),'accent')
+    parts.add(box(-19.45,19.45,-20.95,15.15,ROOF+23.20,ROOF+24.3),'accent')
     # Recessed plant-room windows, access door and modest ventilation upstands.
     rf=Facade(-20.4,0)
     wall_window(parts,cuts,rf,0,5.6,ROOF+7.0,h=4.9,panes=2)
     rb=Facade(-14.6,180)
     wall_window(parts,cuts,rb,10.8,5.0,ROOF+.5,h=9.4,panes=1)
     for x,y in ((-30,36),(30,36),(-35,-28),(35,-28)):
-        parts.append(box(x-1.1,x+1.1,y-1.1,y+1.1,ROOF-.1,ROOF+.65))
-        parts.append(md.Manifold.cylinder(2.1,.7,.7,12).translate((x,y,ROOF+.4)))
-        parts.append(md.Manifold.cylinder(.45,.95,.95,12).translate((x,y,ROOF+2.1)))
+        parts.add(box(x-1.1,x+1.1,y-1.1,y+1.1,ROOF-.1,ROOF+.65),'accent')
+        parts.add(md.Manifold.cylinder(2.1,.7,.7,12).translate((x,y,ROOF+.4)),'accent')
+        parts.add(md.Manifold.cylinder(.45,.95,.95,12).translate((x,y,ROOF+2.1)),'accent')
     counts={name:sum(len(h[name]) for h in households.values())
             for name in ('sash_partial','sash_full','ac_bracket','ac_unit')}
     print(f'Base: {len(parts)} solids, {len(cuts)} recesses; 40 households, option solids {counts}.',flush=True)
@@ -311,6 +349,18 @@ def build_base():
     parts,cuts,households=build_layers()
     # Cut structural openings before attaching the original window frames.
     base=union([subtract(union(parts),cuts)]+parts.window_details).simplify(.00002)
+    return base,households
+
+
+def build_material_base():
+    """Build the same watertight base with a stable material property channel."""
+    parts,cuts,households=build_layers()
+    tagged=[materialized(shape,MATERIAL_INDEX[material])
+            for shape,material in zip(parts,parts.materials)]
+    tagged_cuts=[materialized(shape,MATERIAL_INDEX['concrete']) for shape in cuts]
+    details=[materialized(shape,MATERIAL_INDEX[material])
+             for shape,material in zip(parts.window_details,parts.window_details.materials)]
+    base=union([subtract(union(tagged),tagged_cuts)]+details).simplify(.00002)
     return base,households
 
 
@@ -359,8 +409,16 @@ def dong_label(value):
     return union(pieces).simplify(.00002)
 
 
+def normalize_palette(value=None):
+    palette=list(DEFAULT_PALETTE if value is None else value)
+    if len(palette)!=4 or any(not isinstance(color,str) or
+        not re.fullmatch(r'#[0-9A-Fa-f]{6}',color) for color in palette):
+        raise ValueError('palette must contain exactly four #RRGGBB colors')
+    return [color.upper() for color in palette]
+
+
 def default_configuration(dong=''):
-    return dict(schemaVersion=1,dong=normalize_dong(dong),households={
+    return dict(schemaVersion=1,dong=normalize_dong(dong),palette=normalize_palette(),households={
         key:dict(sash='none',ac='none') for key in sorted_household_ids()
     })
 
@@ -373,6 +431,7 @@ def normalize_configuration(raw):
     if not isinstance(raw,dict) or raw.get('schemaVersion')!=1:
         raise ValueError('configuration schemaVersion must be 1')
     result=default_configuration(raw.get('dong',''))
+    result['palette']=normalize_palette(raw.get('palette'))
     states=raw.get('households')
     if not isinstance(states,dict) or set(states)!=set(result['households']):
         raise ValueError('configuration must contain exactly the 40 household ids')
@@ -397,11 +456,29 @@ def configuration_parts(base,households,config):
     return parts
 
 
+def configuration_material_shape(base,households,config):
+    """Fuse a selected configuration while preserving four face properties."""
+    parts=[base]
+    for key,state in config['households'].items():
+        layer=households[key]
+        if state['sash'] in ('partial','full'):
+            parts.extend(materialized(shape,MATERIAL_INDEX['metal']) for shape in layer['sash_partial'])
+        if state['sash']=='full':
+            parts.extend(materialized(shape,MATERIAL_INDEX['metal']) for shape in layer['sash_full'])
+        if state['ac'] in ('bracket','unit'):
+            parts.extend(materialized(shape,MATERIAL_INDEX['accent']) for shape in layer['ac_bracket'])
+        if state['ac']=='unit':
+            parts.extend(materialized(shape,MATERIAL_INDEX['accent']) for shape in layer['ac_unit'])
+    label=dong_label(config['dong'])
+    if label is not None:parts.append(materialized(label,MATERIAL_INDEX['accent']))
+    return union(parts).simplify(.00003)
+
+
 def export_display_layers(base,households,root):
     root.mkdir(parents=True,exist_ok=True)
     base_name='base.stl'
     to_trimesh(base).export(root/base_name,file_type='stl')
-    manifest=dict(schemaVersion=1,households=[])
+    manifest=dict(schemaVersion=1,materials=MATERIALS,households=[])
     for key in sorted_household_ids():
         source=households[key]
         item={name:source[name] for name in ('id','floor','line','estimated_unit','position','facade','unit_type')}
@@ -421,6 +498,76 @@ def to_trimesh(shape):
     t=trimesh.Trimesh(vertices=np.asarray(raw.vert_properties)[:,:3],faces=np.asarray(raw.tri_verts),process=True)
     t.fix_normals(multibody=False)
     return t
+
+
+def material_mesh(shape):
+    """Return indexed geometry and one exact material index per triangle."""
+    assert shape.status()==md.Error.NoError,shape.status()
+    raw=shape.to_mesh64()
+    vertices=np.asarray(raw.vert_properties,dtype=np.float64)
+    faces=np.asarray(raw.tri_verts,dtype=np.int64)
+    assert vertices.shape[1]>=4,'material property channel is missing'
+    corner=np.rint(vertices[faces,3]).astype(np.int64)
+    assert np.all(corner==corner[:,:1]),'a face crosses a material boundary'
+    materials=corner[:,0]
+    assert np.all((0<=materials)&(materials<len(MATERIALS)))
+    return vertices[:,:3],faces,materials
+
+
+def export_material_stl(shape,path):
+    """Binary STL for the viewer; the standard attribute word carries slot 0..3."""
+    vertices,faces,materials=material_mesh(shape)
+    mesh=trimesh.Trimesh(vertices=vertices,faces=faces,process=False)
+    header=b'Dunchon Jugong material-index STL; attr word = 0..3'.ljust(80,b' ')
+    with Path(path).open('wb') as handle:
+        handle.write(header)
+        handle.write(struct.pack('<I',len(faces)))
+        for normal,face,material in zip(mesh.face_normals,faces,materials):
+            values=[*normal,*vertices[face[0]],*vertices[face[1]],*vertices[face[2]]]
+            handle.write(struct.pack('<12fH',*values,int(material)))
+    return dict(file=Path(path).name,triangles=len(faces),materials={
+        MATERIALS[i]['key']:int(np.count_nonzero(materials==i)) for i in range(4)})
+
+
+def write_color_3mf(shape,path,config,title=None):
+    """Write one fused, watertight 3MF whose every face references one of 4 slots."""
+    path=Path(path)
+    vertices,faces,materials=material_mesh(shape)
+    palette=normalize_palette(config.get('palette'))
+    bases=''.join(f'<base name={quoteattr(item["name"])} displaycolor={quoteattr(color+"FF")}/>'
+                  for item,color in zip(MATERIALS,palette))
+    vertex_xml=''.join(f'<vertex x="{x:.5f}" y="{y:.5f}" z="{z:.5f}"/>'
+                       for x,y,z in vertices)
+    face_xml=''.join(f'<triangle v1="{a}" v2="{b}" v3="{c}" pid="1" p1="{m}" p2="{m}" p3="{m}"/>'
+                     for (a,b,c),m in zip(faces,materials))
+    safe_title=escape(title or (f'둔촌주공 {config["dong"]}동 4색 구성' if config['dong'] else '둔촌주공 4색 기본 구성'))
+    metadata=escape(json.dumps(config,ensure_ascii=False,separators=(',',':')))
+    model=(f'<?xml version="1.0" encoding="UTF-8"?>'
+           f'<model unit="millimeter" xml:lang="ko-KR" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02">'
+           f'<metadata name="Title">{safe_title}</metadata>'
+           f'<metadata name="Application">Dunchon Jugong four-material exporter</metadata>'
+           f'<metadata name="https://lqez.github.io/sandbox-games/jugong/configuration">{metadata}</metadata>'
+           f'<resources><basematerials id="1">{bases}</basematerials>'
+           f'<object id="2" type="model" name="four-material fused configuration"><mesh>'
+           f'<vertices>{vertex_xml}</vertices><triangles>{face_xml}</triangles>'
+           f'</mesh></object></resources><build><item objectid="2"/></build></model>')
+    types=('<?xml version="1.0" encoding="UTF-8"?>'
+           '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+           '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+           '<Default Extension="model" ContentType="application/vnd.ms-package.3dmanufacturing-3dmodel+xml"/>'
+           '</Types>')
+    rels=('<?xml version="1.0" encoding="UTF-8"?>'
+          '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+          '<Relationship Target="/3D/3dmodel.model" Id="rel-1" Type="http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel"/>'
+          '</Relationships>')
+    path.parent.mkdir(parents=True,exist_ok=True)
+    with zipfile.ZipFile(path,'w',compression=zipfile.ZIP_DEFLATED,compresslevel=9) as archive:
+        archive.writestr('[Content_Types].xml',types)
+        archive.writestr('_rels/.rels',rels)
+        archive.writestr('3D/3dmodel.model',model)
+    return dict(file=path.name,unit='millimeter',objects=1,triangles=len(faces),
+                material_slots=4,material_triangles={MATERIALS[i]['key']:int(np.count_nonzero(materials==i)) for i in range(4)},
+                file_bytes=path.stat().st_size)
 
 
 def export_checked(shape,path):
@@ -445,6 +592,8 @@ def main():
     p.add_argument('--all-variants',action='store_true')
     p.add_argument('--configuration',type=Path,
                    help='schemaVersion 1 JSON; emits one fused STL for that household selection')
+    p.add_argument('--color-3mf',type=Path,
+                   help='also emit the selected configuration as a fused four-material 3MF')
     args=p.parse_args()
     if args.scale<=0:p.error('--scale must be positive')
     out=Path(args.output).resolve();out.parent.mkdir(parents=True,exist_ok=True)
@@ -472,12 +621,23 @@ def main():
         # Addressable display layers are embedded by scripts/build_viewer.py.
         work=out.parent.parent/'work'
         work.mkdir(parents=True,exist_ok=True)
-        export_display_layers(base,households,work/'configurator')
+        layer_root=work/'configurator'
+        export_display_layers(base,households,layer_root)
+        material_base,material_households=build_material_base()
+        color_stl=export_material_stl(material_base,layer_root/'base_material.stl')
+        default_3mf=write_color_3mf(material_base,out.parent/'jugong_10f_four_color.3mf',default_configuration())
+        report.append({'four_color_viewer_mesh':color_stl,'four_color_3mf':default_3mf})
         report_text=json.dumps(report,indent=2)+'\n'
         (work/'model_validation.json').write_text(report_text)
         validation=out.parent.parent/'validation'
         validation.mkdir(parents=True,exist_ok=True)
         (validation/'model_validation.json').write_text(report_text)
+    if args.color_3mf:
+        material_base,material_households=build_material_base()
+        color_config=(normalize_configuration(json.loads(args.configuration.read_text(encoding='utf-8')))
+                      if args.configuration else default_configuration())
+        colored=configuration_material_shape(material_base,material_households,color_config).scale((args.scale,)*3)
+        print(json.dumps(write_color_3mf(colored,args.color_3mf,color_config),ensure_ascii=False),flush=True)
 
 
 if __name__=='__main__':main()

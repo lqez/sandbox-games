@@ -17,7 +17,8 @@ def pack(path):
 
 def main():
     manifest=json.loads((LAYER_ROOT/'manifest.json').read_text(encoding='utf-8'))
-    data={'schemaVersion':1,'base':pack(ROOT/'dist/jugong_10f.stl'),'households':[]}
+    data={'schemaVersion':1,'materials':manifest['materials'],
+          'base':pack(LAYER_ROOT/'base_material.stl'),'households':[]}
     for household in manifest['households']:
         item={key:household[key] for key in
               ('id','floor','line','estimated_unit','position','facade','unit_type')}

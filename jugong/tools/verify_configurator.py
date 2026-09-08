@@ -35,6 +35,19 @@ def mesh_facts(raw: bytes) -> dict:
     }
 
 
+def stl_material_counts(raw: bytes) -> dict[str, int]:
+    assert len(raw) >= 84
+    triangles = int.from_bytes(raw[80:84], 'little')
+    assert len(raw) == 84 + triangles * 50
+    counts = {item['key']: 0 for item in model.MATERIALS}
+    for index in range(triangles):
+        material = int.from_bytes(raw[84 + index * 50 + 48:84 + index * 50 + 50], 'little')
+        assert 0 <= material < 4
+        counts[model.MATERIALS[material]['key']] += 1
+    assert all(counts.values())
+    return counts
+
+
 def read_payload() -> dict:
     html = (ROOT / 'dist/dunchon_jugong_viewer.html').read_text(encoding='utf-8')
     match = re.search(r'<script id="mesh-data" type="application/json">(.*?)</script>', html, re.S)
@@ -47,6 +60,7 @@ def read_payload() -> dict:
 
 def validate_payload(payload: dict) -> dict:
     assert payload['schemaVersion'] == 1
+    assert payload['materials'] == [dict(item) for item in model.MATERIALS]
     entries = payload['households']
     assert len(entries) == 40
     ids = [entry['id'] for entry in entries]
@@ -83,12 +97,14 @@ def validate_payload(payload: dict) -> dict:
             triangle_count += facts['triangles']
     base_raw = gzip.decompress(base64.b64decode(payload['base']['data']))
     assert hashlib.sha256(base_raw).hexdigest() == payload['base']['sha256']
-    assert base_raw == (ROOT / 'dist/jugong_10f.stl').read_bytes()
+    assert base_raw == (ROOT / 'work/configurator/base_material.stl').read_bytes()
+    material_triangles = stl_material_counts(base_raw)
     base = mesh_facts(base_raw)
     assert base['component_count'] == 1
     return {'households': 40, 'addressable_layers': layer_count,
             'layer_triangles': triangle_count, 'base': base,
-            'default_all_off': True, 'facade_mapping_checked': True}
+            'default_all_off': True, 'facade_mapping_checked': True,
+            'material_slots': 4, 'material_triangles': material_triangles}
 
 
 def representative_fused_outputs() -> list[dict]:

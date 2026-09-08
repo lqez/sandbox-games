@@ -9,6 +9,7 @@ import trimesh
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'tools'))
 import verify_configurator  # noqa: E402
+import verify_color_3mf  # noqa: E402
 
 LEGACY = [
     ('jugong_10f.stl', False, False),
@@ -42,12 +43,14 @@ def main():
     report = {
         'legacy_mesh_checks': legacy,
         'configurator': configurator,
-        'browser_execution': 'See scratchpad/2026-09-08/unit-configurator/REPORT.md',
+        'four_color_3mf': verify_color_3mf.validate(
+            ROOT / 'dist/jugong_10f_four_color.3mf', require_fused=True),
+        'browser_execution': 'See scratchpad/2026-09-08/four-color-print/REPORT.md',
     }
     (ROOT / 'validation').mkdir(exist_ok=True)
     (ROOT / 'validation/handoff_checks.json').write_text(
         json.dumps(report, ensure_ascii=False, indent=2), encoding='utf-8')
-    print('PASS: four legacy solids and 40-household configurator payload verified.')
+    print('PASS: four legacy solids, 40-household configurator, and four-material 3MF verified.')
 
 
 if __name__ == '__main__':
