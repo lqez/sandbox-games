@@ -57,7 +57,7 @@ PASS: four connected, watertight STL solids; viewer payloads match; options off.
 Browser interaction and visual accuracy still require review.
 ```
 
-즉 네 STL 모두 닫힌 메시, 양의 부피·일관된 winding, 단일 연결체이며 HTML 내장 바이트와 파일이 일치한다. 외부 섀시와 거치대 체크박스도 기본 꺼짐이다. 이 스크립트는 WebGL 표시, 클릭·회전·다운로드, 실제 3D 프린트 성공을 검증하지 않는다.
+즉 네 STL 모두 닫힌 메시, 양의 부피·일관된 winding, 단일 연결체이며 HTML 내장 바이트와 파일이 일치한다. 외부 섀시와 거치대 체크박스도 기본 꺼짐이다. 이 스크립트 자체는 WebGL 표시, 클릭·회전·다운로드, 실제 3D 프린트 성공을 검증하지 않는다. 아래 배포 확인에서 브라우저 동작 일부를 별도로 검사했다.
 
 ## 4. 이력 조사 결과
 
@@ -134,7 +134,7 @@ Browser interaction and visual accuracy still require review.
 3. 상가·관리소·보일러실·조경·옥외전기 도면 원본의 범례 판독
 4. 급수탑·유치원·경로당 존재와 위치 확인
 5. 서울시 항공사진에서 1979-1980, 1990년대, 2015-2018의 같은 좌표 비교
-6. 허용된 브라우저에서 현재 뷰어 회전·방향·옵션·다운로드 상호작용 확인
+6. 브라우저에서 남은 전후·좌측·위쪽 방향, 회전·확대, 네 다운로드 파일 바이트 확인
 7. 후속 4색 3MF와 표면 질감 시험 출력
 
 ## 7. 산출물
@@ -145,3 +145,14 @@ Browser interaction and visual accuracy still require review.
 - 이 보고서
 
 이 단계는 자료 기준선과 구현 입력을 만드는 작업이다. 동별 드롭다운, 세대별 섀시/에어컨, 4색 재료·표면 질감의 실제 코드는 다음 단계로 남겼다.
+
+## 8. GitHub Pages 배포 확인
+
+- 저장소 Pages 설정: `main` 브랜치, 저장소 루트(`/`), 공개 HTTPS
+- 배포 커밋: `577165892079b0745bcc8cc5e977e00597b6d815`
+- Actions 실행: [pages build and deployment #34229810828](https://github.com/lqez/sandbox-games/actions/runs/34229810828), 성공
+- 공개 뷰어: <https://lqez.github.io/sandbox-games/jugong/dist/dunchon_jugong_viewer.html>
+- 공개 이력 문서: <https://lqez.github.io/sandbox-games/jugong/docs/HISTORY.html>
+- 두 URL 모두 배포 직후 HTTP 200과 최신 수정 시각을 확인했다.
+- Orca 내장 브라우저에서 기본형 `variant=0`(83,780 triangles), 옵션 기본 해제, 섀시 단독 `variant=1`(125,028 triangles), 섀시+거치대 `variant=3`(129,190 triangles), 우측 출입구 방향 선택을 확인했다.
+- 다운로드 버튼은 활성 상태였지만 이번 단계에서 실제 저장 파일과 원본 STL의 바이트 일치까지 다시 검사하지 않았다. 드래그·줌과 모든 방향 선택도 전수 검사는 남아 있다.
