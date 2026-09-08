@@ -16,7 +16,7 @@ plan are reconstructed, not an as-built survey of a particular building.
 DEFAULT: no added outer balcony enclosure; no AC mounting brackets.
 Original room windows and balcony guards are always retained.
 
-Requirements: pip install numpy manifold3d trimesh
+Requirements: pip install numpy manifold3d trimesh networkx
 Run: python jugong_10f_model.py --output jugong_10f.stl
      python jugong_10f_model.py --show-balcony-sashes --show-ac-brackets
      python jugong_10f_model.py --all-variants --output jugong_10f.stl
