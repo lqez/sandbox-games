@@ -98,4 +98,8 @@ Orca 내장 브라우저의 WebGL2 페이지에서 324동 대표 조합을 만�
 
 ## 배포
 
-커밋·`main` 통합·Pages 확인 결과는 최종 통합 뒤 이 절에 기록한다.
+- 기능 커밋 `b788c1b` (`둔촌주공 4색 3MF 인쇄 재료 추가`)을 최신 `origin/main`에 fast-forward push하고 로컬 `main`도 같은 커밋으로 갱신했다.
+- GitHub Pages `pages build and deployment` 실행 `34247691988`이 성공했다.
+- 공개 URL `https://lqez.github.io/sandbox-games/jugong/dist/dunchon_jugong_viewer.html`에서 HTTP 200, 4색 팔레트와 인쇄 슬롯 분리 UI를 확인했다.
+- 공개 WebGL 페이지를 324동 기본 상태로 열어 `materialSlots=4`, 선택 세대 0/40, 선택 레이어 0, base+명판 84,064 삼각형, 콘솔 오류 없음을 확인했다.
+- 공개 `jugong_10f_four_color.3mf`의 MIME은 `model/3mf`이며 SHA-256 `8f72c6a8e17c42fbafa1701ee793ddfefd976e43da9f74e62cd47ea08e668a52`가 로컬 배포 파일과 일치했다.
