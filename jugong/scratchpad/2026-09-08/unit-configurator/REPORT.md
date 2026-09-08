@@ -134,4 +134,7 @@ Orca 내장 브라우저의 screenshot 명령은 탭 비가시성으로 타임�
 
 ## 9. 배포
 
-최종 커밋·`origin/main` 통합·GitHub Pages 공개 확인 결과는 작업 완료 시 이 절에 기록한다.
+- 기능 커밋 `748a7fe` (`둔촌주공 동별 세대 구성기 추가`)을 `main`에 fast-forward 통합하고 `origin/main`에 push했다.
+- GitHub Pages `pages build and deployment` 실행 `34238711248`이 성공했다.
+- 공개 URL `https://lqez.github.io/sandbox-games/jugong/dist/dunchon_jugong_viewer.html`에서 HTTP 200, 새 제목, 동 선택기, 현재 구성 3MF 버튼을 확인했다.
+- 공개 WebGL 페이지를 324동·전 세대 꺼짐 URL로 직접 열어 40세대 복원, 선택 레이어 0, 다운로드 활성 상태와 콘솔 오류 없음을 재확인했다. 동 명판 때문에 표시 삼각형은 base 83,780개에 `324` 명판 180개가 더해진 83,960개다.
