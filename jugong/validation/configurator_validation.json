@@ -1,0 +1,98 @@
+{
+  "schema_and_layers": {
+    "households": 40,
+    "addressable_layers": 160,
+    "layer_triangles": 41230,
+    "base": {
+      "triangles": 83780,
+      "watertight": true,
+      "component_count": 1,
+      "bounds": [
+        [
+          -60.0,
+          -68.4,
+          0.0
+        ],
+        [
+          60.0,
+          63.6,
+          174.2
+        ]
+      ]
+    },
+    "default_all_off": true,
+    "facade_mapping_checked": true
+  },
+  "representative_fused_outputs": [
+    {
+      "case": "default",
+      "selected_layers": 0,
+      "file": "default.stl",
+      "dimensions_mm": [
+        120.0,
+        132.0,
+        174.2
+      ],
+      "triangles": 83780,
+      "watertight": true,
+      "connected_bodies": 1,
+      "file_bytes": 4189084
+    },
+    {
+      "case": "single_05-B",
+      "selected_layers": 4,
+      "file": "single_05-B.stl",
+      "dimensions_mm": [
+        120.0,
+        132.0,
+        174.2
+      ],
+      "triangles": 85310,
+      "watertight": true,
+      "connected_bodies": 1,
+      "file_bytes": 4265584
+    },
+    {
+      "case": "different_floor_line",
+      "selected_layers": 6,
+      "file": "different_floor_line.stl",
+      "dimensions_mm": [
+        120.0,
+        132.0,
+        174.2
+      ],
+      "triangles": 86186,
+      "watertight": true,
+      "connected_bodies": 1,
+      "file_bytes": 4309384
+    },
+    {
+      "case": "floor_07_partial",
+      "selected_layers": 4,
+      "file": "floor_07_partial.stl",
+      "dimensions_mm": [
+        120.0,
+        132.0,
+        174.2
+      ],
+      "triangles": 86344,
+      "watertight": true,
+      "connected_bodies": 1,
+      "file_bytes": 4317284
+    }
+  ],
+  "dong_validation": {
+    "accepted": [
+      "302",
+      "420",
+      "123-1"
+    ],
+    "rejected": [
+      "../302",
+      "<script>",
+      "123456789",
+      "-302",
+      "302-"
+    ]
+  }
+}

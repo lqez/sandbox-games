@@ -11,7 +11,8 @@
     "connected_bodies": 1,
     "file_bytes": 4189084,
     "external_sashes": false,
-    "ac_brackets": false
+    "ac_brackets": false,
+    "compatibility": "all 40 households: full sash / empty rack"
   },
   {
     "file": "jugong_10f_sashes.stl",
@@ -20,12 +21,13 @@
       132.0,
       174.2
     ],
-    "triangles": 125028,
+    "triangles": 125062,
     "watertight": true,
     "connected_bodies": 1,
-    "file_bytes": 6251484,
+    "file_bytes": 6253184,
     "external_sashes": true,
-    "ac_brackets": false
+    "ac_brackets": false,
+    "compatibility": "all 40 households: full sash / empty rack"
   },
   {
     "file": "jugong_10f_ac_brackets.stl",
@@ -34,12 +36,13 @@
       132.0,
       174.2
     ],
-    "triangles": 87620,
+    "triangles": 91358,
     "watertight": true,
     "connected_bodies": 1,
-    "file_bytes": 4381084,
+    "file_bytes": 4567984,
     "external_sashes": false,
-    "ac_brackets": true
+    "ac_brackets": true,
+    "compatibility": "all 40 households: full sash / empty rack"
   },
   {
     "file": "jugong_10f_sashes_ac_brackets.stl",
@@ -48,11 +51,12 @@
       132.0,
       174.2
     ],
-    "triangles": 129190,
+    "triangles": 135374,
     "watertight": true,
     "connected_bodies": 1,
-    "file_bytes": 6459584,
+    "file_bytes": 6768784,
     "external_sashes": true,
-    "ac_brackets": true
+    "ac_brackets": true,
+    "compatibility": "all 40 households: full sash / empty rack"
   }
 ]
