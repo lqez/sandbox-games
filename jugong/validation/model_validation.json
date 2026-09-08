@@ -1,0 +1,58 @@
+[
+  {
+    "file": "jugong_10f.stl",
+    "dimensions_mm": [
+      120.0,
+      132.0,
+      174.2
+    ],
+    "triangles": 83780,
+    "watertight": true,
+    "connected_bodies": 1,
+    "file_bytes": 4189084,
+    "external_sashes": false,
+    "ac_brackets": false
+  },
+  {
+    "file": "jugong_10f_sashes.stl",
+    "dimensions_mm": [
+      120.0,
+      132.0,
+      174.2
+    ],
+    "triangles": 125028,
+    "watertight": true,
+    "connected_bodies": 1,
+    "file_bytes": 6251484,
+    "external_sashes": true,
+    "ac_brackets": false
+  },
+  {
+    "file": "jugong_10f_ac_brackets.stl",
+    "dimensions_mm": [
+      120.0,
+      132.0,
+      174.2
+    ],
+    "triangles": 87620,
+    "watertight": true,
+    "connected_bodies": 1,
+    "file_bytes": 4381084,
+    "external_sashes": false,
+    "ac_brackets": true
+  },
+  {
+    "file": "jugong_10f_sashes_ac_brackets.stl",
+    "dimensions_mm": [
+      120.0,
+      132.0,
+      174.2
+    ],
+    "triangles": 129190,
+    "watertight": true,
+    "connected_bodies": 1,
+    "file_bytes": 6459584,
+    "external_sashes": true,
+    "ac_brackets": true
+  }
+]

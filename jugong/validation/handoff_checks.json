@@ -1,0 +1,58 @@
+{
+  "mesh_checks": [
+    {
+      "file": "jugong_10f.stl",
+      "triangles": 83780,
+      "dimensions_mm": [
+        120.0,
+        132.0,
+        174.2
+      ],
+      "watertight": true,
+      "connected_bodies": 1,
+      "embedded_bytes_match": true,
+      "sha256": "29857738c1faebf7cd53b5fe028d150834ce301dc20ff5f2adf9d91f0df891c6"
+    },
+    {
+      "file": "jugong_10f_sashes.stl",
+      "triangles": 125028,
+      "dimensions_mm": [
+        120.0,
+        132.0,
+        174.2
+      ],
+      "watertight": true,
+      "connected_bodies": 1,
+      "embedded_bytes_match": true,
+      "sha256": "1d9c52b2c0da1686aaadda6e62c1eb384cfd56201823f5f85f81c11f15940fdc"
+    },
+    {
+      "file": "jugong_10f_ac_brackets.stl",
+      "triangles": 87620,
+      "dimensions_mm": [
+        120.0,
+        132.0,
+        174.2
+      ],
+      "watertight": true,
+      "connected_bodies": 1,
+      "embedded_bytes_match": true,
+      "sha256": "637cbba8981b609663c24fb20cead16966c02634a4fd9e1db678aa076b9925cd"
+    },
+    {
+      "file": "jugong_10f_sashes_ac_brackets.stl",
+      "triangles": 129190,
+      "dimensions_mm": [
+        120.0,
+        132.0,
+        174.2
+      ],
+      "watertight": true,
+      "connected_bodies": 1,
+      "embedded_bytes_match": true,
+      "sha256": "48668dffac5be0fc1936b85e9d913a52b5f4873d57823b4fd5c5d9c58b9b07eb"
+    }
+  ],
+  "options_default_hidden": true,
+  "browser_execution": "NOT VERIFIED in the originating environment"
+}
