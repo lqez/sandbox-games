@@ -1,0 +1,23 @@
+{
+  "date": "2026-09-09",
+  "browser": "Orca embedded Chromium",
+  "folded_pick_centers": {
+    "tested": 40,
+    "failures": 0,
+    "views": {"A": "front", "B": "front", "C": "left", "D": "right"}
+  },
+  "unfolded_pick_centers": {"tested": 40, "failures": 0},
+  "selection_state": {
+    "id": "05-B",
+    "sash": "full",
+    "ac": "unit",
+    "url_reflected": true,
+    "geometry_layers": 4,
+    "folded_to_unfolded_preserved": true
+  },
+  "orbit_drag": {"distance_px": 75, "selection_before": "05-B", "selection_after": "05-B", "misclick": false},
+  "facade_3mf_blob_bytes": 1011150,
+  "console_messages": 0,
+  "touch_path": "Pointer Events with 6px/650ms tap threshold",
+  "keyboard_screen_reader_path": "40-entry labelled select and original labelled table controls"
+}

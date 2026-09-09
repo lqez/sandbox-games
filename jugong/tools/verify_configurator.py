@@ -59,7 +59,7 @@ def read_payload() -> dict:
 
 
 def validate_payload(payload: dict) -> dict:
-    assert payload['schemaVersion'] == 1
+    assert payload['schemaVersion'] == 2
     assert payload['materials'] == [dict(item) for item in model.MATERIALS]
     entries = payload['households']
     assert len(entries) == 40
@@ -76,6 +76,7 @@ def validate_payload(payload: dict) -> dict:
         assert entry['floor'] == floor and expected_facades[line] == (entry['position'], entry['facade'])
         assert entry['estimated_unit'] == str(floor * 100 + ord(line) - 64)
         assert set(entry['meshes']) == {'sash_partial', 'sash_full', 'ac_bracket', 'ac_unit'}
+        assert set(entry['unfolded_meshes']) == set(entry['meshes'])
         for layer in entry['meshes'].values():
             raw = gzip.decompress(base64.b64decode(layer['data']))
             assert hashlib.sha256(raw).hexdigest() == layer['sha256']
@@ -95,14 +96,26 @@ def validate_payload(payload: dict) -> dict:
                 assert low[0] > 44
             layer_count += 1
             triangle_count += facts['triangles']
+        for layer in entry['unfolded_meshes'].values():
+            raw = gzip.decompress(base64.b64decode(layer['data']))
+            assert hashlib.sha256(raw).hexdigest() == layer['sha256']
+            facts = mesh_facts(raw)
+            assert facts['bounds'][0][2] >= model.PANEL_THICKNESS - .2
+            assert facts['bounds'][1][2] <= model.PANEL_THICKNESS + 1.2
     base_raw = gzip.decompress(base64.b64decode(payload['base']['data']))
     assert hashlib.sha256(base_raw).hexdigest() == payload['base']['sha256']
     assert base_raw == (ROOT / 'work/configurator/base_material.stl').read_bytes()
     material_triangles = stl_material_counts(base_raw)
     base = mesh_facts(base_raw)
     assert base['component_count'] == 1
+    flat_raw = gzip.decompress(base64.b64decode(payload['unfoldedBase']['data']))
+    assert hashlib.sha256(flat_raw).hexdigest() == payload['unfoldedBase']['sha256']
+    flat = mesh_facts(flat_raw)
+    assert flat['component_count'] == 1
+    assert payload['printKit']['panelOrder'] == list(model.PANEL_ORDER)
     return {'households': 40, 'addressable_layers': layer_count,
             'layer_triangles': triangle_count, 'base': base,
+            'unfolded_base': flat,'unfolded_addressable_layers': layer_count,
             'default_all_off': True, 'facade_mapping_checked': True,
             'material_slots': 4, 'material_triangles': material_triangles}
 

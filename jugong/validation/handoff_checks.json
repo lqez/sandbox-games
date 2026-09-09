@@ -82,6 +82,24 @@
         ]
       ]
     },
+    "unfolded_base": {
+      "triangles": 10910,
+      "watertight": true,
+      "component_count": 1,
+      "bounds": [
+        [
+          -252.0,
+          0.0,
+          0.0
+        ],
+        [
+          252.0,
+          147.5,
+          1.58
+        ]
+      ]
+    },
+    "unfolded_addressable_layers": 160,
     "default_all_off": true,
     "facade_mapping_checked": true,
     "material_slots": 4,
@@ -94,7 +112,7 @@
   },
   "four_color_3mf": {
     "file": "jugong_10f_four_color.3mf",
-    "sha256": "8f72c6a8e17c42fbafa1701ee793ddfefd976e43da9f74e62cd47ea08e668a52",
+    "sha256": "be481ebe3ffa095138819dda13c6587542503337e77b6e0b5ab593d5dc373556",
     "zip_crc": "pass",
     "unit": "millimeter",
     "material_slots": 4,

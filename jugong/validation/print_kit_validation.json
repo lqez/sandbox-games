@@ -1,0 +1,67 @@
+{
+  "facade_strip": {
+    "file": "jugong_10f_facade_strip.stl",
+    "dimensions_mm": [
+      504.0,
+      147.5,
+      1.58
+    ],
+    "triangles": 10910,
+    "watertight": true,
+    "connected_bodies": 1,
+    "file_bytes": 545584
+  },
+  "facade_strip_3mf": {
+    "file": "jugong_10f_facade_strip_four_color.3mf",
+    "unit": "millimeter",
+    "objects": 1,
+    "triangles": 10910,
+    "material_slots": 4,
+    "material_triangles": {
+      "concrete": 2373,
+      "metal": 7280,
+      "glass": 1227,
+      "accent": 30
+    },
+    "file_bytes": 111395
+  },
+  "roof": {
+    "file": "jugong_10f_roof.stl",
+    "dimensions_mm": [
+      120.0,
+      132.0,
+      2.3
+    ],
+    "triangles": 60,
+    "watertight": true,
+    "connected_bodies": 1,
+    "file_bytes": 3084
+  },
+  "base": {
+    "file": "jugong_10f_base.stl",
+    "dimensions_mm": [
+      120.0,
+      132.0,
+      2.65
+    ],
+    "triangles": 60,
+    "watertight": true,
+    "connected_bodies": 1,
+    "file_bytes": 3084
+  },
+  "panel_order": [
+    "front",
+    "right",
+    "back",
+    "left"
+  ],
+  "panel_widths_mm": [
+    120.0,
+    132.0,
+    120.0,
+    132.0
+  ],
+  "panel_thickness_mm": 1.2,
+  "hinge_skin_mm": 0.45,
+  "miter_clearance_mm": 0.18
+}

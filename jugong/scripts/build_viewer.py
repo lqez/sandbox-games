@@ -17,16 +17,26 @@ def pack(path):
 
 def main():
     manifest=json.loads((LAYER_ROOT/'manifest.json').read_text(encoding='utf-8'))
-    data={'schemaVersion':1,'materials':manifest['materials'],
-          'base':pack(LAYER_ROOT/'base_material.stl'),'households':[]}
+    kit=manifest['printKit']
+    data={'schemaVersion':2,'materials':manifest['materials'],
+          'base':pack(LAYER_ROOT/'base_material.stl'),
+          'unfoldedBase':pack(LAYER_ROOT/kit['base']),
+          'roof':pack(LAYER_ROOT/kit['roof']),'basePart':pack(LAYER_ROOT/kit['basePart']),
+          'printKit':{key:value for key,value in kit.items() if key not in ('base','roof','basePart')},
+          'households':[]}
     for household in manifest['households']:
         item={key:household[key] for key in
               ('id','floor','line','estimated_unit','position','facade','unit_type')}
         item['meshes']={}
+        item['unfolded_meshes']={}
         for key,info in household['meshes'].items():
             packed=pack(LAYER_ROOT/info['file'])
             packed['solid_count']=info['solid_count']
             item['meshes'][key]=packed
+        for key,info in household['unfolded_meshes'].items():
+            packed=pack(LAYER_ROOT/info['file'])
+            packed['solid_count']=info['solid_count']
+            item['unfolded_meshes'][key]=packed
         data['households'].append(item)
     assert len(data['households'])==40
     template = (ROOT / 'viewer/viewer_template.html').read_text(encoding='utf-8')

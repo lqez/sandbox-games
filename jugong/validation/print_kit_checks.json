@@ -1,0 +1,109 @@
+{
+  "facade_strip": {
+    "file": "jugong_10f_facade_strip.stl",
+    "dimensions_mm": [
+      504.0,
+      147.5,
+      1.58
+    ],
+    "triangles": 10910,
+    "volume_mm3": 93946.44,
+    "watertight": true,
+    "winding_consistent": true,
+    "positive_volume": true,
+    "connected_bodies": 1
+  },
+  "roof": {
+    "file": "jugong_10f_roof.stl",
+    "dimensions_mm": [
+      120.0,
+      132.0,
+      2.3
+    ],
+    "triangles": 60,
+    "volume_mm3": 25756.273,
+    "watertight": true,
+    "winding_consistent": true,
+    "positive_volume": true,
+    "connected_bodies": 1
+  },
+  "base": {
+    "file": "jugong_10f_base.stl",
+    "dimensions_mm": [
+      120.0,
+      132.0,
+      2.65
+    ],
+    "triangles": 60,
+    "volume_mm3": 31993.3,
+    "watertight": true,
+    "winding_consistent": true,
+    "positive_volume": true,
+    "connected_bodies": 1
+  },
+  "panel_order_exterior_view": [
+    "front",
+    "right",
+    "back",
+    "left"
+  ],
+  "panel_widths_mm": [
+    120.0,
+    132.0,
+    120.0,
+    132.0
+  ],
+  "assembled_outer_xy_mm": [
+    120.0,
+    132.0
+  ],
+  "folds": 3,
+  "closing_seam": "complementary 45-degree miter, captured by roof/base locating rims",
+  "panel_thickness_mm": 1.2,
+  "hinge_skin_mm": 0.45,
+  "miter_clearance_mm": 0.18,
+  "dong_labels": {
+    "302": {
+      "z_base_mm": 44.0,
+      "dimensions_mm": [
+        1.76,
+        20.0,
+        10.0
+      ],
+      "project_glyph": true,
+      "emboss_depth_mm": 0.62
+    },
+    "324": {
+      "z_base_mm": 39.5,
+      "dimensions_mm": [
+        1.76,
+        20.0,
+        10.0
+      ],
+      "project_glyph": true,
+      "emboss_depth_mm": 0.62
+    },
+    "420": {
+      "z_base_mm": 25.5,
+      "dimensions_mm": [
+        1.76,
+        20.0,
+        10.0
+      ],
+      "project_glyph": true,
+      "emboss_depth_mm": 0.62
+    },
+    "123-1": {
+      "z_base_mm": 39.5,
+      "dimensions_mm": [
+        1.76,
+        20.0,
+        10.0
+      ],
+      "project_glyph": true,
+      "emboss_depth_mm": 0.62
+    }
+  },
+  "flat_on_print_bed": true,
+  "manufacturing_note": "504 mm strip exceeds common 220-256 mm beds; continuous print requires a large-format bed."
+}

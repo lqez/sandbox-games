@@ -20,6 +20,24 @@
         ]
       ]
     },
+    "unfolded_base": {
+      "triangles": 10910,
+      "watertight": true,
+      "component_count": 1,
+      "bounds": [
+        [
+          -252.0,
+          0.0,
+          0.0
+        ],
+        [
+          252.0,
+          147.5,
+          1.58
+        ]
+      ]
+    },
+    "unfolded_addressable_layers": 160,
     "default_all_off": true,
     "facade_mapping_checked": true,
     "material_slots": 4,
@@ -54,10 +72,10 @@
         132.0,
         174.2
       ],
-      "triangles": 85414,
+      "triangles": 85576,
       "watertight": true,
       "connected_bodies": 1,
-      "file_bytes": 4270784
+      "file_bytes": 4278884
     },
     {
       "case": "different_floor_line",
@@ -68,10 +86,10 @@
         132.0,
         174.2
       ],
-      "triangles": 86290,
+      "triangles": 86462,
       "watertight": true,
       "connected_bodies": 1,
-      "file_bytes": 4314584
+      "file_bytes": 4323184
     },
     {
       "case": "floor_07_partial",
@@ -82,10 +100,10 @@
         132.0,
         174.2
       ],
-      "triangles": 86448,
+      "triangles": 86596,
       "watertight": true,
       "connected_bodies": 1,
-      "file_bytes": 4322484
+      "file_bytes": 4329884
     }
   ],
   "dong_validation": {
