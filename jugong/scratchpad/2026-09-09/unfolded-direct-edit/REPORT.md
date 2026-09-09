@@ -37,3 +37,11 @@ Orca 내장 브라우저에서 완성형 40개와 전개형 40개의 프록시 �
 ## 남은 제조 한계
 
 504 mm 연속 스트립은 일반적인 220~256 mm 베드를 초과한다. 사용자의 “한 장 연속 출력” 조건을 지킨 결과라 대형 베드가 필요하며, 보통 장비용 분할판은 이번 산출물에 넣지 않았다. 0.45 mm 연결막은 TPU 단회 접힘을 우선 가정한다. PLA/PETG와 네 재료 동시 출력은 본체 전에 V홈 쿠폰으로 파단·백화·실제 마이터 간극을 확인해야 하며, 이 물성 검증은 메시 검증으로 대체할 수 없다.
+
+## 커밋과 배포
+
+- 기능 커밋 `43e4d7e` (`둔촌주공 전개형과 3D 세대 직접 편집 추가`)을 `origin/main`에 fast-forward push했다.
+- GitHub Pages `pages build and deployment` 실행 `34329386633`의 build/report/deploy가 모두 성공했다.
+- 공개 URL `https://lqez.github.io/sandbox-games/jugong/dist/dunchon_jugong_viewer.html`에서 전개 토글, 직접 세대 선택, 전개 3MF 버튼을 확인했다.
+- 공개 전개 STL과 4색 3MF의 HTTP 200/MIME/바이트를 확인했고 SHA-256은 로컬과 각각 `04ba3551…` / `3006d835…`로 일치했다.
+- 공개 WebGL 페이지에서 `420`, `03-D`, `layout=unfolded` URL이 복원됐고 전개 3MF Blob 994,602 bytes, 콘솔 메시 0건을 확인했다.
