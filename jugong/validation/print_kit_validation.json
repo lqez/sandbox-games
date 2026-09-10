@@ -6,24 +6,24 @@
       147.5,
       1.58
     ],
-    "triangles": 10910,
+    "triangles": 13678,
     "watertight": true,
     "connected_bodies": 1,
-    "file_bytes": 545584
+    "file_bytes": 683984
   },
   "facade_strip_3mf": {
     "file": "jugong_10f_facade_strip_four_color.3mf",
     "unit": "millimeter",
     "objects": 1,
-    "triangles": 10910,
+    "triangles": 13678,
     "material_slots": 4,
     "material_triangles": {
-      "concrete": 2373,
-      "metal": 7280,
-      "glass": 1227,
+      "concrete": 3378,
+      "metal": 8294,
+      "glass": 1976,
       "accent": 30
     },
-    "file_bytes": 111395
+    "file_bytes": 140227
   },
   "roof": {
     "file": "jugong_10f_roof.stl",

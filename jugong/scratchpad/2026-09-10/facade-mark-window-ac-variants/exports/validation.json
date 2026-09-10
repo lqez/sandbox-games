@@ -1,0 +1,220 @@
+[
+  {
+    "seed": 0,
+    "counts": {
+      "sash": {
+        "none": 6,
+        "partial": 8,
+        "full": 26
+      },
+      "ac": {
+        "none": 27,
+        "bracket": 1,
+        "unit": 12
+      },
+      "sashVariant": {
+        "two": 12,
+        "three": 15,
+        "four": 5,
+        "transom": 8
+      },
+      "frameFinish": {
+        "metal": 23,
+        "light": 11,
+        "dark": 6
+      },
+      "smallWindow": {
+        "none": 18,
+        "boxed": 7,
+        "roof": 12,
+        "transom": 3
+      },
+      "acPosition": {
+        "bedroom": 20,
+        "corner": 8,
+        "small_rail": 4,
+        "small_wall": 6,
+        "small_top": 2
+      }
+    },
+    "folded": {
+      "file": "seed-0.stl",
+      "dimensions_mm": [
+        120.0,
+        132.0,
+        174.2
+      ],
+      "triangles": 137050,
+      "watertight": true,
+      "connected_bodies": 1,
+      "file_bytes": 6852584
+    },
+    "unfolded": {
+      "file": "seed-0-facade.stl",
+      "dimensions_mm": [
+        504.0,
+        147.5,
+        2.35
+      ],
+      "triangles": 30186,
+      "watertight": true,
+      "connected_bodies": 1,
+      "file_bytes": 1509384
+    },
+    "explicit_override": true
+  },
+  {
+    "seed": 324,
+    "counts": {
+      "sash": {
+        "none": 7,
+        "partial": 8,
+        "full": 25
+      },
+      "ac": {
+        "none": 21,
+        "bracket": 1,
+        "unit": 18
+      },
+      "sashVariant": {
+        "two": 9,
+        "three": 15,
+        "four": 10,
+        "transom": 6
+      },
+      "frameFinish": {
+        "metal": 21,
+        "light": 14,
+        "dark": 5
+      },
+      "smallWindow": {
+        "none": 19,
+        "boxed": 9,
+        "roof": 9,
+        "transom": 3
+      },
+      "acPosition": {
+        "bedroom": 23,
+        "corner": 6,
+        "small_rail": 1,
+        "small_wall": 6,
+        "small_top": 4
+      }
+    },
+    "folded": {
+      "file": "seed-324.stl",
+      "dimensions_mm": [
+        120.0,
+        132.0,
+        174.2
+      ],
+      "triangles": 138652,
+      "watertight": true,
+      "connected_bodies": 1,
+      "file_bytes": 6932684
+    },
+    "unfolded": {
+      "file": "seed-324-facade.stl",
+      "dimensions_mm": [
+        504.0,
+        147.5,
+        2.35
+      ],
+      "triangles": 30758,
+      "watertight": true,
+      "connected_bodies": 1,
+      "file_bytes": 1537984
+    },
+    "explicit_override": true
+  },
+  {
+    "seed": 20260910,
+    "counts": {
+      "sash": {
+        "none": 5,
+        "partial": 5,
+        "full": 30
+      },
+      "ac": {
+        "none": 23,
+        "bracket": 3,
+        "unit": 14
+      },
+      "sashVariant": {
+        "two": 8,
+        "three": 20,
+        "four": 6,
+        "transom": 6
+      },
+      "frameFinish": {
+        "metal": 23,
+        "light": 10,
+        "dark": 7
+      },
+      "smallWindow": {
+        "none": 16,
+        "boxed": 12,
+        "roof": 11,
+        "transom": 1
+      },
+      "acPosition": {
+        "bedroom": 17,
+        "corner": 12,
+        "small_rail": 5,
+        "small_wall": 4,
+        "small_top": 2
+      }
+    },
+    "folded": {
+      "file": "seed-20260910.stl",
+      "dimensions_mm": [
+        120.0,
+        132.0,
+        174.2
+      ],
+      "triangles": 141480,
+      "watertight": true,
+      "connected_bodies": 1,
+      "file_bytes": 7074084
+    },
+    "unfolded": {
+      "file": "seed-20260910-facade.stl",
+      "dimensions_mm": [
+        504.0,
+        147.5,
+        2.35
+      ],
+      "triangles": 31598,
+      "watertight": true,
+      "connected_bodies": 1,
+      "file_bytes": 1579984
+    },
+    "explicit_override": true
+  },
+  {
+    "sweep": {
+      "file": "variant-sweep.stl",
+      "dimensions_mm": [
+        120.0,
+        132.0,
+        174.2
+      ],
+      "triangles": 173318,
+      "watertight": true,
+      "connected_bodies": 1,
+      "file_bytes": 8665984
+    },
+    "flat": {
+      "file": "variant-sweep-facade.stl",
+      "dimensions_mm": [
+        504.0,
+        147.5,
+        2.35
+      ],
+      "triangles": 40242,
+      "watertight": true,
+      "connected_bodies": 1,
+      "file_bytes": 2012184
+    }
+  }
+]

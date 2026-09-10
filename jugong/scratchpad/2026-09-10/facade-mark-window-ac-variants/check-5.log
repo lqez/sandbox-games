@@ -1,0 +1,3 @@
+Base: 1938 solids, 290 recesses; 40 households, option solids {'sash_partial': 744, 'sash_full': 1000, 'ac_bracket': 280, 'ac_unit': 200}.
+Base: 1938 solids, 290 recesses; 40 households, option solids {'sash_partial': 744, 'sash_full': 1000, 'ac_bracket': 280, 'ac_unit': 200}.
+PASS: seeds, overrides, legacy configuration, every variant, folded and flat fused exports

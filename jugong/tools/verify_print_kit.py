@@ -52,7 +52,7 @@ def main() -> None:
         assert mesh.is_watertight and mesh.is_volume and len(mesh.split()) == 1
         labels[dong] = {'z_base_mm': model.dong_label_position(dong),
                         'dimensions_mm': np.round(mesh.extents, 3).tolist(),
-                        'project_glyph': True, 'emboss_depth_mm': .62}
+                        'project_glyph': True, 'emboss_depth_mm': .18}
     report = {
         'facade_strip': facade,
         'roof': roof,

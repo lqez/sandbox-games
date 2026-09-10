@@ -1,0 +1,66 @@
+[
+  {
+    "file": "browser-current.3mf",
+    "sha256": "a1e55f396a5816077a670dc58d0c7970d39469dc678ec54694a4ca7c8271cd6f",
+    "zip_crc": "pass",
+    "unit": "millimeter",
+    "material_slots": 4,
+    "palette": [
+      {
+        "name": "노후 콘크리트·도장 외벽",
+        "color": "#C5C1B2"
+      },
+      {
+        "name": "창호·난간 금속",
+        "color": "#E1E4DF"
+      },
+      {
+        "name": "유리·어두운 개구부",
+        "color": "#4F7397"
+      },
+      {
+        "name": "출입구·옥상·후대 부착물",
+        "color": "#454C4F"
+      }
+    ],
+    "material_triangles": {
+      "0": 51625,
+      "1": 79904,
+      "2": 1625,
+      "3": 11468
+    },
+    "material_surface_area_mm2": {
+      "0": 142870.01,
+      "1": 33460.96,
+      "2": 10826.46,
+      "3": 9127.55
+    },
+    "mesh_objects": [
+      {
+        "id": 2,
+        "name": "four-material fused configuration",
+        "triangles": 144622,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          120.0,
+          132.0,
+          174.2
+        ]
+      }
+    ],
+    "all_triangles_have_valid_material": true,
+    "empty_shells": 0,
+    "duplicate_shells": 0,
+    "assembly_policy": "single fused watertight volume",
+    "print_limits": {
+      "default_scale": "1:200",
+      "minimum_colored_frame_mm": 0.45,
+      "minimum_relief_width_mm": 3.8,
+      "minimum_relief_depth_mm": 0.4,
+      "recommended_fdm_nozzle_mm": ".25-.4",
+      "recommended_layer_height_mm": "<=.2"
+    }
+  }
+]

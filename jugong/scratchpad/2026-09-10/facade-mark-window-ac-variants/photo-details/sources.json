@@ -1,0 +1,192 @@
+[
+  {
+    "file": "/Users/lqez/Desktop/Screenshot 2026-09-10 at 17.51.41.png",
+    "size": [
+      1712,
+      1098
+    ],
+    "sha256": "3abaef35f00d9da233dd4677a7af835ec3eb530ce71357489efbdc9091549aa9",
+    "crops": {
+      "mark": {
+        "box": [
+          1130,
+          231,
+          1301,
+          351
+        ],
+        "file": "17.51.41-mark.png",
+        "scale": 3
+      },
+      "number": {
+        "box": [
+          1267,
+          769,
+          1507,
+          955
+        ],
+        "file": "17.51.41-number.png",
+        "scale": 3
+      },
+      "windows": {
+        "box": [
+          257,
+          307,
+          788,
+          878
+        ],
+        "file": "17.51.41-windows.png",
+        "scale": 3
+      }
+    }
+  },
+  {
+    "file": "/Users/lqez/Desktop/Screenshot 2026-09-10 at 17.51.37.png",
+    "size": [
+      1924,
+      1302
+    ],
+    "sha256": "2d076c3018c06d00090c625c2b76ab98279b6206117962070caf10fac49f6fad",
+    "crops": {
+      "number": {
+        "box": [
+          1481,
+          234,
+          1693,
+          417
+        ],
+        "file": "17.51.37-number.png",
+        "scale": 3
+      },
+      "small-room": {
+        "box": [
+          1097,
+          169,
+          1424,
+          586
+        ],
+        "file": "17.51.37-small-room.png",
+        "scale": 3
+      },
+      "ac": {
+        "box": [
+          519,
+          391,
+          693,
+          599
+        ],
+        "file": "17.51.37-ac.png",
+        "scale": 3
+      }
+    }
+  },
+  {
+    "file": "/Users/lqez/Desktop/Screenshot 2026-09-10 at 17.51.23.png",
+    "size": [
+      1112,
+      1702
+    ],
+    "sha256": "786d51fcfe41d646d46108cae12b0b7e4555e0d80ad4e6d625034627f612a0e6",
+    "crops": {
+      "mark": {
+        "box": [
+          267,
+          221,
+          389,
+          357
+        ],
+        "file": "17.51.23-mark.png",
+        "scale": 3
+      },
+      "small-ac": {
+        "box": [
+          434,
+          477,
+          600,
+          681
+        ],
+        "file": "17.51.23-small-ac.png",
+        "scale": 3
+      },
+      "windows": {
+        "box": [
+          756,
+          732,
+          967,
+          1106
+        ],
+        "file": "17.51.23-windows.png",
+        "scale": 3
+      }
+    }
+  },
+  {
+    "file": "/Users/lqez/Desktop/Screenshot 2026-09-10 at 17.51.18.png",
+    "size": [
+      1046,
+      1150
+    ],
+    "sha256": "7164d1e3c678ed9d988167ea84c808dc580ba3313f3a0d97383286fa4f01f261",
+    "crops": {
+      "windows": {
+        "box": [
+          293,
+          253,
+          722,
+          656
+        ],
+        "file": "17.51.18-windows.png",
+        "scale": 3
+      },
+      "small-ac": {
+        "box": [
+          188,
+          621,
+          314,
+          851
+        ],
+        "file": "17.51.18-small-ac.png",
+        "scale": 3
+      }
+    }
+  },
+  {
+    "file": "/Users/lqez/Desktop/Screenshot 2026-09-10 at 17.51.01.png",
+    "size": [
+      1118,
+      1698
+    ],
+    "sha256": "2c0adb4918ed21cdb09f72e70155b7c402f791277b7c31ca80342b9d0d6e60a2",
+    "crops": {
+      "mark": {
+        "box": [
+          861,
+          170,
+          984,
+          272
+        ],
+        "file": "17.51.01-mark.png",
+        "scale": 3
+      },
+      "small-roofs": {
+        "box": [
+          716,
+          492,
+          995,
+          1138
+        ],
+        "file": "17.51.01-small-roofs.png",
+        "scale": 3
+      },
+      "ac": {
+        "box": [
+          682,
+          985,
+          805,
+          1155
+        ],
+        "file": "17.51.01-ac.png",
+        "scale": 3
+      }
+    }
+  }
+]

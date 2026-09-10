@@ -40,6 +40,8 @@ from xml.sax.saxutils import escape, quoteattr
 import numpy as np
 import manifold3d as md
 import trimesh
+from facade_variants import (CATALOG, DEFAULTS, LAYER_NAMES, SASH_PROFILES,
+    normalize_seed, resolve_state, selected_layers)
 
 FLOORS=10
 BASE=2.4
@@ -59,10 +61,10 @@ PANEL_ORDER=('front','right','back','left')
 # Four fixed print-material slots.  Colors may be replaced by the user, but
 # the slot count and the geometric assignment stay stable for slicers.
 MATERIALS=(
-    dict(key='concrete',name='노후 콘크리트·도장 외벽',color='#B7B09C',roughness=.88),
-    dict(key='metal',name='창호·난간 금속',color='#6E7773',roughness=.58),
-    dict(key='glass',name='유리·어두운 개구부',color='#334348',roughness=.28),
-    dict(key='accent',name='출입구·옥상·후대 부착물',color='#8A4F37',roughness=.72),
+    dict(key='concrete',name='노후 콘크리트·도장 외벽',color='#C5C1B2',roughness=.88),
+    dict(key='metal',name='창호·난간 금속',color='#E1E4DF',roughness=.58),
+    dict(key='glass',name='유리·어두운 개구부',color='#4F7397',roughness=.28),
+    dict(key='accent',name='출입구·옥상·후대 부착물',color='#454C4F',roughness=.72),
 )
 MATERIAL_INDEX={item['key']:i for i,item in enumerate(MATERIALS)}
 DEFAULT_PALETTE=tuple(item['color'] for item in MATERIALS)
@@ -129,7 +131,7 @@ class Facade:
         return self.transform(md.Manifold.hull_points(p))
 
 
-def frame(parts,fac,u0,u1,z0,z1,depth,panes=2,outer=.65,inner=.45,glaze=True):
+def frame(parts,fac,u0,u1,z0,z1,depth,panes=2,outer=.65,inner=.45,glaze=True,ratios=None):
     """Outer jamb + separate sliding sash perimeter + inset backing per pane."""
     b=fac.b
     # Main perimeter projects farther than the individual sliding leaves.
@@ -139,9 +141,10 @@ def frame(parts,fac,u0,u1,z0,z1,depth,panes=2,outer=.65,inner=.45,glaze=True):
         add_material(parts,b(u0,u1,depth-.95,depth,e,f),'metal')
     left=u0+outer-.12;right=u1-outer+.12
     bottom=z0+outer-.12;top=z1-outer+.12
-    w=(right-left)/panes
-    for i in range(panes):
-        a=left+i*w-.04;c=left+(i+1)*w+.04
+    ratios=ratios or [1]*panes
+    breaks=np.concatenate(([0],np.cumsum(ratios)/sum(ratios)))
+    for i in range(len(ratios)):
+        a=left+breaks[i]*(right-left)-.04;c=left+breaks[i+1]*(right-left)+.04
         # Alternating tracks make the individual overlapping leaves legible.
         p=depth-.16-(.27 if i%2 else 0)
         for x,y in ((a,a+inner),(c-inner,c)):
@@ -222,6 +225,7 @@ def balcony(parts,cuts,households,fac,start,line):
         frame(sash_full,fac,b-.06,split+.12,z+4.48,top-.79,5.99,panes=2,glaze=False)
         frame(sash_partial,fac,split+.12,c-.12,z+1.82,top-.79,7.49,panes=(3,4,3,4,3,3,4,3,4,3)[i],glaze=False)
         # Enclosure end return: two individual panes across the balcony depth.
+        full_frame_count=len(sash_full)
         for d0,d1 in ((.10,3.50),(3.50,7.45)):
             sash_full.append(fac.b(c-.56,c+.02,d0,d1,z+1.82,z+2.36))
             sash_full.append(fac.b(c-.56,c+.02,d0,d1,top-1.35,top-.79))
@@ -247,9 +251,55 @@ def balcony(parts,cuts,households,fac,start,line):
         ac_unit.append(fac.b(l+.18,r-.18,8.34,10.55,zz+.20,zz+3.48))
         for u in np.linspace(l+.72,r-.72,4):
             ac_unit.append(fac.b(u-.12,u+.12,10.48,10.72,zz+.62,zz+3.05))
+        for variant,(ratios,thickness,transom) in SASH_PROFILES.items():
+            living=household[f'sash_partial__{variant}'];bed=household[f'sash_full__{variant}']
+            profile_frame(living,fac,split+.12,c-.12,z+1.82,top-.79,7.49,ratios,thickness,transom)
+            profile_frame(bed,fac,b-.06,split+.12,z+4.48,top-.79,6.20,(1,1,1) if variant=='three' else ratios if variant=='four' else (1,1),thickness,False)
+            bed.extend(sash_full[full_frame_count:])
+        # Photographed main-wall and corner racks; separate position layers.
+        ac_attachment(household,'bedroom',fac,b+4.3,5.85,z+2.2)
+        ac_attachment(household,'corner',fac,split+2.6,6.98,z+1.0)
     # Roof cover follows both balcony depths, below the main wall parapet.
     parts.append(fac.b(a-.12,split+.14,-.18,6.50,ROOF-.87,ROOF+.12))
     parts.append(fac.b(split-.14,c+.18,-.18,7.98,ROOF-.87,ROOF+.12))
+
+
+def profile_frame(parts,fac,a,c,z0,z1,depth,ratios,thickness,transom):
+    frame(parts,fac,a,c,z0,z1,depth,outer=thickness,inner=.45,glaze=False,ratios=ratios)
+    if transom:
+        parts.append(fac.b(a,c,depth-.75,depth+.03,z0+2.5,z0+3.05))
+
+
+def small_attachments(household,fac,u,z,*,narrow=None,ac=True):
+    for variant in ('boxed','roof','transom'):
+        target=household[f'small__{variant}'];a=u-4.0;c=u+4.0
+        profile_frame(target,fac,a,c,z+5.10,z+11.55,3.15,(1,1),.60,variant=='transom')
+        for x in (a,c-.55):
+            target.append(fac.b(x,x+.55,-.15,3.2,z+4.2,z+5.70))
+            target.append(fac.b(x,x+.55,-.15,3.2,z+11.0,z+11.55))
+        if variant!='boxed':
+            target.append(fac.hull([(x,d,h) for x in (a-.4,c+.4) for d,h in
+                ((-.2,z+12.0),(3.75,z+11.6),(3.75,z+12.08),(-.2,z+12.48))]))
+    if ac:
+        ac_attachment(household,'small_rail',fac,u,-.12,z+4.4,reach=2.0)
+        ac_attachment(household,'small_wall',fac,narrow if narrow is not None else u,-.12,z+2.0,reach=1.7)
+        ac_attachment(household,'small_top',fac,u,-.12,z+11.0,reach=1.7,height=2.35)
+
+
+def ac_attachment(household,position,fac,u,anchor,zz,reach=2.5,height=2.8):
+    rack=household[f'ac_bracket__{position}'];unit=household[f'ac_unit__{position}']
+    l=u-2.3;r=u+2.3;front=anchor+reach
+    for x in (l,r-.55):
+        rack.append(fac.b(x,x+.55,anchor,anchor+.65,zz-.8,zz+1.5))
+        rack.append(fac.b(x,x+.55,anchor,front+.3,zz-.05,zz+.50))
+        rack.append(fac.hull([(xx,d,h) for xx in (x,x+.55) for d,h in
+            ((anchor,zz-.8),(front,zz+.0),(front,zz+.5),(anchor,zz-.25))]))
+    rack.append(fac.b(l,r,front-.2,front+.35,zz-.05,zz+.5))
+    unit.append(fac.b(l+.1,r-.1,front-1.5,front+.3,zz+.4,zz+.4+height))
+    # Raised fan ring, connected to the casing, survives at 1:200 scale.
+    ring=md.CrossSection.circle(.95,24)-md.CrossSection.circle(.60,24)
+    fan=md.Manifold.extrude(ring,.25).rotate((90,0,0)).translate((u-.35,fac.face-front-.12,zz+.4+height/2))
+    unit.append(fac.transform(fan))
 
 
 def build_layers():
@@ -264,7 +314,7 @@ def build_layers():
             key=f'{floor:02d}-{line}'
             households[key]=dict(id=key,floor=floor,line=line,
                 estimated_unit=str(floor*100+ord(line)-64),
-                **info,sash_partial=[],sash_full=[],ac_bracket=[],ac_unit=[])
+                **info,**{name:[] for name in LAYER_NAMES})
     pts=[]
     for z,w,d in ((0,120,132),(1.65,120,132),(BASE,118.6,130.6)):
         for x in (-w/2,w/2):
@@ -277,7 +327,12 @@ def build_layers():
         ff=Facade(FRONT,0,mirror)
         sf=Facade(-51.5,90,mirror)
         sa=Facade(-44,90,mirror)
-        for z in LEVELS:
+        for i,z in enumerate(LEVELS):
+            front_house=households[f'{i+1:02d}-{"A" if mirror else "B"}']
+            side_house=households[f'{i+1:02d}-{"C" if mirror else "D"}']
+            small_attachments(front_house,ff,44.85,z,ac=False)
+            small_attachments(front_house,sf,-26.50,z,narrow=-14.90)
+            small_attachments(side_house,sa,46.90,z,narrow=46.9)
             juliet(parts,cuts,ff,44.85,z,width=7.9)
             juliet(parts,cuts,sf,-26.50,z,width=7.9)
             wall_window(parts,cuts,sf,-14.90,4.10,z+5.35,h=5.8,panes=2)
@@ -311,9 +366,11 @@ def build_layers():
                 cuts.append(sf.b(u,u+.28,-.25,.10,z+.52,z+13.55))
         # Broad repair fields translate the photographed faded patching and
         # rain streaks into nozzle-safe relief, rather than a fragile bitmap.
-        for floor,u,w,h in ((3,-46.0,4.6,8.0),(6,-41.2,5.4,10.0),(9,-47.5,3.8,7.0)):
+        for floor,u,w,h in ((3,-46.0,4.6,8.0),(6,-41.2,5.4,10.0),(7,-47.5,3.8,7.0)):
             z=LEVELS[floor-1]+2.1
             parts.append(sf.b(u,u+w,-.12,.30,z,z+h))
+    for side in (1,-1):
+        for shape,mat in jugong_mark(side):parts.add(shape,mat)
     # Rear is a continuous facade, with NO large balcony or door stack.
     back=Facade(-REAR,180)
     for z in LEVELS:
@@ -354,7 +411,7 @@ def build_layers():
 def build_base():
     parts,cuts,households=build_layers()
     # Cut structural openings before attaching the original window frames.
-    base=union([subtract(union(parts),cuts)]+parts.window_details).simplify(.00002)
+    base=union([subtract(union(parts),cuts)]+parts.window_details).simplify(.0005)
     return base,households
 
 
@@ -366,7 +423,7 @@ def build_material_base():
     tagged_cuts=[materialized(shape,MATERIAL_INDEX['concrete']) for shape in cuts]
     details=[materialized(shape,MATERIAL_INDEX[material])
              for shape,material in zip(parts.window_details,parts.window_details.materials)]
-    base=union([subtract(union(tagged),tagged_cuts)]+details).simplify(.00002)
+    base=union([subtract(union(tagged),tagged_cuts)]+details).simplify(.0005)
     return base,households
 
 
@@ -410,20 +467,52 @@ DONG_GLYPH_STROKES={
 }
 
 
-def _stroke_polygon(a,b,width=.135):
+def _stroke_polygon(a,b,width=.18):
     """Return a clipped-end quadrilateral around one normalized stroke."""
     ax,ay=a;bx,by=b;dx=bx-ax;dy=by-ay
     length=max((dx*dx+dy*dy)**.5,1e-9);nx=-dy/length*width/2;ny=dx/length*width/2
     return [(ax+nx,ay+ny),(bx+nx,by+ny),(bx-nx,by-ny),(ax-nx,ay-ny)]
 
 
+def _bezier_points(a,b,c,d,steps=12):
+    return [tuple((1-t)**3*a[j]+3*(1-t)**2*t*b[j]+3*(1-t)*t*t*c[j]+t**3*d[j] for j in (0,1)) for t in np.linspace(0,1,steps+1)]
+
+
+def _numeral_path(char):
+    # Rounded bowls and square-cut terminals traced from the 324 detail crop.
+    curves={
+        '3': [((.17,.77),(.17,1.03),(.78,1.03),(.78,.76)),
+              ((.78,.76),(.78,.60),(.69,.53),(.47,.52)),
+              ((.47,.52),(.72,.52),(.80,.42),(.80,.27)),
+              ((.80,.27),(.80,-.025),(.17,-.025),(.17,.24))],
+        '2': [((.17,.77),(.17,1.035),(.80,1.035),(.80,.77)),
+              ((.80,.77),(.80,.55),(.55,.35),(.20,.07))],
+        '0': [((.48,.95),(.17,.95),(.17,.86),(.17,.50)),
+              ((.17,.50),(.17,.13),(.17,.05),(.48,.05)),
+              ((.48,.05),(.79,.05),(.79,.13),(.79,.50)),
+              ((.79,.50),(.79,.86),(.79,.95),(.48,.95))],
+    }
+    if char not in curves:return None
+    path=[]
+    for points in curves[char]:path.extend(_bezier_points(*points)[1:] if path else _bezier_points(*points))
+    if char=='2':path.append((.82,.07))
+    return path
+
+
 def _glyph_cross_section(text,height):
     advance=.76;gap=.16;width=max(.01,len(text)*advance+(len(text)-1)*gap)
-    polygons=[]
+    shapes=[]
     for index,char in enumerate(text):
-        for a,b in DONG_GLYPH_STROKES[char]:
+        path=_numeral_path(char)
+        strokes=list(zip(path,path[1:])) if path else DONG_GLYPH_STROKES[char]
+        polygons=[]
+        for a,b in strokes:
             polygons.append([((x+index*(advance+gap))*height,y*height) for x,y in _stroke_polygon(a,b)])
-    return md.CrossSection(polygons,md.FillRule.NonZero),width*height
+        shapes.append(md.CrossSection(polygons,md.FillRule.NonZero))
+        # Interior round joins only: the photographed terminals are flat cuts.
+        joints=path[1:-1] if path else [b for a,b in strokes[:-1]]
+        for x,y in joints:shapes.append(md.CrossSection.circle(.09*height,16).translate(((x+index*(advance+gap))*height,y*height)))
+    return md.CrossSection.batch_boolean(shapes,md.OpType.Add),width*height
 
 
 def _extrude_x(section,depth):
@@ -432,10 +521,24 @@ def _extrude_x(section,depth):
     return md.Manifold.extrude(section,depth).transform(((0,0,1,0),(1,0,0,0),(0,1,0,0)))
 
 
+def jugong_symbol():
+    oval=md.CrossSection.circle(1,64).scale((6.6,4.4))
+    house=md.CrossSection([[(-5.0,.35),(0,3.35),(5.0,.35),(3.05,.35),(3.05,-2.5),
+        (1.05,-2.5),(1.05,1.15),(.45,1.85),(-.45,1.85),(-1.05,1.15),(-1.05,-2.5),(-3.05,-2.5),(-3.05,.35)]],md.FillRule.NonZero)
+    return oval-house
+
+
+def jugong_mark(side=1):
+    panel=box(51.35,51.68,-48.8,-33.6,LEVELS[8]+.9,LEVELS[8]+11.6)
+    symbol=_extrude_x(jugong_symbol(),.18).translate((51.64,-41.2,LEVELS[8]+6.25))
+    shapes=[(panel,'metal'),(symbol,'glass')]
+    return shapes if side==1 else [(shape.mirror((1,0,0)),mat) for shape,mat in shapes]
+
+
 def dong_label_position(value):
     """Photo-based gable location; compass side remains a documented inference."""
     text=normalize_dong(value)
-    return {'302':44.0,'324':39.5,'420':25.5}.get(text,39.5)
+    return {'302':44.0,'303':48.5,'304':48.5,'324':48.5,'420':25.5}.get(text,48.5)
 
 
 def normalize_dong(value, *, allow_empty=True):
@@ -456,14 +559,14 @@ def dong_label(value):
     text=normalize_dong(value)
     if not text:return None
     glyph,glyph_width=_glyph_cross_section(text,7.0)
-    if glyph_width>17.4:
-        glyph=glyph.scale((17.4/glyph_width,1));glyph_width=17.4
+    if glyph_width>13.0:
+        glyph=glyph.scale((13.0/glyph_width,1));glyph_width=13.0
     width=glyph_width+2.6;z0=dong_label_position(text);y0=-49.0
-    pieces=[box(50.80,52.02,y0,y0+width,z0,z0+10.0)]
+    pieces=[materialized(box(51.35,51.68,y0,y0+width,z0,z0+10.0),1)]
     # Convert section horizontal coordinate to world Y and vertical to world Z.
-    raised=_extrude_x(glyph,.62).translate((51.94,y0+1.3,z0+.9))
-    pieces.append(raised)
-    return union(pieces).simplify(.00002)
+    raised=_extrude_x(glyph,.18).translate((51.64,y0+1.3,z0+.9))
+    pieces.append(materialized(raised,3))
+    return union(pieces).simplify(.0005)
 
 
 def normalize_palette(value=None):
@@ -475,8 +578,8 @@ def normalize_palette(value=None):
 
 
 def default_configuration(dong=''):
-    return dict(schemaVersion=1,dong=normalize_dong(dong),palette=normalize_palette(),households={
-        key:dict(sash='none',ac='none') for key in sorted_household_ids()
+    return dict(schemaVersion=1,dong=normalize_dong(dong),palette=normalize_palette(),seed=None,households={
+        key:dict(**DEFAULTS,explicit=[]) for key in sorted_household_ids()
     })
 
 
@@ -489,6 +592,7 @@ def normalize_configuration(raw):
         raise ValueError('configuration schemaVersion must be 1')
     result=default_configuration(raw.get('dong',''))
     result['palette']=normalize_palette(raw.get('palette'))
+    result['seed']=normalize_seed(raw.get('seed'))
     states=raw.get('households')
     if not isinstance(states,dict) or set(states)!=set(result['households']):
         raise ValueError('configuration must contain exactly the 40 household ids')
@@ -496,39 +600,30 @@ def normalize_configuration(raw):
         state=states[key]
         if not isinstance(state,dict) or state.get('sash') not in SASH_STATES or state.get('ac') not in AC_STATES:
             raise ValueError(f'invalid state for {key}')
-        result['households'][key]=dict(sash=state['sash'],ac=state['ac'])
+        result['households'][key]=resolve_state(result['seed'],key,state)
     return result
 
 
 def configuration_parts(base,households,config):
-    parts=[base]
+    config=normalize_configuration(config);parts=[base]
     for key,state in config['households'].items():
-        layer=households[key]
-        if state['sash'] in ('partial','full'):parts.extend(layer['sash_partial'])
-        if state['sash']=='full':parts.extend(layer['sash_full'])
-        if state['ac'] in ('bracket','unit'):parts.extend(layer['ac_bracket'])
-        if state['ac']=='unit':parts.extend(layer['ac_unit'])
+        for name,_mat in selected_layers(state):parts.extend(households[key][name])
     label=dong_label(config['dong'])
     if label is not None:parts.append(label)
     return parts
 
 
 def configuration_material_shape(base,households,config):
-    """Fuse a selected configuration while preserving four face properties."""
-    parts=[base]
+    return _configuration_colored(base,households,config,dong_label)
+
+
+def _configuration_colored(base,households,config,label_builder):
+    config=normalize_configuration(config);parts=[base]
     for key,state in config['households'].items():
-        layer=households[key]
-        if state['sash'] in ('partial','full'):
-            parts.extend(materialized(shape,MATERIAL_INDEX['metal']) for shape in layer['sash_partial'])
-        if state['sash']=='full':
-            parts.extend(materialized(shape,MATERIAL_INDEX['metal']) for shape in layer['sash_full'])
-        if state['ac'] in ('bracket','unit'):
-            parts.extend(materialized(shape,MATERIAL_INDEX['accent']) for shape in layer['ac_bracket'])
-        if state['ac']=='unit':
-            parts.extend(materialized(shape,MATERIAL_INDEX['accent']) for shape in layer['ac_unit'])
-    label=dong_label(config['dong'])
-    if label is not None:parts.append(materialized(label,MATERIAL_INDEX['accent']))
-    return union(parts).simplify(.00003)
+        for name,mat in selected_layers(state):parts.extend(materialized(shape,mat) for shape in households[key][name])
+    label=label_builder(config['dong'])
+    if label is not None:parts.append(label)
+    return union(parts).simplify(.0005)
 
 
 def _strip_layout():
@@ -576,9 +671,9 @@ def build_unfolded_layers(*, material=True):
         md.Manifold.hull_points(np.asarray([(x1,0,0),(x1-bevel,0,0),(x1,0,PANEL_THICKNESS),
                                             (x1,FACADE_HEIGHT,0),(x1-bevel,FACADE_HEIGHT,0),(x1,FACADE_HEIGHT,PANEL_THICKNESS)])),
     ])
-    substrate=subtract(substrate,grooves).simplify(.00002)
+    substrate=subtract(substrate,grooves).simplify(.0005)
     parts=Solids();parts.add(substrate,'concrete')
-    households={key:{name:[] for name in ('sash_partial','sash_full','ac_bracket','ac_unit')}
+    households={key:{name:[] for name in LAYER_NAMES}
                 for key in sorted_household_ids()}
 
     # Original facade language: concrete balcony aprons, dark openings and
@@ -588,27 +683,39 @@ def build_unfolded_layers(*, material=True):
         y=LEVELS[floor-1]-BASE
         for line,(x0,x1) in {'A':(front[0]+4,front[0]+58),'B':(front[0]+62,front[1]-4)}.items():
             parts.add(box(x0,x1,y,y+2.0,z,PANEL_THICKNESS+.34),'concrete')
-            parts.add(box(x0+3,x1-3,y+4.2,y+11.6,z,PANEL_THICKNESS+.28),'glass')
-            _frame_relief(parts,x0+3,x1-3,y+4.2,y+11.6,z,'metal')
-            for px in np.linspace(x0+4,x1-4,6):parts.add(box(px-.22,px+.22,y+1.7,y+5.1,z,PANEL_THICKNESS+.38),'metal')
+            parts.add(box(x0+3,x1-10,y+4.2,y+11.6,z,PANEL_THICKNESS+.28),'glass')
+            _frame_relief(parts,x0+3,x1-10,y+4.2,y+11.6,z,'metal')
+            for px in np.linspace(x0+4,x1-10,6):parts.add(box(px-.22,px+.22,y+1.7,y+5.1,z,PANEL_THICKNESS+.38),'metal')
+            small_x=x1-6.5
+            parts.add(box(small_x,small_x+5.45,y+5.1,y+11.55,z,PANEL_THICKNESS+.25),'glass')
+            _frame_relief(parts,small_x,small_x+5.45,y+5.1,y+11.55,z,'metal')
+            parts.add(box(small_x-.3,small_x+5.75,y+4.2,y+5.1,z,PANEL_THICKNESS+.36),'concrete')
             _unfolded_option_geometry(households[f'{floor:02d}-{line}'],x0,x1,y,z)
         for line,panel in (('D',right),('C',left)):
             cx=(panel[0]+panel[1])/2;x0=cx-21;x1=cx+21
             parts.add(box(x0,x1,y,y+2.0,z,PANEL_THICKNESS+.34),'concrete')
-            parts.add(box(x0+3,x1-3,y+4.2,y+11.6,z,PANEL_THICKNESS+.28),'glass')
-            _frame_relief(parts,x0+3,x1-3,y+4.2,y+11.6,z,'metal')
+            parts.add(box(x0+3,x1-10,y+4.2,y+11.6,z,PANEL_THICKNESS+.28),'glass')
+            _frame_relief(parts,x0+3,x1-10,y+4.2,y+11.6,z,'metal')
+            small_x=x1-6.5
+            parts.add(box(small_x,small_x+5.45,y+5.1,y+11.55,z,PANEL_THICKNESS+.25),'glass')
+            _frame_relief(parts,small_x,small_x+5.45,y+5.1,y+11.55,z,'metal')
+            parts.add(box(small_x-.3,small_x+5.75,y+4.2,y+5.1,z,PANEL_THICKNESS+.36),'concrete')
             _unfolded_option_geometry(households[f'{floor:02d}-{line}'],x0,x1,y,z)
         for cx in (back[0]+37,back[0]+60,back[0]+83):
             parts.add(box(cx-5,cx+5,y+4.8,y+10.5,z,PANEL_THICKNESS+.25),'glass')
             _frame_relief(parts,cx-5,cx+5,y+4.8,y+10.5,z,'metal')
+    for panel in (right,left):
+        xx=panel[0]+16;yy=LEVELS[8]-BASE+6.25
+        parts.add(box(xx-7.6,xx+7.6,yy-5.35,yy+5.35,z,PANEL_THICKNESS+.18),'metal')
+        parts.add(md.Manifold.extrude(jugong_symbol(),.18).translate((xx,yy,PANEL_THICKNESS+.14)),'glass')
     # Raised seam IDs provide subtle assembly keys without a fifth material.
     for index,x in enumerate(seams,1):
         parts.add(box(x-3.0,x+3.0,FACADE_HEIGHT-7.0,FACADE_HEIGHT-1.0,z,PANEL_THICKNESS+.35),'accent')
     if material:
         tagged=[materialized(shape,MATERIAL_INDEX[m]) for shape,m in zip(parts,parts.materials)]
-        base=union(tagged).simplify(.00002)
+        base=union(tagged).simplify(.0005)
     else:
-        base=union(parts).simplify(.00002)
+        base=union(parts).simplify(.0005)
     return base,households
 
 
@@ -616,10 +723,10 @@ def _unfolded_option_geometry(target,x0,x1,y,z):
     """Create simplified but address-identical raised option layers."""
     mid=(x0+x1)/2
     target['sash_partial'].extend([
-        box(mid,x1-2,y+2.1,y+2.6,z,PANEL_THICKNESS+.48),
-        box(mid,x1-2,y+11.25,y+11.75,z,PANEL_THICKNESS+.48),
+        box(mid,x1-8.5,y+2.1,y+2.6,z,PANEL_THICKNESS+.48),
+        box(mid,x1-8.5,y+11.25,y+11.75,z,PANEL_THICKNESS+.48),
         box(mid,mid+.5,y+2.1,y+11.75,z,PANEL_THICKNESS+.48),
-        box(x1-2.5,x1-2,y+2.1,y+11.75,z,PANEL_THICKNESS+.48)])
+        box(x1-9,x1-8.5,y+2.1,y+11.75,z,PANEL_THICKNESS+.48)])
     target['sash_full'].extend([
         box(x0+2,mid,y+4.0,y+4.5,z,PANEL_THICKNESS+.48),
         box(x0+2,mid,y+11.25,y+11.75,z,PANEL_THICKNESS+.48),
@@ -630,35 +737,40 @@ def _unfolded_option_geometry(target,x0,x1,y,z):
         box(x0+5,x0+5.5,y+2.45,y+5.6,z,PANEL_THICKNESS+.62),
         box(x0+10.5,x0+11,y+2.45,y+5.6,z,PANEL_THICKNESS+.62)])
     target['ac_unit'].append(box(x0+5.4,x0+10.6,y+3.0,y+6.0,z,PANEL_THICKNESS+1.15))
+    for variant,(ratios,thickness,transom) in SASH_PROFILES.items():
+        for name,a,c,bottom in (('sash_partial',mid,x1-8.5,2.1),('sash_full',x0+2,mid,4.0)):
+            out=target[f'{name}__{variant}'];out.extend(target[name])
+            breaks=np.cumsum(ratios)/sum(ratios)
+            for t in breaks[:-1]:
+                xx=a+(c-a)*t;out.append(box(xx-thickness/2,xx+thickness/2,y+bottom,y+11.75,z,PANEL_THICKNESS+.55))
+            if transom and name=='sash_partial':out.append(box(a,c,y+4.6,y+5.15,z,PANEL_THICKNESS+.56))
+    sx=x1-6.5
+    for variant in ('boxed','roof','transom'):
+        out=target[f'small__{variant}']
+        for xx in (sx,sx+2.5,sx+5):out.append(box(xx,xx+.45,y+5.1,y+11.55,z,PANEL_THICKNESS+.65))
+        for yy in (5.1,11.1):out.append(box(sx,sx+5.45,y+yy,y+yy+.45,z,PANEL_THICKNESS+.65))
+        if variant!='boxed':out.append(box(sx-.3,sx+5.8,y+11.47,y+12.15,z,PANEL_THICKNESS+.90))
+        if variant=='transom':out.append(box(sx,sx+5.45,y+7.5,y+8,z,PANEL_THICKNESS+.70))
+    for position,dx,dy in (('bedroom',0,0),('corner',mid-x0-3,-1.2),('small_rail',sx-x0-6,2),('small_wall',sx-x0-12,-.8),('small_top',sx-x0-6,7.5)):
+        for name in ('ac_bracket','ac_unit'):
+            target[f'{name}__{position}']=[shape.translate((dx,dy,0)) for shape in target[name]]
+
 
 
 def unfolded_dong_label(value):
     text=normalize_dong(value)
     if not text:return None
     section,glyph_width=_glyph_cross_section(text,7.0)
-    if glyph_width>17.4:
-        section=section.scale((17.4/glyph_width,1));glyph_width=17.4
+    if glyph_width>13.0:
+        section=section.scale((13.0/glyph_width,1));glyph_width=13.0
     right=_strip_layout()['right'];x0=right[0]+8.0;y0=dong_label_position(text)-BASE
-    plate=box(x0,x0+glyph_width+2.6,y0,y0+10.0,PANEL_THICKNESS-.08,PANEL_THICKNESS+.34)
-    glyph=md.Manifold.extrude(section,.58).translate((x0+1.3,y0+.9,PANEL_THICKNESS+.26))
-    return union([plate,glyph]).simplify(.00002)
+    plate=materialized(box(x0,x0+glyph_width+2.6,y0,y0+10.0,PANEL_THICKNESS-.08,PANEL_THICKNESS+.18),1)
+    glyph=materialized(md.Manifold.extrude(section,.18).translate((x0+1.3,y0+.9,PANEL_THICKNESS+.14)),3)
+    return union([plate,glyph]).simplify(.0005)
 
 
 def configuration_unfolded_material_shape(base,households,config):
-    parts=[base]
-    for key,state in config['households'].items():
-        layer=households[key]
-        if state['sash'] in ('partial','full'):
-            parts.extend(materialized(shape,MATERIAL_INDEX['metal']) for shape in layer['sash_partial'])
-        if state['sash']=='full':
-            parts.extend(materialized(shape,MATERIAL_INDEX['metal']) for shape in layer['sash_full'])
-        if state['ac'] in ('bracket','unit'):
-            parts.extend(materialized(shape,MATERIAL_INDEX['accent']) for shape in layer['ac_bracket'])
-        if state['ac']=='unit':
-            parts.extend(materialized(shape,MATERIAL_INDEX['accent']) for shape in layer['ac_unit'])
-    label=unfolded_dong_label(config['dong'])
-    if label is not None:parts.append(materialized(label,MATERIAL_INDEX['accent']))
-    return union(parts).simplify(.00003)
+    return _configuration_colored(base,households,config,unfolded_dong_label)
 
 
 def build_roof_part():
@@ -666,14 +778,14 @@ def build_roof_part():
     # 0.8 mm raised locating rim fits just inside the folded wall strip.
     rails=[box(-58.9,58.9,-65.0,-63.8,1.50,2.30),box(-58.9,58.9,63.8,65.0,1.50,2.30),
            box(-58.9,-57.7,-63.8,63.8,1.50,2.30),box(57.7,58.9,-63.8,63.8,1.50,2.30)]
-    return union([slab]+rails).simplify(.00002)
+    return union([slab]+rails).simplify(.0005)
 
 
 def build_base_part():
     slab=box(-60,60,-66,66,0,2.0)
     keys=[box(-57.7,57.7,-63.8,-62.8,1.9,2.65),box(-57.7,57.7,62.8,63.8,1.9,2.65),
           box(-57.7,-56.7,-62.8,62.8,1.9,2.65),box(56.7,57.7,-62.8,62.8,1.9,2.65)]
-    return union([slab]+keys).simplify(.00002)
+    return union([slab]+keys).simplify(.0005)
 
 
 def export_display_layers(base,households,root):
@@ -685,7 +797,7 @@ def export_display_layers(base,households,root):
     roof=build_roof_part();base_part=build_base_part()
     to_trimesh(roof).export(root/'roof.stl',file_type='stl')
     to_trimesh(base_part).export(root/'base_part.stl',file_type='stl')
-    manifest=dict(schemaVersion=2,materials=MATERIALS,
+    manifest=dict(schemaVersion=2,materials=MATERIALS,variantCatalog=CATALOG,
         printKit=dict(panelOrder=list(PANEL_ORDER),panelWidths=list(PANEL_WIDTHS),
             panelThickness=PANEL_THICKNESS,hingeSkin=HINGE_SKIN,
             miterClearance=MITER_CLEARANCE,facadeHeight=FACADE_HEIGHT,
@@ -695,13 +807,13 @@ def export_display_layers(base,households,root):
         item={name:source[name] for name in ('id','floor','line','estimated_unit','position','facade','unit_type')}
         item['meshes']={}
         item['unfolded_meshes']={}
-        for name in ('sash_partial','sash_full','ac_bracket','ac_unit'):
+        for name in LAYER_NAMES:
             path=root/f'{key}_{name}.stl'
-            to_trimesh(union(source[name]).simplify(.00002)).export(path,file_type='stl')
+            to_trimesh(union(source[name]).simplify(.0005)).export(path,file_type='stl')
             item['meshes'][name]=dict(file=path.name,solid_count=len(source[name]))
             unfolded_source=unfolded_households[key][name]
             unfolded_path=root/f'{key}_unfolded_{name}.stl'
-            to_trimesh(union(unfolded_source).simplify(.00002)).export(unfolded_path,file_type='stl')
+            to_trimesh(union(unfolded_source).simplify(.0005)).export(unfolded_path,file_type='stl')
             item['unfolded_meshes'][name]=dict(file=unfolded_path.name,solid_count=len(unfolded_source))
         manifest['households'].append(item)
     (root/'manifest.json').write_text(json.dumps(manifest,ensure_ascii=False,indent=2),encoding='utf-8')
@@ -709,6 +821,10 @@ def export_display_layers(base,households,root):
 
 
 def to_trimesh(shape):
+    assert shape.status()==md.Error.NoError,shape.status()
+    # Round through STL precision before export so collapsed float32 edges are
+    # removed by Manifold while all material properties remain attached.
+    shape=md.Manifold(shape.to_mesh())
     assert shape.status()==md.Error.NoError,shape.status()
     raw=shape.to_mesh64()
     t=trimesh.Trimesh(vertices=np.asarray(raw.vert_properties)[:,:3],faces=np.asarray(raw.tri_verts),process=True)
@@ -718,6 +834,10 @@ def to_trimesh(shape):
 
 def material_mesh(shape):
     """Return indexed geometry and one exact material index per triangle."""
+    assert shape.status()==md.Error.NoError,shape.status()
+    # Round through STL precision before export so collapsed float32 edges are
+    # removed by Manifold while all material properties remain attached.
+    shape=md.Manifold(shape.to_mesh())
     assert shape.status()==md.Error.NoError,shape.status()
     raw=shape.to_mesh64()
     vertices=np.asarray(raw.vert_properties,dtype=np.float64)
@@ -752,7 +872,7 @@ def write_color_3mf(shape,path,config,title=None):
     palette=normalize_palette(config.get('palette'))
     bases=''.join(f'<base name={quoteattr(item["name"])} displaycolor={quoteattr(color+"FF")}/>'
                   for item,color in zip(MATERIALS,palette))
-    vertex_xml=''.join(f'<vertex x="{x:.5f}" y="{y:.5f}" z="{z:.5f}"/>'
+    vertex_xml=''.join(f'<vertex x="{x:.9f}" y="{y:.9f}" z="{z:.9f}"/>'
                        for x,y,z in vertices)
     face_xml=''.join(f'<triangle v1="{a}" v2="{b}" v3="{c}" pid="1" p1="{m}" p2="{m}" p3="{m}"/>'
                      for (a,b,c),m in zip(faces,materials))
@@ -787,7 +907,7 @@ def write_color_3mf(shape,path,config,title=None):
 
 
 def export_checked(shape,path):
-    t=to_trimesh(shape.simplify(.00003))
+    t=to_trimesh(shape.simplify(.0005))
     assert t.is_watertight,'Mesh has a boundary / non-manifold edge'
     assert t.is_volume and t.is_winding_consistent,'Invalid oriented volume'
     assert len(t.split(only_watertight=False))==1,'Disconnected parts'

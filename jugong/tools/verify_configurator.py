@@ -75,9 +75,9 @@ def validate_payload(payload: dict) -> dict:
         floor, line = int(entry['id'][:2]), entry['line']
         assert entry['floor'] == floor and expected_facades[line] == (entry['position'], entry['facade'])
         assert entry['estimated_unit'] == str(floor * 100 + ord(line) - 64)
-        assert set(entry['meshes']) == {'sash_partial', 'sash_full', 'ac_bracket', 'ac_unit'}
+        assert set(entry['meshes']) == set(model.LAYER_NAMES)
         assert set(entry['unfolded_meshes']) == set(entry['meshes'])
-        for layer in entry['meshes'].values():
+        for name,layer in entry['meshes'].items():
             raw = gzip.decompress(base64.b64decode(layer['data']))
             assert hashlib.sha256(raw).hexdigest() == layer['sha256']
             assert len(raw) == layer['bytes'] and layer['solid_count'] > 0
@@ -86,9 +86,12 @@ def validate_payload(payload: dict) -> dict:
                 assert source.read_bytes() == raw
             facts = mesh_facts(raw)
             low, high = facts['bounds']
-            assert model.LEVELS[floor - 1] - 1.5 <= low[2] <= model.LEVELS[floor - 1] + 6
+            assert model.LEVELS[floor - 1] - 1.5 <= low[2] <= model.LEVELS[floor - 1] + 12
             assert high[2] <= (model.ROOF + .1 if floor == 10 else model.LEVELS[floor] + .1)
-            if line in ('A', 'B'):
+            if name.startswith('small__') or '__small_' in name:
+                assert low[2]>=model.LEVELS[floor-1]+1
+                assert (high[0]<0 if line in ('A','C') else low[0]>0)
+            elif line in ('A', 'B'):
                 assert high[1] < -53
             elif line == 'C':
                 assert high[0] < -44
@@ -173,7 +176,7 @@ def main() -> None:
         raise AssertionError(f'unsafe dong accepted: {value}')
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding='utf-8')
-    print(f"PASS: 40 households, 160 addressable layers, {len(report['representative_fused_outputs'])} fused configurations")
+    print(f"PASS: 40 households, 1000 addressable layers, {len(report['representative_fused_outputs'])} fused configurations")
 
 
 if __name__ == '__main__':

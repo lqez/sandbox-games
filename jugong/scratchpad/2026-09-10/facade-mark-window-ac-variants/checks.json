@@ -1,0 +1,30 @@
+[
+  {
+    "command": "python scripts/verify.py",
+    "exit_code": 0
+  },
+  {
+    "command": "python tools/verify_configurator.py",
+    "exit_code": 0
+  },
+  {
+    "command": "python tools/verify_color_3mf.py --fused dist/jugong_10f_four_color.3mf",
+    "exit_code": 0
+  },
+  {
+    "command": "python tools/verify_print_kit.py",
+    "exit_code": 0
+  },
+  {
+    "command": "python tools/verify_facade_variants.py --output /Users/lqez/dev/sandbox-games/jugong/scratchpad/2026-09-10/facade-mark-window-ac-variants/exports",
+    "exit_code": 0
+  },
+  {
+    "command": "python tools/verify_color_3mf.py --fused /Users/lqez/dev/sandbox-games/jugong/scratchpad/2026-09-10/facade-mark-window-ac-variants/exports/variant-sweep.3mf",
+    "exit_code": 0
+  },
+  {
+    "command": "python scripts/render_preview.py",
+    "exit_code": 0
+  }
+]

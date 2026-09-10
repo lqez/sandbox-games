@@ -1,10 +1,10 @@
 {
   "schema_and_layers": {
     "households": 40,
-    "addressable_layers": 160,
-    "layer_triangles": 41230,
+    "addressable_layers": 1000,
+    "layer_triangles": 323966,
     "base": {
-      "triangles": 83884,
+      "triangles": 84400,
       "watertight": true,
       "component_count": 1,
       "bounds": [
@@ -21,7 +21,7 @@
       ]
     },
     "unfolded_base": {
-      "triangles": 10910,
+      "triangles": 13678,
       "watertight": true,
       "component_count": 1,
       "bounds": [
@@ -37,14 +37,14 @@
         ]
       ]
     },
-    "unfolded_addressable_layers": 160,
+    "unfolded_addressable_layers": 1000,
     "default_all_off": true,
     "facade_mapping_checked": true,
     "material_slots": 4,
     "material_triangles": {
-      "concrete": 20216,
-      "metal": 62012,
-      "glass": 1162,
+      "concrete": 20090,
+      "metal": 62191,
+      "glass": 1625,
       "accent": 494
     }
   },
@@ -58,10 +58,10 @@
         132.0,
         174.2
       ],
-      "triangles": 83884,
+      "triangles": 84400,
       "watertight": true,
       "connected_bodies": 1,
-      "file_bytes": 4194284
+      "file_bytes": 4220084
     },
     {
       "case": "single_05-B",
@@ -72,10 +72,10 @@
         132.0,
         174.2
       ],
-      "triangles": 85576,
+      "triangles": 88380,
       "watertight": true,
       "connected_bodies": 1,
-      "file_bytes": 4278884
+      "file_bytes": 4419084
     },
     {
       "case": "different_floor_line",
@@ -86,10 +86,10 @@
         132.0,
         174.2
       ],
-      "triangles": 86462,
+      "triangles": 88184,
       "watertight": true,
       "connected_bodies": 1,
-      "file_bytes": 4323184
+      "file_bytes": 4409284
     },
     {
       "case": "floor_07_partial",
@@ -100,10 +100,10 @@
         132.0,
         174.2
       ],
-      "triangles": 86596,
+      "triangles": 88038,
       "watertight": true,
       "connected_bodies": 1,
-      "file_bytes": 4329884
+      "file_bytes": 4401984
     }
   ],
   "dong_validation": {
