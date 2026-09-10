@@ -69,7 +69,7 @@
 
 핵심 코드는 `src/facade_signs.py`, 새 `src/facade_unfold.py`, `src/jugong_10f_model.py`, `viewer/viewer_template.html`, `scripts/build_viewer.py`다. 검사/분석/캡처 도구는 `tools`에 두었으며 `dist`, `validation`, `README`, `CONTINUE`, `AGENTS`, `SHA256SUMS.txt`를 함께 갱신한다. `.DS_Store`와 다른 작업 파일은 포함하지 않는다.
 
-구현 커밋 `e2f113fc6d800344511c12ee724a5be5db8d83fa`를 `origin/main`에 force 없이 push했다. 배포 대상은 [공개 뷰어](https://lqez.github.io/sandbox-games/jugong/dist/dunchon_jugong_viewer.html)이며 GitHub Pages `main /`를 사용한다. 단색 모드의 색상 필드 숨김 CSS도 실제 브라우저에서 추가 확인했다. 최종 공개 파일 검증은 아래에 기록한다.
+구현 커밋 `e2f113fc6d800344511c12ee724a5be5db8d83fa`를 `origin/main`에 force 없이 push했다. 배포 대상은 [공개 뷰어](https://lqez.github.io/sandbox-games/jugong/dist/dunchon_jugong_viewer.html)이며 GitHub Pages `main /`를 사용한다. 단색 모드의 색상 필드 숨김 CSS도 실제 브라우저에서 추가 확인했다. 최종 뷰어 보정 커밋은 `ae40fd3f63f86dc6c91345932a28c5cdbb635531`이며 역시 force 없이 push했다. [Pages 실행 34483391711](https://github.com/lqez/sandbox-games/actions/runs/34483391711)이 성공했다. 2026-09-10 22:35 KST 공개 HTML을 HTTP 200으로 받아 로컬과 **10,853,272 bytes 전체 일치**, SHA-256 `36088f8864a455ac77e3579db42d8fb7d7e3a5dc7a55f242888674752faa9b30`을 확인했다. 공개 페이지에서 단색 1슬롯, 전개, `05-B` 입체 선택 및 색상 필드 표시까지 확인했다. [배포 기록](validation/deployment.json), [공개 브라우저 검사](validation/deployed-browser.json), [공개 화면](captures/deployed-mono-unfold.png). 이후 검증 기록 커밋은 뷰어 내용을 변경하지 않는다.
 
 ## 남은 한계
 

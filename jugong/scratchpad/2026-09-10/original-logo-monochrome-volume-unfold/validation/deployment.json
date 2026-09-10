@@ -1,0 +1,12 @@
+{
+  "url": "https://lqez.github.io/sandbox-games/jugong/dist/dunchon_jugong_viewer.html",
+  "http_status": 200,
+  "bytes": 10853272,
+  "sha256": "36088f8864a455ac77e3579db42d8fb7d7e3a5dc7a55f242888674752faa9b30",
+  "matches_local": true,
+  "implementation_commit": "e2f113fc6d800344511c12ee724a5be5db8d83fa",
+  "viewer_commit": "ae40fd3f63f86dc6c91345932a28c5cdbb635531",
+  "pages_run": 34483391711,
+  "pages_conclusion": "success",
+  "checked_at": "2026-09-10T13:35:49.481722+00:00"
+}
