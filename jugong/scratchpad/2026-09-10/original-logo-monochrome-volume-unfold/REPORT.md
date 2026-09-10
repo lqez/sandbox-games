@@ -69,7 +69,7 @@
 
 핵심 코드는 `src/facade_signs.py`, 새 `src/facade_unfold.py`, `src/jugong_10f_model.py`, `viewer/viewer_template.html`, `scripts/build_viewer.py`다. 검사/분석/캡처 도구는 `tools`에 두었으며 `dist`, `validation`, `README`, `CONTINUE`, `AGENTS`, `SHA256SUMS.txt`를 함께 갱신한다. `.DS_Store`와 다른 작업 파일은 포함하지 않는다.
 
-커밋·push·Pages 확인은 아래에 최종 기록한다.
+구현 커밋 `e2f113fc6d800344511c12ee724a5be5db8d83fa`를 `origin/main`에 force 없이 push했다. 배포 대상은 [공개 뷰어](https://lqez.github.io/sandbox-games/jugong/dist/dunchon_jugong_viewer.html)이며 GitHub Pages `main /`를 사용한다. 단색 모드의 색상 필드 숨김 CSS도 실제 브라우저에서 추가 확인했다. 최종 공개 파일 검증은 아래에 기록한다.
 
 ## 남은 한계
 

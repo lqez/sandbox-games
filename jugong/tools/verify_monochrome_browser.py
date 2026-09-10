@@ -20,10 +20,13 @@ def shot(name):
  raw=js("document.getElementById('model').toDataURL('image/png')");(a.output/(name+'.png')).write_bytes(base64.b64decode(raw.split(',')[-1]))
 def camera(**values):js('window.modelViewer.setCamera('+json.dumps(values)+');true')
 call('goto','--url',(ROOT/'dist/dunchon_jugong_viewer.html').as_uri()+'?dong=324');call('viewport','--width','1280','--height','1000','--scale','1');ready()
+assert js("getComputedStyle(document.getElementById('mono-color-wrap')).display")=='none'
 js('window.modelViewer.randomize(324);true');ready();camera(yaw=-.93,pitch=.34,span=225);shot('after-folded')
 camera(yaw=0,pitch=0,span=20,center=[51.7,-41.2,127.15]);shot('historic-mark-color')
 camera(yaw=0,pitch=0,span=20,center=[51.7,-41.2,53.5]);shot('number-color')
 refs=call('snapshot')['refs'];ref=next(k for k,v in refs.items() if v.get('name')=='인쇄 색상' and v.get('role')=='combobox');call('select','--element',ref,'--value','mono');ready();assert js('window.modelViewer.getState().materialSlots')==1
+assert js("getComputedStyle(document.getElementById('palette')).display")=='none'
+assert js("getComputedStyle(document.getElementById('mono-color-wrap')).display")!='none'
 js("document.getElementById('mono-color').value='#b8b8b8';document.getElementById('mono-color').dispatchEvent(new Event('input'));true");ready()
 camera(yaw=-.22,pitch=.1,span=18,center=[51.7,-41.2,53.5]);shot('number-mono-emboss')
 camera(yaw=-.22,pitch=.1,span=18,center=[51.7,-41.2,127.15]);shot('mark-mono-emboss')
