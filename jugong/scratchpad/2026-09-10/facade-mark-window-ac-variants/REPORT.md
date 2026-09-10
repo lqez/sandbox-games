@@ -83,3 +83,10 @@
 ## 커밋·push·배포
 
 저장소의 기존 GitHub Pages 배포 경로는 `main`의 `/`이며 서비스 URL은 https://lqez.github.io/sandbox-games/jugong/dist/dunchon_jugong_viewer.html 이다. 다른 작업자의 변경은 발견되지 않았고 기존 미추적 `.DS_Store` 네 파일은 작업·스테이징에서 제외한다. 최종 커밋과 Pages 배포 확인 결과는 아래에 기록한다.
+
+
+- 구현 커밋: `be84ccbaf411620566e78d7576aad7861ab8426f` (`be84ccb`), `git push origin main` 성공; force 사용 없음.
+- GitHub Pages: `built`, 구현 커밋 일치, 2026-09-10T09:37:45Z 완료.
+- 배포 HTML: HTTP 200, 6,105,582 bytes, 로컬 파일과 바이트 단위 일치. SHA256 `ede20fb5a52720c82dbd6e1f571bdcd2c9e2a92dc3804e6556b10ae282dcb44a`.
+- 근거: `deployment.json`. 이 배포 결과와 보고서를 후속 기록 커밋으로 같은 main에 반영한다.
+- 작업 후 미추적 파일은 작업 전에 있던 `.DS_Store` 네 개뿐이며 변경하거나 커밋하지 않았다.
