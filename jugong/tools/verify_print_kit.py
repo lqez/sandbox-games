@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify the flat four-facade strip and separate keyed roof/base print parts."""
+"""Verify the full-depth twelve-facade strip and separate keyed roof/base print parts."""
 from __future__ import annotations
 
 import argparse
@@ -39,12 +39,11 @@ def main() -> None:
     facade = facts(ROOT / 'dist/jugong_10f_facade_strip.stl')
     roof = facts(ROOT / 'dist/jugong_10f_roof.stl')
     base = facts(ROOT / 'dist/jugong_10f_base.stl')
-    assert np.allclose(facade['dimensions_mm'][:2], [sum(model.PANEL_WIDTHS), model.FACADE_HEIGHT], atol=.02)
-    assert facade['dimensions_mm'][2] <= model.PANEL_THICKNESS + 1.2
-    assert np.allclose(roof['dimensions_mm'][:2], [120, 132], atol=.02)
+    assert np.allclose(facade['dimensions_mm'][:2], [sum(model.PANEL_WIDTHS)+11*model.unfolding.GAP, model.FACADE_HEIGHT], atol=.1)
+    assert 20 < facade['dimensions_mm'][2] < 30
+    assert np.allclose(roof['dimensions_mm'][:2], [98.2, 102.7], atol=.02)
     assert np.allclose(base['dimensions_mm'][:2], [120, 132], atol=.02)
     assert model.HINGE_SKIN >= model.MIN_FRAME
-    assert model.MITER_CLEARANCE >= .15
     labels = {}
     for dong in ('302', '324', '420', '123-1'):
         label = model.dong_label(dong)
@@ -59,15 +58,15 @@ def main() -> None:
         'base': base,
         'panel_order_exterior_view': list(model.PANEL_ORDER),
         'panel_widths_mm': list(model.PANEL_WIDTHS),
-        'assembled_outer_xy_mm': [120.0, 132.0],
-        'folds': 3,
-        'closing_seam': 'complementary 45-degree miter, captured by roof/base locating rims',
+        'assembled_outer_xy_mm': [103.0, 107.5],
+        'folds': 11,
+        'closing_seam': 'open butt seam; base follows the actual H-shaped inner perimeter',
         'panel_thickness_mm': model.PANEL_THICKNESS,
         'hinge_skin_mm': model.HINGE_SKIN,
-        'miter_clearance_mm': model.MITER_CLEARANCE,
+        'hinge_gap_mm': model.unfolding.GAP,
         'dong_labels': labels,
         'flat_on_print_bed': True,
-        'manufacturing_note': '504 mm strip exceeds common 220-256 mm beds; continuous print requires a large-format bed.',
+        'manufacturing_note': '500.6 mm strip retains full projecting attachments; needs a large bed, support planning and a physical hinge test.',
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(report, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')

@@ -6,10 +6,10 @@
       132.0,
       174.2
     ],
-    "triangles": 104444,
+    "triangles": 104588,
     "watertight": true,
     "connected_bodies": 1,
-    "file_bytes": 5222284,
+    "file_bytes": 5229484,
     "external_sashes": false,
     "ac_brackets": false,
     "compatibility": "all 40 households: full sash / empty rack"
@@ -21,10 +21,10 @@
       132.0,
       174.2
     ],
-    "triangles": 158738,
+    "triangles": 158882,
     "watertight": true,
     "connected_bodies": 1,
-    "file_bytes": 7936984,
+    "file_bytes": 7944184,
     "external_sashes": true,
     "ac_brackets": false,
     "compatibility": "all 40 households: full sash / empty rack"
@@ -36,10 +36,10 @@
       132.0,
       174.2
     ],
-    "triangles": 111080,
+    "triangles": 111224,
     "watertight": true,
     "connected_bodies": 1,
-    "file_bytes": 5554084,
+    "file_bytes": 5561284,
     "external_sashes": false,
     "ac_brackets": true,
     "compatibility": "all 40 households: full sash / empty rack"
@@ -51,10 +51,10 @@
       132.0,
       174.2
     ],
-    "triangles": 164728,
+    "triangles": 164872,
     "watertight": true,
     "connected_bodies": 1,
-    "file_bytes": 8236484,
+    "file_bytes": 8243684,
     "external_sashes": true,
     "ac_brackets": true,
     "compatibility": "all 40 households: full sash / empty rack"
@@ -62,11 +62,11 @@
   {
     "four_color_viewer_mesh": {
       "file": "base_material.stl",
-      "triangles": 104452,
+      "triangles": 104596,
       "materials": {
         "concrete": 28263,
-        "metal": 74490,
-        "glass": 1182,
+        "metal": 74526,
+        "glass": 1290,
         "accent": 517
       }
     },
@@ -74,15 +74,15 @@
       "file": "jugong_10f_four_color.3mf",
       "unit": "millimeter",
       "objects": 1,
-      "triangles": 104452,
+      "triangles": 104596,
       "material_slots": 4,
       "material_triangles": {
         "concrete": 28263,
-        "metal": 74490,
-        "glass": 1182,
+        "metal": 74526,
+        "glass": 1290,
         "accent": 517
       },
-      "file_bytes": 1071781
+      "file_bytes": 1073010
     }
   }
 ]

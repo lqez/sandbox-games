@@ -5,7 +5,7 @@
       "external_sashes": false,
       "ac_brackets": false,
       "policy": "all 40 households; full sash and/or empty rack",
-      "triangles": 104444,
+      "triangles": 104588,
       "dimensions_mm": [
         120.0,
         132.0,
@@ -13,14 +13,14 @@
       ],
       "watertight": true,
       "connected_bodies": 1,
-      "sha256": "8ffd5c83780532dc77406a5aa229391b3e0ccccaf231ab91986289b0e3f26d56"
+      "sha256": "9aa733583fb1556be264f9cc116960167ab2c69529a1f83fb7a2fe99a02dc532"
     },
     {
       "file": "jugong_10f_sashes.stl",
       "external_sashes": true,
       "ac_brackets": false,
       "policy": "all 40 households; full sash and/or empty rack",
-      "triangles": 158738,
+      "triangles": 158882,
       "dimensions_mm": [
         120.0,
         132.0,
@@ -28,14 +28,14 @@
       ],
       "watertight": true,
       "connected_bodies": 1,
-      "sha256": "2f6543477b87ca5ecfb6e1c9e4c51e2ba278ad8b104e0dbfdc331b130647d8d0"
+      "sha256": "def5c00224a2a07c90bfa42329b0eefab70e80f5641cea9e0af289c04dfeaafd"
     },
     {
       "file": "jugong_10f_ac_brackets.stl",
       "external_sashes": false,
       "ac_brackets": true,
       "policy": "all 40 households; full sash and/or empty rack",
-      "triangles": 111080,
+      "triangles": 111224,
       "dimensions_mm": [
         120.0,
         132.0,
@@ -43,14 +43,14 @@
       ],
       "watertight": true,
       "connected_bodies": 1,
-      "sha256": "1fe0f57b095fe1fc742bc0c6b4ebe88f022e21e4d60ef0d5fd1dce1ec677a02b"
+      "sha256": "c0c93b49c70586e8baeec1ef160f0839bb3bb054a15366448ef9f690ad8d709d"
     },
     {
       "file": "jugong_10f_sashes_ac_brackets.stl",
       "external_sashes": true,
       "ac_brackets": true,
       "policy": "all 40 households; full sash and/or empty rack",
-      "triangles": 164728,
+      "triangles": 164872,
       "dimensions_mm": [
         120.0,
         132.0,
@@ -58,7 +58,7 @@
       ],
       "watertight": true,
       "connected_bodies": 1,
-      "sha256": "e058b80b441d2420428723af7bc5cfd5388adea71415361ea56ab486bd221654"
+      "sha256": "36df6de217d7e989d3d6ef157cd0e85184b9f52b59962a9a4230913db4bdfdcc"
     }
   ],
   "configurator": {
@@ -66,7 +66,7 @@
     "addressable_layers": 1000,
     "layer_triangles": 356388,
     "base": {
-      "triangles": 104452,
+      "triangles": 104596,
       "watertight": true,
       "component_count": 1,
       "bounds": [
@@ -83,19 +83,19 @@
       ]
     },
     "unfolded_base": {
-      "triangles": 14654,
+      "triangles": 109354,
       "watertight": true,
       "component_count": 1,
       "bounds": [
         [
-          -252.0,
-          0.0,
+          -250.3,
+          -0.08,
           0.0
         ],
         [
-          252.0,
-          147.5,
-          1.58
+          250.3,
+          153.4,
+          26.9
         ]
       ]
     },
@@ -105,14 +105,14 @@
     "material_slots": 4,
     "material_triangles": {
       "concrete": 28263,
-      "metal": 74490,
-      "glass": 1182,
+      "metal": 74526,
+      "glass": 1290,
       "accent": 517
     }
   },
   "four_color_3mf": {
     "file": "jugong_10f_four_color.3mf",
-    "sha256": "6f10520f56b6f3cb05639953296916a556680adad296b0470d697d1c1971a8b6",
+    "sha256": "b85d27efe5b79c4f5a2e45e13c706f310a15b730634fd0ac78b7ba70057549c2",
     "zip_crc": "pass",
     "unit": "millimeter",
     "material_slots": 4,
@@ -136,21 +136,21 @@
     ],
     "material_triangles": {
       "0": 28263,
-      "1": 74490,
-      "2": 1182,
+      "1": 74526,
+      "2": 1290,
       "3": 517
     },
     "material_surface_area_mm2": {
-      "0": 136360.85,
-      "1": 21248.18,
-      "2": 15688.29,
+      "0": 136309.97,
+      "1": 21277.08,
+      "2": 15711.02,
       "3": 5869.55
     },
     "mesh_objects": [
       {
         "id": 2,
-        "name": "four-material fused configuration",
-        "triangles": 104452,
+        "name": "fused configuration",
+        "triangles": 104596,
         "shells": 1,
         "watertight": true,
         "positive_volume": true,
@@ -167,7 +167,8 @@
     "assembly_policy": "single fused watertight volume",
     "print_limits": {
       "default_scale": "1:200",
-      "minimum_colored_frame_mm": 0.45,
+      "minimum_sash_mullion_mm": 0.16,
+      "minimum_outer_sash_mm": 0.26,
       "minimum_relief_width_mm": 3.8,
       "minimum_relief_depth_mm": 0.4,
       "recommended_fdm_nozzle_mm": ".25-.4",

@@ -1,0 +1,59 @@
+{
+  "seeds": [
+    {
+      "seed": 0,
+      "identical_replay": true,
+      "python_parity": true,
+      "distinct_values": {
+        "sash": 3,
+        "ac": 3,
+        "sashVariant": 4,
+        "frameFinish": 3,
+        "smallWindow": 4,
+        "acPosition": 5
+      }
+    },
+    {
+      "seed": 324,
+      "identical_replay": true,
+      "python_parity": true,
+      "distinct_values": {
+        "sash": 3,
+        "ac": 3,
+        "sashVariant": 4,
+        "frameFinish": 3,
+        "smallWindow": 4,
+        "acPosition": 5
+      }
+    },
+    {
+      "seed": 20260910,
+      "identical_replay": true,
+      "python_parity": true,
+      "distinct_values": {
+        "sash": 3,
+        "ac": 3,
+        "sashVariant": 4,
+        "frameFinish": 3,
+        "smallWindow": 4,
+        "acPosition": 5
+      }
+    }
+  ],
+  "real_pointer_hover": "05-B",
+  "real_pointer_click": "05-B",
+  "small_window_hit": "05-B",
+  "explicit_preserved": true,
+  "url_roundtrip": true,
+  "json_roundtrip": true,
+  "all_off": true,
+  "dong_validation": true,
+  "fold_unfold_config_preserved": true,
+  "material_slots": 4,
+  "mobile": {
+    "cards": "grid",
+    "scroll": 390,
+    "width": 390
+  },
+  "page_id": "9967fe28-b6a1-41c3-b945-059fd865d695"
+}

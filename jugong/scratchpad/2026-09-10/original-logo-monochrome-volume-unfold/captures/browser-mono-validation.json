@@ -1,0 +1,11 @@
+{
+  "native_mono_select": true,
+  "mono_url_roundtrip": true,
+  "fold_configuration_preserved": true,
+  "selection": "3D translucent footprint cells",
+  "folded_cells": 4,
+  "rectangle_overlay_count": 0,
+  "mono_export_slots_expected": 1,
+  "color_restored_slots": 4,
+  "page_id": "9967fe28-b6a1-41c3-b945-059fd865d695"
+}

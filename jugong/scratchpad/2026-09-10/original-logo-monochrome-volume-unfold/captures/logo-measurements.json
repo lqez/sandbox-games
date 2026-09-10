@@ -1,0 +1,17 @@
+{
+  "source_bounds_px": [
+    8,
+    4,
+    60,
+    55
+  ],
+  "source_ink_width_height_px": [
+    52,
+    51
+  ],
+  "model_width_height_mm": [
+    8.6,
+    8.6
+  ],
+  "source_pixel_uncertainty": 1
+}

@@ -1,0 +1,380 @@
+{
+  "dong": "324",
+  "households": {
+    "01-A": {
+      "ac": "none",
+      "acPosition": "corner",
+      "explicit": [],
+      "frameFinish": "metal",
+      "sash": "partial",
+      "sashVariant": "four",
+      "smallWindow": "boxed"
+    },
+    "01-B": {
+      "ac": "none",
+      "acPosition": "corner",
+      "explicit": [],
+      "frameFinish": "metal",
+      "sash": "full",
+      "sashVariant": "three",
+      "smallWindow": "none"
+    },
+    "01-C": {
+      "ac": "none",
+      "acPosition": "small_top",
+      "explicit": [],
+      "frameFinish": "metal",
+      "sash": "full",
+      "sashVariant": "four",
+      "smallWindow": "roof"
+    },
+    "01-D": {
+      "ac": "none",
+      "acPosition": "bedroom",
+      "explicit": [],
+      "frameFinish": "metal",
+      "sash": "full",
+      "sashVariant": "four",
+      "smallWindow": "boxed"
+    },
+    "02-A": {
+      "ac": "none",
+      "acPosition": "small_rail",
+      "explicit": [],
+      "frameFinish": "metal",
+      "sash": "none",
+      "sashVariant": "four",
+      "smallWindow": "boxed"
+    },
+    "02-B": {
+      "ac": "none",
+      "acPosition": "corner",
+      "explicit": [],
+      "frameFinish": "dark",
+      "sash": "partial",
+      "sashVariant": "four",
+      "smallWindow": "roof"
+    },
+    "02-C": {
+      "ac": "none",
+      "acPosition": "small_top",
+      "explicit": [],
+      "frameFinish": "metal",
+      "sash": "none",
+      "sashVariant": "transom",
+      "smallWindow": "roof"
+    },
+    "02-D": {
+      "ac": "unit",
+      "acPosition": "bedroom",
+      "explicit": [],
+      "frameFinish": "metal",
+      "sash": "full",
+      "sashVariant": "four",
+      "smallWindow": "boxed"
+    },
+    "03-A": {
+      "ac": "none",
+      "acPosition": "small_rail",
+      "explicit": [],
+      "frameFinish": "light",
+      "sash": "full",
+      "sashVariant": "three",
+      "smallWindow": "roof"
+    },
+    "03-B": {
+      "ac": "none",
+      "acPosition": "bedroom",
+      "explicit": [],
+      "frameFinish": "metal",
+      "sash": "full",
+      "sashVariant": "two",
+      "smallWindow": "boxed"
+    },
+    "03-C": {
+      "ac": "none",
+      "acPosition": "bedroom",
+      "explicit": [],
+      "frameFinish": "light",
+      "sash": "full",
+      "sashVariant": "two",
+      "smallWindow": "transom"
+    },
+    "03-D": {
+      "ac": "none",
+      "acPosition": "corner",
+      "explicit": [],
+      "frameFinish": "light",
+      "sash": "full",
+      "sashVariant": "four",
+      "smallWindow": "boxed"
+    },
+    "04-A": {
+      "ac": "unit",
+      "acPosition": "corner",
+      "explicit": [],
+      "frameFinish": "light",
+      "sash": "full",
+      "sashVariant": "three",
+      "smallWindow": "boxed"
+    },
+    "04-B": {
+      "ac": "unit",
+      "acPosition": "corner",
+      "explicit": [],
+      "frameFinish": "metal",
+      "sash": "none",
+      "sashVariant": "three",
+      "smallWindow": "boxed"
+    },
+    "04-C": {
+      "ac": "none",
+      "acPosition": "bedroom",
+      "explicit": [],
+      "frameFinish": "metal",
+      "sash": "full",
+      "sashVariant": "four",
+      "smallWindow": "roof"
+    },
+    "04-D": {
+      "ac": "none",
+      "acPosition": "corner",
+      "explicit": [],
+      "frameFinish": "metal",
+      "sash": "full",
+      "sashVariant": "four",
+      "smallWindow": "boxed"
+    },
+    "05-A": {
+      "ac": "unit",
+      "acPosition": "small_top",
+      "explicit": [],
+      "frameFinish": "metal",
+      "sash": "full",
+      "sashVariant": "four",
+      "smallWindow": "none"
+    },
+    "05-B": {
+      "ac": "unit",
+      "acPosition": "small_top",
+      "explicit": [
+        "sash",
+        "ac",
+        "smallWindow",
+        "acPosition"
+      ],
+      "frameFinish": "metal",
+      "sash": "none",
+      "sashVariant": "transom",
+      "smallWindow": "roof"
+    },
+    "05-C": {
+      "ac": "none",
+      "acPosition": "small_wall",
+      "explicit": [],
+      "frameFinish": "light",
+      "sash": "full",
+      "sashVariant": "three",
+      "smallWindow": "none"
+    },
+    "05-D": {
+      "ac": "unit",
+      "acPosition": "small_wall",
+      "explicit": [],
+      "frameFinish": "metal",
+      "sash": "full",
+      "sashVariant": "two",
+      "smallWindow": "boxed"
+    },
+    "06-A": {
+      "ac": "none",
+      "acPosition": "bedroom",
+      "explicit": [],
+      "frameFinish": "light",
+      "sash": "none",
+      "sashVariant": "two",
+      "smallWindow": "none"
+    },
+    "06-B": {
+      "ac": "none",
+      "acPosition": "bedroom",
+      "explicit": [],
+      "frameFinish": "light",
+      "sash": "full",
+      "sashVariant": "two",
+      "smallWindow": "roof"
+    },
+    "06-C": {
+      "ac": "none",
+      "acPosition": "corner",
+      "explicit": [],
+      "frameFinish": "dark",
+      "sash": "full",
+      "sashVariant": "three",
+      "smallWindow": "transom"
+    },
+    "06-D": {
+      "ac": "none",
+      "acPosition": "bedroom",
+      "explicit": [],
+      "frameFinish": "metal",
+      "sash": "partial",
+      "sashVariant": "transom",
+      "smallWindow": "boxed"
+    },
+    "07-A": {
+      "ac": "unit",
+      "acPosition": "small_rail",
+      "explicit": [],
+      "frameFinish": "metal",
+      "sash": "none",
+      "sashVariant": "three",
+      "smallWindow": "none"
+    },
+    "07-B": {
+      "ac": "none",
+      "acPosition": "bedroom",
+      "explicit": [],
+      "frameFinish": "metal",
+      "sash": "full",
+      "sashVariant": "four",
+      "smallWindow": "roof"
+    },
+    "07-C": {
+      "ac": "unit",
+      "acPosition": "small_top",
+      "explicit": [],
+      "frameFinish": "light",
+      "sash": "none",
+      "sashVariant": "two",
+      "smallWindow": "boxed"
+    },
+    "07-D": {
+      "ac": "unit",
+      "acPosition": "small_wall",
+      "explicit": [],
+      "frameFinish": "metal",
+      "sash": "full",
+      "sashVariant": "two",
+      "smallWindow": "transom"
+    },
+    "08-A": {
+      "ac": "none",
+      "acPosition": "small_top",
+      "explicit": [],
+      "frameFinish": "metal",
+      "sash": "full",
+      "sashVariant": "transom",
+      "smallWindow": "roof"
+    },
+    "08-B": {
+      "ac": "unit",
+      "acPosition": "small_rail",
+      "explicit": [],
+      "frameFinish": "light",
+      "sash": "full",
+      "sashVariant": "four",
+      "smallWindow": "boxed"
+    },
+    "08-C": {
+      "ac": "unit",
+      "acPosition": "bedroom",
+      "explicit": [],
+      "frameFinish": "dark",
+      "sash": "full",
+      "sashVariant": "three",
+      "smallWindow": "none"
+    },
+    "08-D": {
+      "ac": "unit",
+      "acPosition": "corner",
+      "explicit": [],
+      "frameFinish": "metal",
+      "sash": "partial",
+      "sashVariant": "two",
+      "smallWindow": "none"
+    },
+    "09-A": {
+      "ac": "unit",
+      "acPosition": "small_rail",
+      "explicit": [],
+      "frameFinish": "metal",
+      "sash": "full",
+      "sashVariant": "three",
+      "smallWindow": "none"
+    },
+    "09-B": {
+      "ac": "none",
+      "acPosition": "bedroom",
+      "explicit": [],
+      "frameFinish": "metal",
+      "sash": "full",
+      "sashVariant": "three",
+      "smallWindow": "roof"
+    },
+    "09-C": {
+      "ac": "unit",
+      "acPosition": "bedroom",
+      "explicit": [],
+      "frameFinish": "light",
+      "sash": "full",
+      "sashVariant": "two",
+      "smallWindow": "none"
+    },
+    "09-D": {
+      "ac": "none",
+      "acPosition": "small_wall",
+      "explicit": [],
+      "frameFinish": "metal",
+      "sash": "full",
+      "sashVariant": "two",
+      "smallWindow": "boxed"
+    },
+    "10-A": {
+      "ac": "bracket",
+      "acPosition": "bedroom",
+      "explicit": [],
+      "frameFinish": "dark",
+      "sash": "partial",
+      "sashVariant": "two",
+      "smallWindow": "boxed"
+    },
+    "10-B": {
+      "ac": "none",
+      "acPosition": "bedroom",
+      "explicit": [],
+      "frameFinish": "light",
+      "sash": "full",
+      "sashVariant": "four",
+      "smallWindow": "roof"
+    },
+    "10-C": {
+      "ac": "none",
+      "acPosition": "bedroom",
+      "explicit": [],
+      "frameFinish": "metal",
+      "sash": "full",
+      "sashVariant": "transom",
+      "smallWindow": "boxed"
+    },
+    "10-D": {
+      "ac": "none",
+      "acPosition": "bedroom",
+      "explicit": [],
+      "frameFinish": "light",
+      "sash": "full",
+      "sashVariant": "three",
+      "smallWindow": "roof"
+    }
+  },
+  "monoColor": "#C5C1B2",
+  "palette": [
+    "#C5C1B2",
+    "#E1E4DF",
+    "#4F7397",
+    "#454C4F"
+  ],
+  "printMode": "color",
+  "schemaVersion": 1,
+  "seed": 77
+}

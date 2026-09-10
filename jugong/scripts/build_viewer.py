@@ -32,7 +32,7 @@ def sign_metrics():
     sys.path.insert(0,str(ROOT/'src'))
     import jugong_10f_model as m
     return dict(height=m.SIGN_HEIGHT,gap=m.SIGN_GAP*m.SIGN_HEIGHT,maxWidth=m.SIGN_MAX_WIDTH,
-        center=m.SIGN_CENTER_U,marginX=m.SIGN_MARGIN_X,marginZ=m.SIGN_MARGIN_Z)
+        paintDepth=m.SIGN_PAINT_DEPTH,embossDepth=m.SIGN_EMBOSS_DEPTH,center=m.SIGN_CENTER_U,marginX=m.SIGN_MARGIN_X,marginZ=m.SIGN_MARGIN_Z)
 
 
 def main():
@@ -44,12 +44,14 @@ def main():
           'sign':sign_metrics(),
           'base':pack(LAYER_ROOT/'base_material.stl'),
           'unfoldedBase':pack(LAYER_ROOT/kit['base']),
+          'monochromeMarks':pack(LAYER_ROOT/'monochrome_marks.stl'),
+          'unfoldedMonochromeMarks':pack(LAYER_ROOT/'unfolded_monochrome_marks.stl'),
           'roof':pack(LAYER_ROOT/kit['roof']),'basePart':pack(LAYER_ROOT/kit['basePart']),
           'printKit':{key:value for key,value in kit.items() if key not in ('base','roof','basePart')},
           'households':[]}
     for household in manifest['households']:
         item={key:household[key] for key in
-              ('id','floor','line','estimated_unit','position','facade','unit_type')}
+              ('id','floor','line','estimated_unit','position','facade','unit_type','selectionVolumes')}
         item['meshes']={}
         item['unfolded_meshes']={}
         for key,info in household['meshes'].items():

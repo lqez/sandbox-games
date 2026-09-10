@@ -103,8 +103,8 @@ def validate_payload(payload: dict) -> dict:
             raw = gzip.decompress(base64.b64decode(layer['data']))
             assert hashlib.sha256(raw).hexdigest() == layer['sha256']
             facts = mesh_facts(raw)
-            assert facts['bounds'][0][2] >= model.PANEL_THICKNESS - .2
-            assert facts['bounds'][1][2] <= model.PANEL_THICKNESS + 1.2
+            assert facts['bounds'][0][2] >= 0
+            assert facts['bounds'][1][2] <= 30
     base_raw = gzip.decompress(base64.b64decode(payload['base']['data']))
     assert hashlib.sha256(base_raw).hexdigest() == payload['base']['sha256']
     assert base_raw == (ROOT / 'work/configurator/base_material.stl').read_bytes()

@@ -2,12 +2,12 @@
   "facade_strip": {
     "file": "jugong_10f_facade_strip.stl",
     "dimensions_mm": [
-      504.0,
-      147.5,
-      1.58
+      500.6,
+      153.48,
+      26.9
     ],
-    "triangles": 14654,
-    "volume_mm3": 93760.036,
+    "triangles": 109330,
+    "volume_mm3": 195081.035,
     "watertight": true,
     "winding_consistent": true,
     "positive_volume": true,
@@ -16,12 +16,12 @@
   "roof": {
     "file": "jugong_10f_roof.stl",
     "dimensions_mm": [
-      120.0,
-      132.0,
-      2.3
+      98.2,
+      102.7,
+      25.8
     ],
-    "triangles": 60,
-    "volume_mm3": 25756.273,
+    "triangles": 848,
+    "volume_mm3": 45898.154,
     "watertight": true,
     "winding_consistent": true,
     "positive_volume": true,
@@ -32,10 +32,10 @@
     "dimensions_mm": [
       120.0,
       132.0,
-      2.65
+      2.75
     ],
-    "triangles": 60,
-    "volume_mm3": 31993.3,
+    "triangles": 108,
+    "volume_mm3": 32093.099,
     "watertight": true,
     "winding_consistent": true,
     "positive_volume": true,
@@ -43,25 +43,41 @@
   },
   "panel_order_exterior_view": [
     "front",
-    "right",
+    "right_front",
+    "right_front_return",
+    "right_core",
+    "right_rear_return",
+    "right_rear",
     "back",
-    "left"
+    "left_rear",
+    "left_rear_return",
+    "left_core",
+    "left_front_return",
+    "left_front"
   ],
   "panel_widths_mm": [
-    120.0,
-    132.0,
-    120.0,
-    132.0
+    103.0,
+    44.0,
+    23.0,
+    12.0,
+    15.5,
+    51.5,
+    88.0,
+    51.5,
+    15.5,
+    12.0,
+    23.0,
+    44.0
   ],
   "assembled_outer_xy_mm": [
-    120.0,
-    132.0
+    103.0,
+    107.5
   ],
-  "folds": 3,
-  "closing_seam": "complementary 45-degree miter, captured by roof/base locating rims",
-  "panel_thickness_mm": 1.2,
+  "folds": 11,
+  "closing_seam": "open butt seam; base follows the actual H-shaped inner perimeter",
+  "panel_thickness_mm": 2.2,
   "hinge_skin_mm": 0.45,
-  "miter_clearance_mm": 0.18,
+  "hinge_gap_mm": 1.6,
   "dong_labels": {
     "302": {
       "z_base_mm": 44.0,
@@ -105,5 +121,5 @@
     }
   },
   "flat_on_print_bed": true,
-  "manufacturing_note": "504 mm strip exceeds common 220-256 mm beds; continuous print requires a large-format bed."
+  "manufacturing_note": "500.6 mm strip retains full projecting attachments; needs a large bed, support planning and a physical hinge test."
 }

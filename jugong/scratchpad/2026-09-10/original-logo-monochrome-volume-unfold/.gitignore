@@ -1,0 +1,3 @@
+# Large reproducible validation exports stay local; reports record their hashes.
+*.stl
+*.3mf

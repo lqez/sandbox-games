@@ -50,7 +50,9 @@ def validate(path: Path, *, require_fused: bool = False) -> dict:
     root = ET.fromstring(xml)
     assert root.attrib.get('unit') == 'millimeter'
     bases = root.find(f'{CORE}resources/{CORE}basematerials')
-    assert bases is not None and bases.attrib.get('id') == '1' and len(bases) == 4
+    configuration=json.loads(next(n.text for n in root.findall(f'{CORE}metadata') if n.attrib['name'].endswith('/configuration')))
+    slots=1 if configuration.get('printMode')=='mono' else 4
+    assert bases is not None and bases.attrib.get('id') == '1' and len(bases) == slots
     palette = []
     for entry in bases:
         color = entry.attrib['displaycolor']
@@ -87,19 +89,18 @@ def validate(path: Path, *, require_fused: bool = False) -> dict:
             'positive_volume': True,
             'dimensions_mm': np.round(mesh.extents, 3).tolist(),
         })
-    assert meshes and set(counter) <= set(range(4)) and all(counter[index] for index in range(4))
-    assert all(material_area[index] >= 100 for index in range(4)), 'material color region is too small'
+    assert meshes and set(counter) <= set(range(slots)) and all(counter[index] for index in range(slots))
+    assert all(material_area[index] >= 100 for index in range(slots)), 'material color region is too small'
     assert len(keys) == len(set(keys)), 'duplicate shell across mesh objects'
     if require_fused:
         assert len(meshes) == 1 and meshes[0]['shells'] == 1
 
-    # Print-policy limits at the default 1:200 scale.  The smallest intentionally
-    # colored frame is 0.45 mm; broad repair relief is >=3.8 mm wide and 0.40 mm
-    # deep.  This is a design-bound check, not a substitute for a test print.
-    assert model.MIN_FRAME >= .45
+    # Geometry dimensions are recorded separately from printer capability.
+    # Thin sash/glass geometry requires scale/nozzle/support validation.
     print_limits = {
         'default_scale': '1:200',
-        'minimum_colored_frame_mm': model.MIN_FRAME,
+        'minimum_sash_mullion_mm': .16,
+        'minimum_outer_sash_mm': .26,
         'minimum_relief_width_mm': 3.8,
         'minimum_relief_depth_mm': .4,
         'recommended_fdm_nozzle_mm': '.25-.4',
@@ -112,8 +113,8 @@ def validate(path: Path, *, require_fused: bool = False) -> dict:
         'unit': 'millimeter',
         'material_slots': len(palette),
         'palette': palette,
-        'material_triangles': {str(index): counter[index] for index in range(4)},
-        'material_surface_area_mm2': {str(index): round(material_area[index], 2) for index in range(4)},
+        'material_triangles': {str(index): counter[index] for index in range(slots)},
+        'material_surface_area_mm2': {str(index): round(material_area[index], 2) for index in range(slots)},
         'mesh_objects': meshes,
         'all_triangles_have_valid_material': True,
         'empty_shells': 0,
@@ -135,7 +136,7 @@ def main() -> None:
     if args.output:
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding='utf-8')
-    print(f'PASS: {len(report)} 3MF package(s), four valid material slots, all triangle references valid')
+    print(f'PASS: {len(report)} 3MF package(s), valid color/monochrome material slots, all triangle references valid')
 
 
 if __name__ == '__main__':

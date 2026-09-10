@@ -74,7 +74,7 @@ for position,_,_ in model.CATALOG['acPosition']:
  capture('ac-'+position)
 js('window.modelViewer.loadConfiguration('+json.dumps(config)+');true');ready();camera(yaw=-.93,pitch=.34,span=225);capture('configured-iso')
 js("document.getElementById('render-mode').value='print';document.getElementById('render-mode').dispatchEvent(new Event('change'));true");capture('four-color')
-click('4면 전개 보기');ready();camera(yaw=-1.5707963267948966,pitch=1.5607963267948965,span=410);capture('unfolded')
+click('입체 전개 보기');ready();camera(yaw=-1.5707963267948966,pitch=1.5607963267948965,span=410);capture('unfolded')
 assert config==js('window.modelViewer.getConfiguration()')
 for name,method in [('browser-folded','make3mf'),('browser-unfolded','makeFacade3mf')]:
  data=js("(async()=>{const b=new Uint8Array(await window.modelViewer."+method+"().arrayBuffer());let s='';for(let i=0;i<b.length;i+=32768)s+=String.fromCharCode(...b.subarray(i,i+32768));return btoa(s);})()")

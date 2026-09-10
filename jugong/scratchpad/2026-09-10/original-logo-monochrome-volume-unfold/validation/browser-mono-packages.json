@@ -1,0 +1,3164 @@
+[
+  {
+    "file": "browser-mono-folded.3mf",
+    "sha256": "6eeb0ebb6b8b0b352f1fecefb713a2828d525c7b160114e487f661ac36b0a694",
+    "zip_crc": "pass",
+    "unit": "millimeter",
+    "material_slots": 1,
+    "palette": [
+      {
+        "name": "노후 콘크리트·도장 외벽",
+        "color": "#B8B8B8"
+      }
+    ],
+    "material_triangles": {
+      "0": 156608
+    },
+    "material_surface_area_mm2": {
+      "0": 217296.75
+    },
+    "mesh_objects": [
+      {
+        "id": 2,
+        "name": "base",
+        "triangles": 104596,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          120.0,
+          132.0,
+          174.2
+        ]
+      },
+      {
+        "id": 3,
+        "name": "01-A sash_partial__four",
+        "triangles": 440,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          19.26,
+          0.54,
+          11.47
+        ]
+      },
+      {
+        "id": 4,
+        "name": "01-A sash_full__four",
+        "triangles": 658,
+        "shells": 2,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          33.83,
+          7.4,
+          11.41
+        ]
+      },
+      {
+        "id": 5,
+        "name": "01-A small__transom",
+        "triangles": 1098,
+        "shells": 4,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          14.8,
+          35.4,
+          7.53
+        ]
+      },
+      {
+        "id": 6,
+        "name": "01-A ac_bracket__bedroom",
+        "triangles": 184,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          4.6,
+          2.85,
+          2.3
+        ]
+      },
+      {
+        "id": 7,
+        "name": "01-A ac_unit__bedroom",
+        "triangles": 204,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          4.4,
+          1.87,
+          2.8
+        ]
+      },
+      {
+        "id": 8,
+        "name": "01-B sash_partial__three",
+        "triangles": 304,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          19.26,
+          0.54,
+          11.47
+        ]
+      },
+      {
+        "id": 9,
+        "name": "01-B sash_full__three",
+        "triangles": 556,
+        "shells": 2,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          33.83,
+          7.4,
+          11.41
+        ]
+      },
+      {
+        "id": 10,
+        "name": "01-B small__boxed",
+        "triangles": 872,
+        "shells": 2,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          13.87,
+          34.47,
+          6.6
+        ]
+      },
+      {
+        "id": 11,
+        "name": "01-C sash_partial__four",
+        "triangles": 494,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          0.54,
+          19.26,
+          11.47
+        ]
+      },
+      {
+        "id": 12,
+        "name": "01-C sash_full__four",
+        "triangles": 674,
+        "shells": 2,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          7.4,
+          33.83,
+          11.41
+        ]
+      },
+      {
+        "id": 13,
+        "name": "01-C small__boxed",
+        "triangles": 472,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          3.37,
+          8.0,
+          6.6
+        ]
+      },
+      {
+        "id": 14,
+        "name": "01-C ac_bracket__bedroom",
+        "triangles": 158,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          2.85,
+          4.6,
+          2.3
+        ]
+      },
+      {
+        "id": 15,
+        "name": "01-C ac_unit__bedroom",
+        "triangles": 204,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          1.87,
+          4.4,
+          2.8
+        ]
+      },
+      {
+        "id": 16,
+        "name": "01-D sash_partial__four",
+        "triangles": 426,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          0.54,
+          19.26,
+          11.47
+        ]
+      },
+      {
+        "id": 17,
+        "name": "01-D sash_full__four",
+        "triangles": 724,
+        "shells": 2,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          7.4,
+          33.83,
+          11.41
+        ]
+      },
+      {
+        "id": 18,
+        "name": "02-A sash_partial__two",
+        "triangles": 254,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          19.26,
+          0.54,
+          11.47
+        ]
+      },
+      {
+        "id": 19,
+        "name": "02-A sash_full__two",
+        "triangles": 514,
+        "shells": 2,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          33.83,
+          7.4,
+          11.41
+        ]
+      },
+      {
+        "id": 20,
+        "name": "02-A ac_bracket__bedroom",
+        "triangles": 184,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          4.6,
+          2.85,
+          2.3
+        ]
+      },
+      {
+        "id": 21,
+        "name": "02-A ac_unit__bedroom",
+        "triangles": 204,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          4.4,
+          1.87,
+          2.8
+        ]
+      },
+      {
+        "id": 22,
+        "name": "02-B sash_partial__transom",
+        "triangles": 650,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          19.26,
+          0.54,
+          11.47
+        ]
+      },
+      {
+        "id": 23,
+        "name": "02-B sash_full__transom",
+        "triangles": 476,
+        "shells": 2,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          33.83,
+          7.4,
+          11.41
+        ]
+      },
+      {
+        "id": 24,
+        "name": "02-C sash_partial__two",
+        "triangles": 292,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          0.54,
+          19.26,
+          11.47
+        ]
+      },
+      {
+        "id": 25,
+        "name": "02-C sash_full__two",
+        "triangles": 524,
+        "shells": 2,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          7.4,
+          33.83,
+          11.41
+        ]
+      },
+      {
+        "id": 26,
+        "name": "02-C small__boxed",
+        "triangles": 490,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          3.37,
+          8.0,
+          6.6
+        ]
+      },
+      {
+        "id": 27,
+        "name": "02-C ac_bracket__small_top",
+        "triangles": 120,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          2.05,
+          4.6,
+          2.3
+        ]
+      },
+      {
+        "id": 28,
+        "name": "02-C ac_unit__small_top",
+        "triangles": 204,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          1.87,
+          4.4,
+          2.35
+        ]
+      },
+      {
+        "id": 29,
+        "name": "02-D sash_partial__transom",
+        "triangles": 666,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          0.54,
+          19.26,
+          11.47
+        ]
+      },
+      {
+        "id": 30,
+        "name": "03-A sash_partial__three",
+        "triangles": 320,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          19.26,
+          0.54,
+          11.47
+        ]
+      },
+      {
+        "id": 31,
+        "name": "03-A sash_full__three",
+        "triangles": 580,
+        "shells": 2,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          33.83,
+          7.4,
+          11.41
+        ]
+      },
+      {
+        "id": 32,
+        "name": "03-B sash_partial__four",
+        "triangles": 444,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          19.26,
+          0.54,
+          11.47
+        ]
+      },
+      {
+        "id": 33,
+        "name": "03-B ac_bracket__small_rail",
+        "triangles": 120,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          2.35,
+          4.6,
+          2.3
+        ]
+      },
+      {
+        "id": 34,
+        "name": "03-B ac_unit__small_rail",
+        "triangles": 204,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          1.87,
+          4.4,
+          2.8
+        ]
+      },
+      {
+        "id": 35,
+        "name": "03-C sash_partial__three",
+        "triangles": 384,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          0.54,
+          19.26,
+          11.47
+        ]
+      },
+      {
+        "id": 36,
+        "name": "03-C small__boxed",
+        "triangles": 490,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          3.37,
+          8.0,
+          6.6
+        ]
+      },
+      {
+        "id": 37,
+        "name": "03-C ac_bracket__bedroom",
+        "triangles": 154,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          2.85,
+          4.6,
+          2.3
+        ]
+      },
+      {
+        "id": 38,
+        "name": "03-C ac_unit__bedroom",
+        "triangles": 204,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          1.87,
+          4.4,
+          2.8
+        ]
+      },
+      {
+        "id": 39,
+        "name": "03-D sash_partial__three",
+        "triangles": 404,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          0.54,
+          19.26,
+          11.47
+        ]
+      },
+      {
+        "id": 40,
+        "name": "03-D sash_full__three",
+        "triangles": 630,
+        "shells": 2,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          7.4,
+          33.83,
+          11.41
+        ]
+      },
+      {
+        "id": 41,
+        "name": "03-D small__boxed",
+        "triangles": 434,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          3.37,
+          8.0,
+          6.6
+        ]
+      },
+      {
+        "id": 42,
+        "name": "04-A sash_partial__three",
+        "triangles": 320,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          19.26,
+          0.54,
+          11.47
+        ]
+      },
+      {
+        "id": 43,
+        "name": "04-A sash_full__three",
+        "triangles": 580,
+        "shells": 2,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          33.83,
+          7.4,
+          11.41
+        ]
+      },
+      {
+        "id": 44,
+        "name": "04-A small__roof",
+        "triangles": 804,
+        "shells": 4,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          14.8,
+          35.4,
+          7.53
+        ]
+      },
+      {
+        "id": 45,
+        "name": "04-B sash_partial__three",
+        "triangles": 318,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          19.26,
+          0.54,
+          11.47
+        ]
+      },
+      {
+        "id": 46,
+        "name": "04-B sash_full__three",
+        "triangles": 578,
+        "shells": 2,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          33.83,
+          7.4,
+          11.41
+        ]
+      },
+      {
+        "id": 47,
+        "name": "04-B small__boxed",
+        "triangles": 852,
+        "shells": 2,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          13.87,
+          34.47,
+          6.6
+        ]
+      },
+      {
+        "id": 48,
+        "name": "04-B ac_bracket__small_top",
+        "triangles": 128,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          2.05,
+          4.6,
+          2.3
+        ]
+      },
+      {
+        "id": 49,
+        "name": "04-B ac_unit__small_top",
+        "triangles": 204,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          1.87,
+          4.4,
+          2.35
+        ]
+      },
+      {
+        "id": 50,
+        "name": "04-C ac_bracket__small_wall",
+        "triangles": 120,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          2.05,
+          4.6,
+          2.3
+        ]
+      },
+      {
+        "id": 51,
+        "name": "04-C ac_unit__small_wall",
+        "triangles": 204,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          1.87,
+          4.4,
+          2.8
+        ]
+      },
+      {
+        "id": 52,
+        "name": "04-D sash_partial__transom",
+        "triangles": 676,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          0.54,
+          19.26,
+          11.47
+        ]
+      },
+      {
+        "id": 53,
+        "name": "05-A small__boxed",
+        "triangles": 898,
+        "shells": 2,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          13.87,
+          34.47,
+          6.6
+        ]
+      },
+      {
+        "id": 54,
+        "name": "05-A ac_bracket__corner",
+        "triangles": 180,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          4.6,
+          2.85,
+          2.3
+        ]
+      },
+      {
+        "id": 55,
+        "name": "05-A ac_unit__corner",
+        "triangles": 204,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          4.4,
+          1.87,
+          2.8
+        ]
+      },
+      {
+        "id": 56,
+        "name": "05-B sash_partial__two",
+        "triangles": 276,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          19.26,
+          0.54,
+          11.47
+        ]
+      },
+      {
+        "id": 57,
+        "name": "05-B sash_full__two",
+        "triangles": 474,
+        "shells": 2,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          33.83,
+          7.4,
+          11.41
+        ]
+      },
+      {
+        "id": 58,
+        "name": "05-B ac_bracket__bedroom",
+        "triangles": 170,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          4.6,
+          2.85,
+          2.3
+        ]
+      },
+      {
+        "id": 59,
+        "name": "05-C sash_partial__three",
+        "triangles": 396,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          0.54,
+          19.26,
+          11.47
+        ]
+      },
+      {
+        "id": 60,
+        "name": "05-C sash_full__three",
+        "triangles": 602,
+        "shells": 2,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          7.4,
+          33.83,
+          11.41
+        ]
+      },
+      {
+        "id": 61,
+        "name": "05-D sash_partial__three",
+        "triangles": 424,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          0.54,
+          19.26,
+          11.47
+        ]
+      },
+      {
+        "id": 62,
+        "name": "05-D sash_full__three",
+        "triangles": 636,
+        "shells": 2,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          7.4,
+          33.83,
+          11.41
+        ]
+      },
+      {
+        "id": 63,
+        "name": "05-D small__roof",
+        "triangles": 452,
+        "shells": 2,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          3.95,
+          8.8,
+          7.53
+        ]
+      },
+      {
+        "id": 64,
+        "name": "06-A sash_partial__three",
+        "triangles": 320,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          19.26,
+          0.54,
+          11.47
+        ]
+      },
+      {
+        "id": 65,
+        "name": "06-A sash_full__three",
+        "triangles": 584,
+        "shells": 2,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          33.83,
+          7.4,
+          11.41
+        ]
+      },
+      {
+        "id": 66,
+        "name": "06-A small__transom",
+        "triangles": 1096,
+        "shells": 4,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          14.8,
+          35.4,
+          7.53
+        ]
+      },
+      {
+        "id": 67,
+        "name": "06-B sash_partial__four",
+        "triangles": 444,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          19.26,
+          0.54,
+          11.47
+        ]
+      },
+      {
+        "id": 68,
+        "name": "06-B small__boxed",
+        "triangles": 856,
+        "shells": 2,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          13.87,
+          34.47,
+          6.6
+        ]
+      },
+      {
+        "id": 69,
+        "name": "06-C sash_partial__three",
+        "triangles": 396,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          0.54,
+          19.26,
+          11.47
+        ]
+      },
+      {
+        "id": 70,
+        "name": "06-C small__roof",
+        "triangles": 422,
+        "shells": 2,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          3.95,
+          8.8,
+          7.53
+        ]
+      },
+      {
+        "id": 71,
+        "name": "07-A sash_partial__four",
+        "triangles": 456,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          19.26,
+          0.54,
+          11.47
+        ]
+      },
+      {
+        "id": 72,
+        "name": "07-A ac_bracket__bedroom",
+        "triangles": 180,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          4.6,
+          2.85,
+          2.3
+        ]
+      },
+      {
+        "id": 73,
+        "name": "07-A ac_unit__bedroom",
+        "triangles": 204,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          4.4,
+          1.87,
+          2.8
+        ]
+      },
+      {
+        "id": 74,
+        "name": "07-B ac_bracket__bedroom",
+        "triangles": 170,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          4.6,
+          2.85,
+          2.3
+        ]
+      },
+      {
+        "id": 75,
+        "name": "07-B ac_unit__bedroom",
+        "triangles": 204,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          4.4,
+          1.87,
+          2.8
+        ]
+      },
+      {
+        "id": 76,
+        "name": "07-C sash_partial__four",
+        "triangles": 474,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          0.54,
+          19.26,
+          11.47
+        ]
+      },
+      {
+        "id": 77,
+        "name": "07-C sash_full__four",
+        "triangles": 720,
+        "shells": 2,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          7.4,
+          33.83,
+          11.41
+        ]
+      },
+      {
+        "id": 78,
+        "name": "07-C ac_bracket__small_wall",
+        "triangles": 120,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          2.05,
+          4.6,
+          2.3
+        ]
+      },
+      {
+        "id": 79,
+        "name": "07-C ac_unit__small_wall",
+        "triangles": 204,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          1.87,
+          4.4,
+          2.8
+        ]
+      },
+      {
+        "id": 80,
+        "name": "07-D sash_partial__three",
+        "triangles": 424,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          0.54,
+          19.26,
+          11.47
+        ]
+      },
+      {
+        "id": 81,
+        "name": "07-D sash_full__three",
+        "triangles": 636,
+        "shells": 2,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          7.4,
+          33.83,
+          11.41
+        ]
+      },
+      {
+        "id": 82,
+        "name": "07-D small__roof",
+        "triangles": 452,
+        "shells": 2,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          3.95,
+          8.8,
+          7.53
+        ]
+      },
+      {
+        "id": 83,
+        "name": "07-D ac_bracket__bedroom",
+        "triangles": 144,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          2.85,
+          4.6,
+          2.3
+        ]
+      },
+      {
+        "id": 84,
+        "name": "07-D ac_unit__bedroom",
+        "triangles": 204,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          1.87,
+          4.4,
+          2.8
+        ]
+      },
+      {
+        "id": 85,
+        "name": "08-A sash_partial__two",
+        "triangles": 256,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          19.26,
+          0.54,
+          11.47
+        ]
+      },
+      {
+        "id": 86,
+        "name": "08-A sash_full__two",
+        "triangles": 506,
+        "shells": 2,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          33.83,
+          7.4,
+          11.41
+        ]
+      },
+      {
+        "id": 87,
+        "name": "08-A ac_bracket__bedroom",
+        "triangles": 180,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          4.6,
+          2.85,
+          2.3
+        ]
+      },
+      {
+        "id": 88,
+        "name": "08-A ac_unit__bedroom",
+        "triangles": 204,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          4.4,
+          1.87,
+          2.8
+        ]
+      },
+      {
+        "id": 89,
+        "name": "08-B sash_partial__two",
+        "triangles": 276,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          19.26,
+          0.54,
+          11.47
+        ]
+      },
+      {
+        "id": 90,
+        "name": "08-B sash_full__two",
+        "triangles": 474,
+        "shells": 2,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          33.83,
+          7.4,
+          11.41
+        ]
+      },
+      {
+        "id": 91,
+        "name": "08-B small__roof",
+        "triangles": 848,
+        "shells": 4,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          14.8,
+          35.4,
+          7.53
+        ]
+      },
+      {
+        "id": 92,
+        "name": "08-B ac_bracket__bedroom",
+        "triangles": 170,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          4.6,
+          2.85,
+          2.3
+        ]
+      },
+      {
+        "id": 93,
+        "name": "08-B ac_unit__bedroom",
+        "triangles": 204,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          4.4,
+          1.87,
+          2.8
+        ]
+      },
+      {
+        "id": 94,
+        "name": "08-C sash_partial__two",
+        "triangles": 284,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          0.54,
+          19.26,
+          11.47
+        ]
+      },
+      {
+        "id": 95,
+        "name": "08-C sash_full__two",
+        "triangles": 516,
+        "shells": 2,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          7.4,
+          33.83,
+          11.41
+        ]
+      },
+      {
+        "id": 96,
+        "name": "08-C small__roof",
+        "triangles": 422,
+        "shells": 2,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          3.95,
+          8.8,
+          7.53
+        ]
+      },
+      {
+        "id": 97,
+        "name": "09-A sash_partial__three",
+        "triangles": 308,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          19.26,
+          0.54,
+          11.47
+        ]
+      },
+      {
+        "id": 98,
+        "name": "09-A small__roof",
+        "triangles": 818,
+        "shells": 4,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          14.8,
+          35.4,
+          7.53
+        ]
+      },
+      {
+        "id": 99,
+        "name": "09-B sash_partial__four",
+        "triangles": 418,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          19.26,
+          0.54,
+          11.47
+        ]
+      },
+      {
+        "id": 100,
+        "name": "09-B sash_full__four",
+        "triangles": 634,
+        "shells": 2,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          33.83,
+          7.4,
+          11.41
+        ]
+      },
+      {
+        "id": 101,
+        "name": "09-B small__transom",
+        "triangles": 1080,
+        "shells": 4,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          14.8,
+          35.4,
+          7.53
+        ]
+      },
+      {
+        "id": 102,
+        "name": "09-C sash_partial__three",
+        "triangles": 396,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          0.54,
+          19.26,
+          11.47
+        ]
+      },
+      {
+        "id": 103,
+        "name": "09-C sash_full__three",
+        "triangles": 596,
+        "shells": 2,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          7.4,
+          33.83,
+          11.41
+        ]
+      },
+      {
+        "id": 104,
+        "name": "09-C ac_bracket__bedroom",
+        "triangles": 146,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          2.85,
+          4.6,
+          2.3
+        ]
+      },
+      {
+        "id": 105,
+        "name": "09-C ac_unit__bedroom",
+        "triangles": 204,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          1.87,
+          4.4,
+          2.8
+        ]
+      },
+      {
+        "id": 106,
+        "name": "09-D ac_bracket__corner",
+        "triangles": 144,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          2.85,
+          4.6,
+          2.3
+        ]
+      },
+      {
+        "id": 107,
+        "name": "09-D ac_unit__corner",
+        "triangles": 204,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          1.87,
+          4.4,
+          2.8
+        ]
+      },
+      {
+        "id": 108,
+        "name": "10-A sash_partial__transom",
+        "triangles": 608,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          19.26,
+          0.54,
+          12.47
+        ]
+      },
+      {
+        "id": 109,
+        "name": "10-A sash_full__transom",
+        "triangles": 516,
+        "shells": 2,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          33.83,
+          7.4,
+          12.41
+        ]
+      },
+      {
+        "id": 110,
+        "name": "10-A small__roof",
+        "triangles": 810,
+        "shells": 4,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          14.8,
+          35.4,
+          7.53
+        ]
+      },
+      {
+        "id": 111,
+        "name": "10-A ac_bracket__corner",
+        "triangles": 180,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          4.6,
+          2.85,
+          2.3
+        ]
+      },
+      {
+        "id": 112,
+        "name": "10-A ac_unit__corner",
+        "triangles": 204,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          4.4,
+          1.87,
+          2.8
+        ]
+      },
+      {
+        "id": 113,
+        "name": "10-B sash_partial__transom",
+        "triangles": 628,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          19.26,
+          0.54,
+          12.47
+        ]
+      },
+      {
+        "id": 114,
+        "name": "10-B sash_full__transom",
+        "triangles": 482,
+        "shells": 2,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          33.83,
+          7.4,
+          12.41
+        ]
+      },
+      {
+        "id": 115,
+        "name": "10-B small__boxed",
+        "triangles": 846,
+        "shells": 2,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          13.87,
+          34.47,
+          6.6
+        ]
+      },
+      {
+        "id": 116,
+        "name": "10-C sash_partial__four",
+        "triangles": 480,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          0.54,
+          19.26,
+          12.47
+        ]
+      },
+      {
+        "id": 117,
+        "name": "10-C sash_full__four",
+        "triangles": 728,
+        "shells": 2,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          7.4,
+          33.83,
+          12.41
+        ]
+      },
+      {
+        "id": 118,
+        "name": "10-D small__roof",
+        "triangles": 434,
+        "shells": 2,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          3.95,
+          8.8,
+          7.53
+        ]
+      },
+      {
+        "id": 119,
+        "name": "raised monochrome marks",
+        "triangles": 1128,
+        "shells": 2,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          104.37,
+          8.6,
+          8.6
+        ]
+      },
+      {
+        "id": 120,
+        "name": "324-dong-label-folded",
+        "triangles": 1060,
+        "shells": 4,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          0.705,
+          10.021,
+          9.3
+        ]
+      }
+    ],
+    "all_triangles_have_valid_material": true,
+    "empty_shells": 0,
+    "duplicate_shells": 0,
+    "assembly_policy": "watertight material objects assembled at intentional fastening overlaps",
+    "print_limits": {
+      "default_scale": "1:200",
+      "minimum_sash_mullion_mm": 0.16,
+      "minimum_outer_sash_mm": 0.26,
+      "minimum_relief_width_mm": 3.8,
+      "minimum_relief_depth_mm": 0.4,
+      "recommended_fdm_nozzle_mm": ".25-.4",
+      "recommended_layer_height_mm": "<=.2"
+    }
+  },
+  {
+    "file": "browser-mono-unfolded.3mf",
+    "sha256": "a2bb84896ce0ef95abdb3f466110fce989b0443a3c39af4f9b274ac2f20b7bdc",
+    "zip_crc": "pass",
+    "unit": "millimeter",
+    "material_slots": 1,
+    "palette": [
+      {
+        "name": "노후 콘크리트·도장 외벽",
+        "color": "#B8B8B8"
+      }
+    ],
+    "material_triangles": {
+      "0": 163244
+    },
+    "material_surface_area_mm2": {
+      "0": 267467.55
+    },
+    "mesh_objects": [
+      {
+        "id": 2,
+        "name": "continuous facade strip",
+        "triangles": 109354,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          500.6,
+          153.48,
+          26.9
+        ]
+      },
+      {
+        "id": 3,
+        "name": "01-A sash_partial__four unfolded",
+        "triangles": 514,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          19.26,
+          11.47,
+          0.54
+        ]
+      },
+      {
+        "id": 4,
+        "name": "01-A sash_full__four unfolded",
+        "triangles": 702,
+        "shells": 2,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          33.83,
+          11.41,
+          7.4
+        ]
+      },
+      {
+        "id": 5,
+        "name": "01-A small__transom unfolded",
+        "triangles": 1096,
+        "shells": 4,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          475.5,
+          7.53,
+          3.95
+        ]
+      },
+      {
+        "id": 6,
+        "name": "01-A ac_bracket__bedroom unfolded",
+        "triangles": 162,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          4.6,
+          2.3,
+          2.85
+        ]
+      },
+      {
+        "id": 7,
+        "name": "01-A ac_unit__bedroom unfolded",
+        "triangles": 204,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          4.4,
+          2.8,
+          1.87
+        ]
+      },
+      {
+        "id": 8,
+        "name": "01-B sash_partial__three unfolded",
+        "triangles": 370,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          19.26,
+          11.47,
+          0.54
+        ]
+      },
+      {
+        "id": 9,
+        "name": "01-B sash_full__three unfolded",
+        "triangles": 610,
+        "shells": 2,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          33.83,
+          11.41,
+          7.4
+        ]
+      },
+      {
+        "id": 10,
+        "name": "01-B small__boxed unfolded",
+        "triangles": 878,
+        "shells": 2,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          43.5,
+          6.6,
+          3.37
+        ]
+      },
+      {
+        "id": 11,
+        "name": "01-C sash_partial__four unfolded",
+        "triangles": 514,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          19.26,
+          11.47,
+          0.54
+        ]
+      },
+      {
+        "id": 12,
+        "name": "01-C sash_full__four unfolded",
+        "triangles": 702,
+        "shells": 2,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          33.83,
+          11.41,
+          7.4
+        ]
+      },
+      {
+        "id": 13,
+        "name": "01-C small__boxed unfolded",
+        "triangles": 460,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          8.0,
+          6.6,
+          3.37
+        ]
+      },
+      {
+        "id": 14,
+        "name": "01-C ac_bracket__bedroom unfolded",
+        "triangles": 164,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          4.6,
+          2.3,
+          2.85
+        ]
+      },
+      {
+        "id": 15,
+        "name": "01-C ac_unit__bedroom unfolded",
+        "triangles": 204,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          4.4,
+          2.8,
+          1.87
+        ]
+      },
+      {
+        "id": 16,
+        "name": "01-D sash_partial__four unfolded",
+        "triangles": 508,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          19.26,
+          11.47,
+          0.54
+        ]
+      },
+      {
+        "id": 17,
+        "name": "01-D sash_full__four unfolded",
+        "triangles": 720,
+        "shells": 2,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          33.83,
+          11.41,
+          7.4
+        ]
+      },
+      {
+        "id": 18,
+        "name": "02-A sash_partial__two unfolded",
+        "triangles": 298,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          19.26,
+          11.47,
+          0.54
+        ]
+      },
+      {
+        "id": 19,
+        "name": "02-A sash_full__two unfolded",
+        "triangles": 532,
+        "shells": 2,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          33.83,
+          11.41,
+          7.4
+        ]
+      },
+      {
+        "id": 20,
+        "name": "02-A ac_bracket__bedroom unfolded",
+        "triangles": 162,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          4.6,
+          2.3,
+          2.85
+        ]
+      },
+      {
+        "id": 21,
+        "name": "02-A ac_unit__bedroom unfolded",
+        "triangles": 204,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          4.4,
+          2.8,
+          1.87
+        ]
+      },
+      {
+        "id": 22,
+        "name": "02-B sash_partial__transom unfolded",
+        "triangles": 740,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          19.26,
+          11.47,
+          0.54
+        ]
+      },
+      {
+        "id": 23,
+        "name": "02-B sash_full__transom unfolded",
+        "triangles": 566,
+        "shells": 2,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          33.83,
+          11.41,
+          7.4
+        ]
+      },
+      {
+        "id": 24,
+        "name": "02-C sash_partial__two unfolded",
+        "triangles": 300,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          19.26,
+          11.47,
+          0.54
+        ]
+      },
+      {
+        "id": 25,
+        "name": "02-C sash_full__two unfolded",
+        "triangles": 532,
+        "shells": 2,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          33.83,
+          11.41,
+          7.4
+        ]
+      },
+      {
+        "id": 26,
+        "name": "02-C small__boxed unfolded",
+        "triangles": 460,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          8.0,
+          6.6,
+          3.37
+        ]
+      },
+      {
+        "id": 27,
+        "name": "02-C ac_bracket__small_top unfolded",
+        "triangles": 148,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          4.6,
+          2.3,
+          2.05
+        ]
+      },
+      {
+        "id": 28,
+        "name": "02-C ac_unit__small_top unfolded",
+        "triangles": 204,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          4.4,
+          2.35,
+          1.87
+        ]
+      },
+      {
+        "id": 29,
+        "name": "02-D sash_partial__transom unfolded",
+        "triangles": 736,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          19.26,
+          11.47,
+          0.54
+        ]
+      },
+      {
+        "id": 30,
+        "name": "03-A sash_partial__three unfolded",
+        "triangles": 384,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          19.26,
+          11.47,
+          0.54
+        ]
+      },
+      {
+        "id": 31,
+        "name": "03-A sash_full__three unfolded",
+        "triangles": 620,
+        "shells": 2,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          33.83,
+          11.41,
+          7.4
+        ]
+      },
+      {
+        "id": 32,
+        "name": "03-B sash_partial__four unfolded",
+        "triangles": 514,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          19.26,
+          11.47,
+          0.54
+        ]
+      },
+      {
+        "id": 33,
+        "name": "03-B ac_bracket__small_rail unfolded",
+        "triangles": 158,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          4.6,
+          2.3,
+          2.35
+        ]
+      },
+      {
+        "id": 34,
+        "name": "03-B ac_unit__small_rail unfolded",
+        "triangles": 204,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          4.4,
+          2.8,
+          1.87
+        ]
+      },
+      {
+        "id": 35,
+        "name": "03-C sash_partial__three unfolded",
+        "triangles": 384,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          19.26,
+          11.47,
+          0.54
+        ]
+      },
+      {
+        "id": 36,
+        "name": "03-C small__boxed unfolded",
+        "triangles": 464,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          8.0,
+          6.6,
+          3.37
+        ]
+      },
+      {
+        "id": 37,
+        "name": "03-C ac_bracket__bedroom unfolded",
+        "triangles": 154,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          4.6,
+          2.3,
+          2.85
+        ]
+      },
+      {
+        "id": 38,
+        "name": "03-C ac_unit__bedroom unfolded",
+        "triangles": 204,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          4.4,
+          2.8,
+          1.87
+        ]
+      },
+      {
+        "id": 39,
+        "name": "03-D sash_partial__three unfolded",
+        "triangles": 386,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          19.26,
+          11.47,
+          0.54
+        ]
+      },
+      {
+        "id": 40,
+        "name": "03-D sash_full__three unfolded",
+        "triangles": 592,
+        "shells": 2,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          33.83,
+          11.41,
+          7.4
+        ]
+      },
+      {
+        "id": 41,
+        "name": "03-D small__boxed unfolded",
+        "triangles": 430,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          8.0,
+          6.6,
+          3.37
+        ]
+      },
+      {
+        "id": 42,
+        "name": "04-A sash_partial__three unfolded",
+        "triangles": 384,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          19.26,
+          11.47,
+          0.54
+        ]
+      },
+      {
+        "id": 43,
+        "name": "04-A sash_full__three unfolded",
+        "triangles": 616,
+        "shells": 2,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          33.83,
+          11.41,
+          7.4
+        ]
+      },
+      {
+        "id": 44,
+        "name": "04-A small__roof unfolded",
+        "triangles": 804,
+        "shells": 4,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          475.5,
+          7.53,
+          3.95
+        ]
+      },
+      {
+        "id": 45,
+        "name": "04-B sash_partial__three unfolded",
+        "triangles": 370,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          19.26,
+          11.47,
+          0.54
+        ]
+      },
+      {
+        "id": 46,
+        "name": "04-B sash_full__three unfolded",
+        "triangles": 590,
+        "shells": 2,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          33.83,
+          11.41,
+          7.4
+        ]
+      },
+      {
+        "id": 47,
+        "name": "04-B small__boxed unfolded",
+        "triangles": 854,
+        "shells": 2,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          43.5,
+          6.6,
+          3.37
+        ]
+      },
+      {
+        "id": 48,
+        "name": "04-B ac_bracket__small_top unfolded",
+        "triangles": 160,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          4.6,
+          2.3,
+          2.05
+        ]
+      },
+      {
+        "id": 49,
+        "name": "04-B ac_unit__small_top unfolded",
+        "triangles": 204,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          4.4,
+          2.35,
+          1.87
+        ]
+      },
+      {
+        "id": 50,
+        "name": "04-C ac_bracket__small_wall unfolded",
+        "triangles": 140,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          4.6,
+          2.3,
+          2.05
+        ]
+      },
+      {
+        "id": 51,
+        "name": "04-C ac_unit__small_wall unfolded",
+        "triangles": 204,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          4.4,
+          2.8,
+          1.87
+        ]
+      },
+      {
+        "id": 52,
+        "name": "04-D sash_partial__transom unfolded",
+        "triangles": 728,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          19.26,
+          11.47,
+          0.54
+        ]
+      },
+      {
+        "id": 53,
+        "name": "05-A small__boxed unfolded",
+        "triangles": 912,
+        "shells": 2,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          474.7,
+          6.6,
+          3.37
+        ]
+      },
+      {
+        "id": 54,
+        "name": "05-A ac_bracket__corner unfolded",
+        "triangles": 154,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          4.6,
+          2.3,
+          2.85
+        ]
+      },
+      {
+        "id": 55,
+        "name": "05-A ac_unit__corner unfolded",
+        "triangles": 204,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          4.4,
+          2.8,
+          1.87
+        ]
+      },
+      {
+        "id": 56,
+        "name": "05-B sash_partial__two unfolded",
+        "triangles": 294,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          19.26,
+          11.47,
+          0.54
+        ]
+      },
+      {
+        "id": 57,
+        "name": "05-B sash_full__two unfolded",
+        "triangles": 532,
+        "shells": 2,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          33.83,
+          11.41,
+          7.4
+        ]
+      },
+      {
+        "id": 58,
+        "name": "05-B ac_bracket__bedroom unfolded",
+        "triangles": 160,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          4.6,
+          2.3,
+          2.85
+        ]
+      },
+      {
+        "id": 59,
+        "name": "05-C sash_partial__three unfolded",
+        "triangles": 384,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          19.26,
+          11.47,
+          0.54
+        ]
+      },
+      {
+        "id": 60,
+        "name": "05-C sash_full__three unfolded",
+        "triangles": 634,
+        "shells": 2,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          33.83,
+          11.41,
+          7.4
+        ]
+      },
+      {
+        "id": 61,
+        "name": "05-D sash_partial__three unfolded",
+        "triangles": 386,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          19.26,
+          11.47,
+          0.54
+        ]
+      },
+      {
+        "id": 62,
+        "name": "05-D sash_full__three unfolded",
+        "triangles": 600,
+        "shells": 2,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          33.83,
+          11.41,
+          7.4
+        ]
+      },
+      {
+        "id": 63,
+        "name": "05-D small__roof unfolded",
+        "triangles": 438,
+        "shells": 2,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          8.8,
+          7.53,
+          3.95
+        ]
+      },
+      {
+        "id": 64,
+        "name": "06-A sash_partial__three unfolded",
+        "triangles": 384,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          19.26,
+          11.47,
+          0.54
+        ]
+      },
+      {
+        "id": 65,
+        "name": "06-A sash_full__three unfolded",
+        "triangles": 634,
+        "shells": 2,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          33.83,
+          11.41,
+          7.4
+        ]
+      },
+      {
+        "id": 66,
+        "name": "06-A small__transom unfolded",
+        "triangles": 1070,
+        "shells": 4,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          475.5,
+          7.53,
+          3.95
+        ]
+      },
+      {
+        "id": 67,
+        "name": "06-B sash_partial__four unfolded",
+        "triangles": 510,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          19.26,
+          11.47,
+          0.54
+        ]
+      },
+      {
+        "id": 68,
+        "name": "06-B small__boxed unfolded",
+        "triangles": 850,
+        "shells": 2,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          43.5,
+          6.6,
+          3.37
+        ]
+      },
+      {
+        "id": 69,
+        "name": "06-C sash_partial__three unfolded",
+        "triangles": 384,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          19.26,
+          11.47,
+          0.54
+        ]
+      },
+      {
+        "id": 70,
+        "name": "06-C small__roof unfolded",
+        "triangles": 398,
+        "shells": 2,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          8.8,
+          7.53,
+          3.95
+        ]
+      },
+      {
+        "id": 71,
+        "name": "07-A sash_partial__four unfolded",
+        "triangles": 516,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          19.26,
+          11.47,
+          0.54
+        ]
+      },
+      {
+        "id": 72,
+        "name": "07-A ac_bracket__bedroom unfolded",
+        "triangles": 154,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          4.6,
+          2.3,
+          2.85
+        ]
+      },
+      {
+        "id": 73,
+        "name": "07-A ac_unit__bedroom unfolded",
+        "triangles": 204,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          4.4,
+          2.8,
+          1.87
+        ]
+      },
+      {
+        "id": 74,
+        "name": "07-B ac_bracket__bedroom unfolded",
+        "triangles": 150,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          4.6,
+          2.3,
+          2.85
+        ]
+      },
+      {
+        "id": 75,
+        "name": "07-B ac_unit__bedroom unfolded",
+        "triangles": 204,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          4.4,
+          2.8,
+          1.87
+        ]
+      },
+      {
+        "id": 76,
+        "name": "07-C sash_partial__four unfolded",
+        "triangles": 514,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          19.26,
+          11.47,
+          0.54
+        ]
+      },
+      {
+        "id": 77,
+        "name": "07-C sash_full__four unfolded",
+        "triangles": 712,
+        "shells": 2,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          33.83,
+          11.41,
+          7.4
+        ]
+      },
+      {
+        "id": 78,
+        "name": "07-C ac_bracket__small_wall unfolded",
+        "triangles": 140,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          4.6,
+          2.3,
+          2.05
+        ]
+      },
+      {
+        "id": 79,
+        "name": "07-C ac_unit__small_wall unfolded",
+        "triangles": 204,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          4.4,
+          2.8,
+          1.87
+        ]
+      },
+      {
+        "id": 80,
+        "name": "07-D sash_partial__three unfolded",
+        "triangles": 386,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          19.26,
+          11.47,
+          0.54
+        ]
+      },
+      {
+        "id": 81,
+        "name": "07-D sash_full__three unfolded",
+        "triangles": 600,
+        "shells": 2,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          33.83,
+          11.41,
+          7.4
+        ]
+      },
+      {
+        "id": 82,
+        "name": "07-D small__roof unfolded",
+        "triangles": 438,
+        "shells": 2,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          8.8,
+          7.53,
+          3.95
+        ]
+      },
+      {
+        "id": 83,
+        "name": "07-D ac_bracket__bedroom unfolded",
+        "triangles": 146,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          4.6,
+          2.3,
+          2.85
+        ]
+      },
+      {
+        "id": 84,
+        "name": "07-D ac_unit__bedroom unfolded",
+        "triangles": 204,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          4.4,
+          2.8,
+          1.87
+        ]
+      },
+      {
+        "id": 85,
+        "name": "08-A sash_partial__two unfolded",
+        "triangles": 292,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          19.26,
+          11.47,
+          0.54
+        ]
+      },
+      {
+        "id": 86,
+        "name": "08-A sash_full__two unfolded",
+        "triangles": 530,
+        "shells": 2,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          33.83,
+          11.41,
+          7.4
+        ]
+      },
+      {
+        "id": 87,
+        "name": "08-A ac_bracket__bedroom unfolded",
+        "triangles": 154,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          4.6,
+          2.3,
+          2.85
+        ]
+      },
+      {
+        "id": 88,
+        "name": "08-A ac_unit__bedroom unfolded",
+        "triangles": 204,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          4.4,
+          2.8,
+          1.87
+        ]
+      },
+      {
+        "id": 89,
+        "name": "08-B sash_partial__two unfolded",
+        "triangles": 294,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          19.26,
+          11.47,
+          0.54
+        ]
+      },
+      {
+        "id": 90,
+        "name": "08-B sash_full__two unfolded",
+        "triangles": 532,
+        "shells": 2,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          33.83,
+          11.41,
+          7.4
+        ]
+      },
+      {
+        "id": 91,
+        "name": "08-B small__roof unfolded",
+        "triangles": 868,
+        "shells": 4,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          44.3,
+          7.53,
+          3.95
+        ]
+      },
+      {
+        "id": 92,
+        "name": "08-B ac_bracket__bedroom unfolded",
+        "triangles": 150,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          4.6,
+          2.3,
+          2.85
+        ]
+      },
+      {
+        "id": 93,
+        "name": "08-B ac_unit__bedroom unfolded",
+        "triangles": 204,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          4.4,
+          2.8,
+          1.87
+        ]
+      },
+      {
+        "id": 94,
+        "name": "08-C sash_partial__two unfolded",
+        "triangles": 292,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          19.26,
+          11.47,
+          0.54
+        ]
+      },
+      {
+        "id": 95,
+        "name": "08-C sash_full__two unfolded",
+        "triangles": 530,
+        "shells": 2,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          33.83,
+          11.41,
+          7.4
+        ]
+      },
+      {
+        "id": 96,
+        "name": "08-C small__roof unfolded",
+        "triangles": 398,
+        "shells": 2,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          8.8,
+          7.53,
+          3.95
+        ]
+      },
+      {
+        "id": 97,
+        "name": "09-A sash_partial__three unfolded",
+        "triangles": 380,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          19.26,
+          11.47,
+          0.54
+        ]
+      },
+      {
+        "id": 98,
+        "name": "09-A small__roof unfolded",
+        "triangles": 810,
+        "shells": 4,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          475.5,
+          7.53,
+          3.95
+        ]
+      },
+      {
+        "id": 99,
+        "name": "09-B sash_partial__four unfolded",
+        "triangles": 490,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          19.26,
+          11.47,
+          0.54
+        ]
+      },
+      {
+        "id": 100,
+        "name": "09-B sash_full__four unfolded",
+        "triangles": 716,
+        "shells": 2,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          33.83,
+          11.41,
+          7.4
+        ]
+      },
+      {
+        "id": 101,
+        "name": "09-B small__transom unfolded",
+        "triangles": 1072,
+        "shells": 4,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          44.3,
+          7.53,
+          3.95
+        ]
+      },
+      {
+        "id": 102,
+        "name": "09-C sash_partial__three unfolded",
+        "triangles": 380,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          19.26,
+          11.47,
+          0.54
+        ]
+      },
+      {
+        "id": 103,
+        "name": "09-C sash_full__three unfolded",
+        "triangles": 618,
+        "shells": 2,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          33.83,
+          11.41,
+          7.4
+        ]
+      },
+      {
+        "id": 104,
+        "name": "09-C ac_bracket__bedroom unfolded",
+        "triangles": 154,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          4.6,
+          2.3,
+          2.85
+        ]
+      },
+      {
+        "id": 105,
+        "name": "09-C ac_unit__bedroom unfolded",
+        "triangles": 204,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          4.4,
+          2.8,
+          1.87
+        ]
+      },
+      {
+        "id": 106,
+        "name": "09-D ac_bracket__corner unfolded",
+        "triangles": 158,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          4.6,
+          2.3,
+          2.85
+        ]
+      },
+      {
+        "id": 107,
+        "name": "09-D ac_unit__corner unfolded",
+        "triangles": 204,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          4.4,
+          2.8,
+          1.87
+        ]
+      },
+      {
+        "id": 108,
+        "name": "10-A sash_partial__transom unfolded",
+        "triangles": 710,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          19.26,
+          12.47,
+          0.54
+        ]
+      },
+      {
+        "id": 109,
+        "name": "10-A sash_full__transom unfolded",
+        "triangles": 570,
+        "shells": 2,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          33.83,
+          12.41,
+          7.4
+        ]
+      },
+      {
+        "id": 110,
+        "name": "10-A small__roof unfolded",
+        "triangles": 810,
+        "shells": 4,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          475.5,
+          7.53,
+          3.95
+        ]
+      },
+      {
+        "id": 111,
+        "name": "10-A ac_bracket__corner unfolded",
+        "triangles": 166,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          4.6,
+          2.3,
+          2.85
+        ]
+      },
+      {
+        "id": 112,
+        "name": "10-A ac_unit__corner unfolded",
+        "triangles": 204,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          4.4,
+          2.8,
+          1.87
+        ]
+      },
+      {
+        "id": 113,
+        "name": "10-B sash_partial__transom unfolded",
+        "triangles": 726,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          19.26,
+          12.47,
+          0.54
+        ]
+      },
+      {
+        "id": 114,
+        "name": "10-B sash_full__transom unfolded",
+        "triangles": 544,
+        "shells": 2,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          33.83,
+          12.41,
+          7.4
+        ]
+      },
+      {
+        "id": 115,
+        "name": "10-B small__boxed unfolded",
+        "triangles": 890,
+        "shells": 2,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          43.5,
+          6.6,
+          3.37
+        ]
+      },
+      {
+        "id": 116,
+        "name": "10-C sash_partial__four unfolded",
+        "triangles": 480,
+        "shells": 1,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          19.26,
+          12.47,
+          0.54
+        ]
+      },
+      {
+        "id": 117,
+        "name": "10-C sash_full__four unfolded",
+        "triangles": 778,
+        "shells": 2,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          33.83,
+          12.41,
+          7.4
+        ]
+      },
+      {
+        "id": 118,
+        "name": "10-D small__roof unfolded",
+        "triangles": 452,
+        "shells": 2,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          8.8,
+          7.53,
+          3.95
+        ]
+      },
+      {
+        "id": 119,
+        "name": "raised monochrome marks unfolded",
+        "triangles": 1128,
+        "shells": 2,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          379.5,
+          8.6,
+          0.65
+        ]
+      },
+      {
+        "id": 120,
+        "name": "324-dong-label-unfolded",
+        "triangles": 1060,
+        "shells": 4,
+        "watertight": true,
+        "positive_volume": true,
+        "dimensions_mm": [
+          10.021,
+          9.3,
+          0.705
+        ]
+      }
+    ],
+    "all_triangles_have_valid_material": true,
+    "empty_shells": 0,
+    "duplicate_shells": 0,
+    "assembly_policy": "watertight material objects assembled at intentional fastening overlaps",
+    "print_limits": {
+      "default_scale": "1:200",
+      "minimum_sash_mullion_mm": 0.16,
+      "minimum_outer_sash_mm": 0.26,
+      "minimum_relief_width_mm": 3.8,
+      "minimum_relief_depth_mm": 0.4,
+      "recommended_fdm_nozzle_mm": ".25-.4",
+      "recommended_layer_height_mm": "<=.2"
+    }
+  }
+]

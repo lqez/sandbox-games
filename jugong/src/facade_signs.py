@@ -17,8 +17,9 @@ SIGN_PAINT_DEPTH=.025
 SIGN_MARGIN_X=.85
 SIGN_MARGIN_Z=2.0
 MARK_WIDTH=8.6
-MARK_HEIGHT=5.8
-MARK_PANEL=(10.6,8.2)
+MARK_HEIGHT=MARK_WIDTH
+MARK_PANEL=(10.6,10.6)
+SIGN_EMBOSS_DEPTH=.65
 
 # Filled outlines retain flat cut terminals and the closed triangular 4 counter.
 PATHS={
@@ -50,10 +51,14 @@ def traced_digit(char):
 
 
 def symbol():
-    # Broad eaves, straight legs, a rounded doorway rising into the roof.
-    # The earlier generic triangle and polygonal door overstated the width.
-    oval=md.CrossSection.circle(1,96).scale((MARK_WIDTH/2,MARK_HEIGHT/2))
-    roof=[(-3.5,.15),(-.65,1.98),(.65,1.98),(3.5,.15),(2.12,.15),(2.12,-1.75),(.65,-1.75),(.65,.83)]
-    roof.extend([(np.cos(t)*.65,.83+np.sin(t)*.65) for t in np.linspace(0,np.pi,17)[1:]])
-    roof.extend([(-.65,-1.75),(-2.12,-1.75),(-2.12,.15)])
-    return oval-md.CrossSection([roof],md.FillRule.NonZero)
+    """LHRI printed p29: circular negative mark, flat roof and pointed doorway.
+
+    Normalized source grid is in references/knhc-logo; unlike the perspective
+    apartment photos, the publication shows the true 1:1 outer proportion.
+    """
+    radius=MARK_WIDTH/2
+    circle=md.CrossSection.circle(radius,128)
+    house=[(-.39,.56),(.39,.56),(.84,-.03),(.56,-.03),(.56,-.60),
+           (.17,-.60),(.17,.22),(0,.44),(-.17,.22),(-.17,-.60),
+           (-.56,-.60),(-.56,-.03),(-.84,-.03)]
+    return circle-md.CrossSection([[(x*radius,y*radius) for x,y in house]],md.FillRule.NonZero)
