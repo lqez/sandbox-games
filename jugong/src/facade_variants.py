@@ -9,7 +9,7 @@ CATALOG={
 }
 DEFAULTS=dict(sash='none',ac='none',sashVariant='three',frameFinish='metal',smallWindow='none',acPosition='bedroom')
 FINISH_MATERIAL={'metal':0,'light':1,'dark':3}
-SASH_PROFILES={'two':((1,1),.60,False),'three':((1,2.2,1),.65,False),'four':((1,1,1,1),.55,False),'transom':((1,1,1,1),.75,True)}
+SASH_PROFILES={'two':((1,1),.28,False),'three':((1,2.2,1),.30,False),'four':((1,1,1,1),.26,False),'transom':((1,1,1,1),.32,True)}
 
 def weighted_choice(seed,key,field):
  h=2166136261

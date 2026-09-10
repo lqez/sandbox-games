@@ -1,0 +1,7 @@
+scripts/verify.py 0
+tools/verify_configurator.py 0
+tools/verify_color_3mf.py 0
+tools/verify_print_kit.py 0
+tools/verify_facade_variants.py 0
+tools/verify_color_3mf.py 0
+scripts/render_preview.py 0

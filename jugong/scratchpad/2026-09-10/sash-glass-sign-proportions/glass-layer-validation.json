@@ -1,0 +1,6168 @@
+{
+  "checked_glazed_layers": 880,
+  "material_slots": 4,
+  "finish_preserves_glass": true,
+  "sign_bounds": true,
+  "records": [
+    {
+      "id": "01-A",
+      "layout": "meshes",
+      "layer": "sash_partial__two",
+      "frame": 238,
+      "glass": 12
+    },
+    {
+      "id": "01-A",
+      "layout": "meshes",
+      "layer": "sash_full__two",
+      "frame": 476,
+      "glass": 30
+    },
+    {
+      "id": "01-A",
+      "layout": "meshes",
+      "layer": "sash_partial__three",
+      "frame": 294,
+      "glass": 18
+    },
+    {
+      "id": "01-A",
+      "layout": "meshes",
+      "layer": "sash_full__three",
+      "frame": 544,
+      "glass": 36
+    },
+    {
+      "id": "01-A",
+      "layout": "meshes",
+      "layer": "sash_partial__four",
+      "frame": 416,
+      "glass": 24
+    },
+    {
+      "id": "01-A",
+      "layout": "meshes",
+      "layer": "sash_full__four",
+      "frame": 616,
+      "glass": 42
+    },
+    {
+      "id": "01-A",
+      "layout": "meshes",
+      "layer": "sash_partial__transom",
+      "frame": 558,
+      "glass": 40
+    },
+    {
+      "id": "01-A",
+      "layout": "meshes",
+      "layer": "sash_full__transom",
+      "frame": 468,
+      "glass": 30
+    },
+    {
+      "id": "01-A",
+      "layout": "meshes",
+      "layer": "small__boxed",
+      "frame": 892,
+      "glass": 24
+    },
+    {
+      "id": "01-A",
+      "layout": "meshes",
+      "layer": "small__roof",
+      "frame": 776,
+      "glass": 24
+    },
+    {
+      "id": "01-A",
+      "layout": "meshes",
+      "layer": "small__transom",
+      "frame": 1058,
+      "glass": 40
+    },
+    {
+      "id": "01-A",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__two",
+      "frame": 81,
+      "glass": 9
+    },
+    {
+      "id": "01-A",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__two",
+      "frame": 89,
+      "glass": 13
+    },
+    {
+      "id": "01-A",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__three",
+      "frame": 96,
+      "glass": 12
+    },
+    {
+      "id": "01-A",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__three",
+      "frame": 104,
+      "glass": 12
+    },
+    {
+      "id": "01-A",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__four",
+      "frame": 125,
+      "glass": 13
+    },
+    {
+      "id": "01-A",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__four",
+      "frame": 128,
+      "glass": 14
+    },
+    {
+      "id": "01-A",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__transom",
+      "frame": 216,
+      "glass": 28
+    },
+    {
+      "id": "01-A",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__transom",
+      "frame": 129,
+      "glass": 13
+    },
+    {
+      "id": "01-A",
+      "layout": "unfolded_meshes",
+      "layer": "small__boxed",
+      "frame": 77,
+      "glass": 13
+    },
+    {
+      "id": "01-A",
+      "layout": "unfolded_meshes",
+      "layer": "small__roof",
+      "frame": 99,
+      "glass": 13
+    },
+    {
+      "id": "01-A",
+      "layout": "unfolded_meshes",
+      "layer": "small__transom",
+      "frame": 174,
+      "glass": 26
+    },
+    {
+      "id": "01-B",
+      "layout": "meshes",
+      "layer": "sash_partial__two",
+      "frame": 236,
+      "glass": 12
+    },
+    {
+      "id": "01-B",
+      "layout": "meshes",
+      "layer": "sash_full__two",
+      "frame": 464,
+      "glass": 30
+    },
+    {
+      "id": "01-B",
+      "layout": "meshes",
+      "layer": "sash_partial__three",
+      "frame": 286,
+      "glass": 18
+    },
+    {
+      "id": "01-B",
+      "layout": "meshes",
+      "layer": "sash_full__three",
+      "frame": 520,
+      "glass": 36
+    },
+    {
+      "id": "01-B",
+      "layout": "meshes",
+      "layer": "sash_partial__four",
+      "frame": 370,
+      "glass": 24
+    },
+    {
+      "id": "01-B",
+      "layout": "meshes",
+      "layer": "sash_full__four",
+      "frame": 608,
+      "glass": 42
+    },
+    {
+      "id": "01-B",
+      "layout": "meshes",
+      "layer": "sash_partial__transom",
+      "frame": 590,
+      "glass": 40
+    },
+    {
+      "id": "01-B",
+      "layout": "meshes",
+      "layer": "sash_full__transom",
+      "frame": 460,
+      "glass": 30
+    },
+    {
+      "id": "01-B",
+      "layout": "meshes",
+      "layer": "small__boxed",
+      "frame": 848,
+      "glass": 24
+    },
+    {
+      "id": "01-B",
+      "layout": "meshes",
+      "layer": "small__roof",
+      "frame": 814,
+      "glass": 24
+    },
+    {
+      "id": "01-B",
+      "layout": "meshes",
+      "layer": "small__transom",
+      "frame": 1044,
+      "glass": 40
+    },
+    {
+      "id": "01-B",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__two",
+      "frame": 81,
+      "glass": 9
+    },
+    {
+      "id": "01-B",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__two",
+      "frame": 89,
+      "glass": 13
+    },
+    {
+      "id": "01-B",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__three",
+      "frame": 96,
+      "glass": 12
+    },
+    {
+      "id": "01-B",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__three",
+      "frame": 104,
+      "glass": 12
+    },
+    {
+      "id": "01-B",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__four",
+      "frame": 125,
+      "glass": 13
+    },
+    {
+      "id": "01-B",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__four",
+      "frame": 128,
+      "glass": 14
+    },
+    {
+      "id": "01-B",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__transom",
+      "frame": 216,
+      "glass": 28
+    },
+    {
+      "id": "01-B",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__transom",
+      "frame": 129,
+      "glass": 13
+    },
+    {
+      "id": "01-B",
+      "layout": "unfolded_meshes",
+      "layer": "small__boxed",
+      "frame": 77,
+      "glass": 13
+    },
+    {
+      "id": "01-B",
+      "layout": "unfolded_meshes",
+      "layer": "small__roof",
+      "frame": 99,
+      "glass": 13
+    },
+    {
+      "id": "01-B",
+      "layout": "unfolded_meshes",
+      "layer": "small__transom",
+      "frame": 174,
+      "glass": 26
+    },
+    {
+      "id": "01-C",
+      "layout": "meshes",
+      "layer": "sash_partial__two",
+      "frame": 258,
+      "glass": 12
+    },
+    {
+      "id": "01-C",
+      "layout": "meshes",
+      "layer": "sash_full__two",
+      "frame": 482,
+      "glass": 30
+    },
+    {
+      "id": "01-C",
+      "layout": "meshes",
+      "layer": "sash_partial__three",
+      "frame": 384,
+      "glass": 18
+    },
+    {
+      "id": "01-C",
+      "layout": "meshes",
+      "layer": "sash_full__three",
+      "frame": 566,
+      "glass": 36
+    },
+    {
+      "id": "01-C",
+      "layout": "meshes",
+      "layer": "sash_partial__four",
+      "frame": 470,
+      "glass": 24
+    },
+    {
+      "id": "01-C",
+      "layout": "meshes",
+      "layer": "sash_full__four",
+      "frame": 632,
+      "glass": 42
+    },
+    {
+      "id": "01-C",
+      "layout": "meshes",
+      "layer": "sash_partial__transom",
+      "frame": 662,
+      "glass": 40
+    },
+    {
+      "id": "01-C",
+      "layout": "meshes",
+      "layer": "sash_full__transom",
+      "frame": 500,
+      "glass": 30
+    },
+    {
+      "id": "01-C",
+      "layout": "meshes",
+      "layer": "small__boxed",
+      "frame": 460,
+      "glass": 12
+    },
+    {
+      "id": "01-C",
+      "layout": "meshes",
+      "layer": "small__roof",
+      "frame": 408,
+      "glass": 12
+    },
+    {
+      "id": "01-C",
+      "layout": "meshes",
+      "layer": "small__transom",
+      "frame": 536,
+      "glass": 20
+    },
+    {
+      "id": "01-C",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__two",
+      "frame": 78,
+      "glass": 10
+    },
+    {
+      "id": "01-C",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__two",
+      "frame": 86,
+      "glass": 10
+    },
+    {
+      "id": "01-C",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__three",
+      "frame": 96,
+      "glass": 12
+    },
+    {
+      "id": "01-C",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__three",
+      "frame": 106,
+      "glass": 14
+    },
+    {
+      "id": "01-C",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__four",
+      "frame": 120,
+      "glass": 14
+    },
+    {
+      "id": "01-C",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__four",
+      "frame": 125,
+      "glass": 15
+    },
+    {
+      "id": "01-C",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__transom",
+      "frame": 212,
+      "glass": 28
+    },
+    {
+      "id": "01-C",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__transom",
+      "frame": 132,
+      "glass": 14
+    },
+    {
+      "id": "01-C",
+      "layout": "unfolded_meshes",
+      "layer": "small__boxed",
+      "frame": 77,
+      "glass": 13
+    },
+    {
+      "id": "01-C",
+      "layout": "unfolded_meshes",
+      "layer": "small__roof",
+      "frame": 99,
+      "glass": 13
+    },
+    {
+      "id": "01-C",
+      "layout": "unfolded_meshes",
+      "layer": "small__transom",
+      "frame": 174,
+      "glass": 26
+    },
+    {
+      "id": "01-D",
+      "layout": "meshes",
+      "layer": "sash_partial__two",
+      "frame": 238,
+      "glass": 12
+    },
+    {
+      "id": "01-D",
+      "layout": "meshes",
+      "layer": "sash_full__two",
+      "frame": 532,
+      "glass": 30
+    },
+    {
+      "id": "01-D",
+      "layout": "meshes",
+      "layer": "sash_partial__three",
+      "frame": 392,
+      "glass": 18
+    },
+    {
+      "id": "01-D",
+      "layout": "meshes",
+      "layer": "sash_full__three",
+      "frame": 592,
+      "glass": 36
+    },
+    {
+      "id": "01-D",
+      "layout": "meshes",
+      "layer": "sash_partial__four",
+      "frame": 402,
+      "glass": 24
+    },
+    {
+      "id": "01-D",
+      "layout": "meshes",
+      "layer": "sash_full__four",
+      "frame": 682,
+      "glass": 42
+    },
+    {
+      "id": "01-D",
+      "layout": "meshes",
+      "layer": "sash_partial__transom",
+      "frame": 690,
+      "glass": 40
+    },
+    {
+      "id": "01-D",
+      "layout": "meshes",
+      "layer": "sash_full__transom",
+      "frame": 544,
+      "glass": 30
+    },
+    {
+      "id": "01-D",
+      "layout": "meshes",
+      "layer": "small__boxed",
+      "frame": 438,
+      "glass": 12
+    },
+    {
+      "id": "01-D",
+      "layout": "meshes",
+      "layer": "small__roof",
+      "frame": 444,
+      "glass": 12
+    },
+    {
+      "id": "01-D",
+      "layout": "meshes",
+      "layer": "small__transom",
+      "frame": 518,
+      "glass": 20
+    },
+    {
+      "id": "01-D",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__two",
+      "frame": 80,
+      "glass": 12
+    },
+    {
+      "id": "01-D",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__two",
+      "frame": 90,
+      "glass": 14
+    },
+    {
+      "id": "01-D",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__three",
+      "frame": 100,
+      "glass": 14
+    },
+    {
+      "id": "01-D",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__three",
+      "frame": 110,
+      "glass": 16
+    },
+    {
+      "id": "01-D",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__four",
+      "frame": 120,
+      "glass": 16
+    },
+    {
+      "id": "01-D",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__four",
+      "frame": 130,
+      "glass": 18
+    },
+    {
+      "id": "01-D",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__transom",
+      "frame": 214,
+      "glass": 30
+    },
+    {
+      "id": "01-D",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__transom",
+      "frame": 135,
+      "glass": 17
+    },
+    {
+      "id": "01-D",
+      "layout": "unfolded_meshes",
+      "layer": "small__boxed",
+      "frame": 74,
+      "glass": 10
+    },
+    {
+      "id": "01-D",
+      "layout": "unfolded_meshes",
+      "layer": "small__roof",
+      "frame": 96,
+      "glass": 10
+    },
+    {
+      "id": "01-D",
+      "layout": "unfolded_meshes",
+      "layer": "small__transom",
+      "frame": 174,
+      "glass": 22
+    },
+    {
+      "id": "02-A",
+      "layout": "meshes",
+      "layer": "sash_partial__two",
+      "frame": 242,
+      "glass": 12
+    },
+    {
+      "id": "02-A",
+      "layout": "meshes",
+      "layer": "sash_full__two",
+      "frame": 484,
+      "glass": 30
+    },
+    {
+      "id": "02-A",
+      "layout": "meshes",
+      "layer": "sash_partial__three",
+      "frame": 316,
+      "glass": 18
+    },
+    {
+      "id": "02-A",
+      "layout": "meshes",
+      "layer": "sash_full__three",
+      "frame": 534,
+      "glass": 36
+    },
+    {
+      "id": "02-A",
+      "layout": "meshes",
+      "layer": "sash_partial__four",
+      "frame": 440,
+      "glass": 24
+    },
+    {
+      "id": "02-A",
+      "layout": "meshes",
+      "layer": "sash_full__four",
+      "frame": 632,
+      "glass": 42
+    },
+    {
+      "id": "02-A",
+      "layout": "meshes",
+      "layer": "sash_partial__transom",
+      "frame": 582,
+      "glass": 40
+    },
+    {
+      "id": "02-A",
+      "layout": "meshes",
+      "layer": "sash_full__transom",
+      "frame": 474,
+      "glass": 30
+    },
+    {
+      "id": "02-A",
+      "layout": "meshes",
+      "layer": "small__boxed",
+      "frame": 922,
+      "glass": 24
+    },
+    {
+      "id": "02-A",
+      "layout": "meshes",
+      "layer": "small__roof",
+      "frame": 776,
+      "glass": 24
+    },
+    {
+      "id": "02-A",
+      "layout": "meshes",
+      "layer": "small__transom",
+      "frame": 1054,
+      "glass": 40
+    },
+    {
+      "id": "02-A",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__two",
+      "frame": 90,
+      "glass": 10
+    },
+    {
+      "id": "02-A",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__two",
+      "frame": 84,
+      "glass": 12
+    },
+    {
+      "id": "02-A",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__three",
+      "frame": 96,
+      "glass": 12
+    },
+    {
+      "id": "02-A",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__three",
+      "frame": 104,
+      "glass": 12
+    },
+    {
+      "id": "02-A",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__four",
+      "frame": 125,
+      "glass": 13
+    },
+    {
+      "id": "02-A",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__four",
+      "frame": 128,
+      "glass": 14
+    },
+    {
+      "id": "02-A",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__transom",
+      "frame": 216,
+      "glass": 28
+    },
+    {
+      "id": "02-A",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__transom",
+      "frame": 129,
+      "glass": 13
+    },
+    {
+      "id": "02-A",
+      "layout": "unfolded_meshes",
+      "layer": "small__boxed",
+      "frame": 101,
+      "glass": 13
+    },
+    {
+      "id": "02-A",
+      "layout": "unfolded_meshes",
+      "layer": "small__roof",
+      "frame": 123,
+      "glass": 13
+    },
+    {
+      "id": "02-A",
+      "layout": "unfolded_meshes",
+      "layer": "small__transom",
+      "frame": 205,
+      "glass": 25
+    },
+    {
+      "id": "02-B",
+      "layout": "meshes",
+      "layer": "sash_partial__two",
+      "frame": 256,
+      "glass": 12
+    },
+    {
+      "id": "02-B",
+      "layout": "meshes",
+      "layer": "sash_full__two",
+      "frame": 444,
+      "glass": 30
+    },
+    {
+      "id": "02-B",
+      "layout": "meshes",
+      "layer": "sash_partial__three",
+      "frame": 306,
+      "glass": 18
+    },
+    {
+      "id": "02-B",
+      "layout": "meshes",
+      "layer": "sash_full__three",
+      "frame": 530,
+      "glass": 36
+    },
+    {
+      "id": "02-B",
+      "layout": "meshes",
+      "layer": "sash_partial__four",
+      "frame": 420,
+      "glass": 24
+    },
+    {
+      "id": "02-B",
+      "layout": "meshes",
+      "layer": "sash_full__four",
+      "frame": 622,
+      "glass": 42
+    },
+    {
+      "id": "02-B",
+      "layout": "meshes",
+      "layer": "sash_partial__transom",
+      "frame": 610,
+      "glass": 40
+    },
+    {
+      "id": "02-B",
+      "layout": "meshes",
+      "layer": "sash_full__transom",
+      "frame": 446,
+      "glass": 30
+    },
+    {
+      "id": "02-B",
+      "layout": "meshes",
+      "layer": "small__boxed",
+      "frame": 848,
+      "glass": 24
+    },
+    {
+      "id": "02-B",
+      "layout": "meshes",
+      "layer": "small__roof",
+      "frame": 812,
+      "glass": 24
+    },
+    {
+      "id": "02-B",
+      "layout": "meshes",
+      "layer": "small__transom",
+      "frame": 1032,
+      "glass": 40
+    },
+    {
+      "id": "02-B",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__two",
+      "frame": 90,
+      "glass": 10
+    },
+    {
+      "id": "02-B",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__two",
+      "frame": 84,
+      "glass": 12
+    },
+    {
+      "id": "02-B",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__three",
+      "frame": 96,
+      "glass": 12
+    },
+    {
+      "id": "02-B",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__three",
+      "frame": 104,
+      "glass": 12
+    },
+    {
+      "id": "02-B",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__four",
+      "frame": 125,
+      "glass": 13
+    },
+    {
+      "id": "02-B",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__four",
+      "frame": 128,
+      "glass": 14
+    },
+    {
+      "id": "02-B",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__transom",
+      "frame": 216,
+      "glass": 28
+    },
+    {
+      "id": "02-B",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__transom",
+      "frame": 129,
+      "glass": 13
+    },
+    {
+      "id": "02-B",
+      "layout": "unfolded_meshes",
+      "layer": "small__boxed",
+      "frame": 101,
+      "glass": 13
+    },
+    {
+      "id": "02-B",
+      "layout": "unfolded_meshes",
+      "layer": "small__roof",
+      "frame": 123,
+      "glass": 13
+    },
+    {
+      "id": "02-B",
+      "layout": "unfolded_meshes",
+      "layer": "small__transom",
+      "frame": 205,
+      "glass": 25
+    },
+    {
+      "id": "02-C",
+      "layout": "meshes",
+      "layer": "sash_partial__two",
+      "frame": 280,
+      "glass": 12
+    },
+    {
+      "id": "02-C",
+      "layout": "meshes",
+      "layer": "sash_full__two",
+      "frame": 494,
+      "glass": 30
+    },
+    {
+      "id": "02-C",
+      "layout": "meshes",
+      "layer": "sash_partial__three",
+      "frame": 400,
+      "glass": 18
+    },
+    {
+      "id": "02-C",
+      "layout": "meshes",
+      "layer": "sash_full__three",
+      "frame": 564,
+      "glass": 36
+    },
+    {
+      "id": "02-C",
+      "layout": "meshes",
+      "layer": "sash_partial__four",
+      "frame": 462,
+      "glass": 24
+    },
+    {
+      "id": "02-C",
+      "layout": "meshes",
+      "layer": "sash_full__four",
+      "frame": 664,
+      "glass": 42
+    },
+    {
+      "id": "02-C",
+      "layout": "meshes",
+      "layer": "sash_partial__transom",
+      "frame": 644,
+      "glass": 40
+    },
+    {
+      "id": "02-C",
+      "layout": "meshes",
+      "layer": "sash_full__transom",
+      "frame": 524,
+      "glass": 30
+    },
+    {
+      "id": "02-C",
+      "layout": "meshes",
+      "layer": "small__boxed",
+      "frame": 478,
+      "glass": 12
+    },
+    {
+      "id": "02-C",
+      "layout": "meshes",
+      "layer": "small__roof",
+      "frame": 402,
+      "glass": 12
+    },
+    {
+      "id": "02-C",
+      "layout": "meshes",
+      "layer": "small__transom",
+      "frame": 536,
+      "glass": 20
+    },
+    {
+      "id": "02-C",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__two",
+      "frame": 90,
+      "glass": 10
+    },
+    {
+      "id": "02-C",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__two",
+      "frame": 86,
+      "glass": 10
+    },
+    {
+      "id": "02-C",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__three",
+      "frame": 96,
+      "glass": 12
+    },
+    {
+      "id": "02-C",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__three",
+      "frame": 106,
+      "glass": 14
+    },
+    {
+      "id": "02-C",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__four",
+      "frame": 120,
+      "glass": 14
+    },
+    {
+      "id": "02-C",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__four",
+      "frame": 125,
+      "glass": 15
+    },
+    {
+      "id": "02-C",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__transom",
+      "frame": 212,
+      "glass": 28
+    },
+    {
+      "id": "02-C",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__transom",
+      "frame": 132,
+      "glass": 14
+    },
+    {
+      "id": "02-C",
+      "layout": "unfolded_meshes",
+      "layer": "small__boxed",
+      "frame": 101,
+      "glass": 13
+    },
+    {
+      "id": "02-C",
+      "layout": "unfolded_meshes",
+      "layer": "small__roof",
+      "frame": 123,
+      "glass": 13
+    },
+    {
+      "id": "02-C",
+      "layout": "unfolded_meshes",
+      "layer": "small__transom",
+      "frame": 205,
+      "glass": 25
+    },
+    {
+      "id": "02-D",
+      "layout": "meshes",
+      "layer": "sash_partial__two",
+      "frame": 248,
+      "glass": 12
+    },
+    {
+      "id": "02-D",
+      "layout": "meshes",
+      "layer": "sash_full__two",
+      "frame": 552,
+      "glass": 30
+    },
+    {
+      "id": "02-D",
+      "layout": "meshes",
+      "layer": "sash_partial__three",
+      "frame": 382,
+      "glass": 18
+    },
+    {
+      "id": "02-D",
+      "layout": "meshes",
+      "layer": "sash_full__three",
+      "frame": 600,
+      "glass": 36
+    },
+    {
+      "id": "02-D",
+      "layout": "meshes",
+      "layer": "sash_partial__four",
+      "frame": 392,
+      "glass": 24
+    },
+    {
+      "id": "02-D",
+      "layout": "meshes",
+      "layer": "sash_full__four",
+      "frame": 682,
+      "glass": 42
+    },
+    {
+      "id": "02-D",
+      "layout": "meshes",
+      "layer": "sash_partial__transom",
+      "frame": 626,
+      "glass": 40
+    },
+    {
+      "id": "02-D",
+      "layout": "meshes",
+      "layer": "sash_full__transom",
+      "frame": 550,
+      "glass": 30
+    },
+    {
+      "id": "02-D",
+      "layout": "meshes",
+      "layer": "small__boxed",
+      "frame": 422,
+      "glass": 12
+    },
+    {
+      "id": "02-D",
+      "layout": "meshes",
+      "layer": "small__roof",
+      "frame": 434,
+      "glass": 12
+    },
+    {
+      "id": "02-D",
+      "layout": "meshes",
+      "layer": "small__transom",
+      "frame": 518,
+      "glass": 20
+    },
+    {
+      "id": "02-D",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__two",
+      "frame": 92,
+      "glass": 12
+    },
+    {
+      "id": "02-D",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__two",
+      "frame": 90,
+      "glass": 14
+    },
+    {
+      "id": "02-D",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__three",
+      "frame": 100,
+      "glass": 14
+    },
+    {
+      "id": "02-D",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__three",
+      "frame": 110,
+      "glass": 16
+    },
+    {
+      "id": "02-D",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__four",
+      "frame": 120,
+      "glass": 16
+    },
+    {
+      "id": "02-D",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__four",
+      "frame": 130,
+      "glass": 18
+    },
+    {
+      "id": "02-D",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__transom",
+      "frame": 214,
+      "glass": 30
+    },
+    {
+      "id": "02-D",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__transom",
+      "frame": 135,
+      "glass": 17
+    },
+    {
+      "id": "02-D",
+      "layout": "unfolded_meshes",
+      "layer": "small__boxed",
+      "frame": 98,
+      "glass": 10
+    },
+    {
+      "id": "02-D",
+      "layout": "unfolded_meshes",
+      "layer": "small__roof",
+      "frame": 120,
+      "glass": 10
+    },
+    {
+      "id": "02-D",
+      "layout": "unfolded_meshes",
+      "layer": "small__transom",
+      "frame": 197,
+      "glass": 21
+    },
+    {
+      "id": "03-A",
+      "layout": "meshes",
+      "layer": "sash_partial__two",
+      "frame": 244,
+      "glass": 12
+    },
+    {
+      "id": "03-A",
+      "layout": "meshes",
+      "layer": "sash_full__two",
+      "frame": 468,
+      "glass": 30
+    },
+    {
+      "id": "03-A",
+      "layout": "meshes",
+      "layer": "sash_partial__three",
+      "frame": 302,
+      "glass": 18
+    },
+    {
+      "id": "03-A",
+      "layout": "meshes",
+      "layer": "sash_full__three",
+      "frame": 544,
+      "glass": 36
+    },
+    {
+      "id": "03-A",
+      "layout": "meshes",
+      "layer": "sash_partial__four",
+      "frame": 436,
+      "glass": 24
+    },
+    {
+      "id": "03-A",
+      "layout": "meshes",
+      "layer": "sash_full__four",
+      "frame": 606,
+      "glass": 42
+    },
+    {
+      "id": "03-A",
+      "layout": "meshes",
+      "layer": "sash_partial__transom",
+      "frame": 598,
+      "glass": 40
+    },
+    {
+      "id": "03-A",
+      "layout": "meshes",
+      "layer": "sash_full__transom",
+      "frame": 468,
+      "glass": 30
+    },
+    {
+      "id": "03-A",
+      "layout": "meshes",
+      "layer": "small__boxed",
+      "frame": 844,
+      "glass": 24
+    },
+    {
+      "id": "03-A",
+      "layout": "meshes",
+      "layer": "small__roof",
+      "frame": 780,
+      "glass": 24
+    },
+    {
+      "id": "03-A",
+      "layout": "meshes",
+      "layer": "small__transom",
+      "frame": 1054,
+      "glass": 40
+    },
+    {
+      "id": "03-A",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__two",
+      "frame": 90,
+      "glass": 10
+    },
+    {
+      "id": "03-A",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__two",
+      "frame": 84,
+      "glass": 12
+    },
+    {
+      "id": "03-A",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__three",
+      "frame": 96,
+      "glass": 12
+    },
+    {
+      "id": "03-A",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__three",
+      "frame": 104,
+      "glass": 12
+    },
+    {
+      "id": "03-A",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__four",
+      "frame": 125,
+      "glass": 13
+    },
+    {
+      "id": "03-A",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__four",
+      "frame": 128,
+      "glass": 14
+    },
+    {
+      "id": "03-A",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__transom",
+      "frame": 216,
+      "glass": 28
+    },
+    {
+      "id": "03-A",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__transom",
+      "frame": 129,
+      "glass": 13
+    },
+    {
+      "id": "03-A",
+      "layout": "unfolded_meshes",
+      "layer": "small__boxed",
+      "frame": 101,
+      "glass": 13
+    },
+    {
+      "id": "03-A",
+      "layout": "unfolded_meshes",
+      "layer": "small__roof",
+      "frame": 123,
+      "glass": 13
+    },
+    {
+      "id": "03-A",
+      "layout": "unfolded_meshes",
+      "layer": "small__transom",
+      "frame": 205,
+      "glass": 25
+    },
+    {
+      "id": "03-B",
+      "layout": "meshes",
+      "layer": "sash_partial__two",
+      "frame": 264,
+      "glass": 12
+    },
+    {
+      "id": "03-B",
+      "layout": "meshes",
+      "layer": "sash_full__two",
+      "frame": 450,
+      "glass": 30
+    },
+    {
+      "id": "03-B",
+      "layout": "meshes",
+      "layer": "sash_partial__three",
+      "frame": 300,
+      "glass": 18
+    },
+    {
+      "id": "03-B",
+      "layout": "meshes",
+      "layer": "sash_full__three",
+      "frame": 522,
+      "glass": 36
+    },
+    {
+      "id": "03-B",
+      "layout": "meshes",
+      "layer": "sash_partial__four",
+      "frame": 420,
+      "glass": 24
+    },
+    {
+      "id": "03-B",
+      "layout": "meshes",
+      "layer": "sash_full__four",
+      "frame": 584,
+      "glass": 42
+    },
+    {
+      "id": "03-B",
+      "layout": "meshes",
+      "layer": "sash_partial__transom",
+      "frame": 606,
+      "glass": 40
+    },
+    {
+      "id": "03-B",
+      "layout": "meshes",
+      "layer": "sash_full__transom",
+      "frame": 454,
+      "glass": 30
+    },
+    {
+      "id": "03-B",
+      "layout": "meshes",
+      "layer": "small__boxed",
+      "frame": 828,
+      "glass": 24
+    },
+    {
+      "id": "03-B",
+      "layout": "meshes",
+      "layer": "small__roof",
+      "frame": 814,
+      "glass": 24
+    },
+    {
+      "id": "03-B",
+      "layout": "meshes",
+      "layer": "small__transom",
+      "frame": 1022,
+      "glass": 40
+    },
+    {
+      "id": "03-B",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__two",
+      "frame": 90,
+      "glass": 10
+    },
+    {
+      "id": "03-B",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__two",
+      "frame": 84,
+      "glass": 12
+    },
+    {
+      "id": "03-B",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__three",
+      "frame": 96,
+      "glass": 12
+    },
+    {
+      "id": "03-B",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__three",
+      "frame": 104,
+      "glass": 12
+    },
+    {
+      "id": "03-B",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__four",
+      "frame": 125,
+      "glass": 13
+    },
+    {
+      "id": "03-B",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__four",
+      "frame": 128,
+      "glass": 14
+    },
+    {
+      "id": "03-B",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__transom",
+      "frame": 216,
+      "glass": 28
+    },
+    {
+      "id": "03-B",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__transom",
+      "frame": 129,
+      "glass": 13
+    },
+    {
+      "id": "03-B",
+      "layout": "unfolded_meshes",
+      "layer": "small__boxed",
+      "frame": 101,
+      "glass": 13
+    },
+    {
+      "id": "03-B",
+      "layout": "unfolded_meshes",
+      "layer": "small__roof",
+      "frame": 123,
+      "glass": 13
+    },
+    {
+      "id": "03-B",
+      "layout": "unfolded_meshes",
+      "layer": "small__transom",
+      "frame": 205,
+      "glass": 25
+    },
+    {
+      "id": "03-C",
+      "layout": "meshes",
+      "layer": "sash_partial__two",
+      "frame": 272,
+      "glass": 12
+    },
+    {
+      "id": "03-C",
+      "layout": "meshes",
+      "layer": "sash_full__two",
+      "frame": 490,
+      "glass": 30
+    },
+    {
+      "id": "03-C",
+      "layout": "meshes",
+      "layer": "sash_partial__three",
+      "frame": 366,
+      "glass": 18
+    },
+    {
+      "id": "03-C",
+      "layout": "meshes",
+      "layer": "sash_full__three",
+      "frame": 580,
+      "glass": 36
+    },
+    {
+      "id": "03-C",
+      "layout": "meshes",
+      "layer": "sash_partial__four",
+      "frame": 448,
+      "glass": 24
+    },
+    {
+      "id": "03-C",
+      "layout": "meshes",
+      "layer": "sash_full__four",
+      "frame": 678,
+      "glass": 42
+    },
+    {
+      "id": "03-C",
+      "layout": "meshes",
+      "layer": "sash_partial__transom",
+      "frame": 674,
+      "glass": 40
+    },
+    {
+      "id": "03-C",
+      "layout": "meshes",
+      "layer": "sash_full__transom",
+      "frame": 514,
+      "glass": 30
+    },
+    {
+      "id": "03-C",
+      "layout": "meshes",
+      "layer": "small__boxed",
+      "frame": 478,
+      "glass": 12
+    },
+    {
+      "id": "03-C",
+      "layout": "meshes",
+      "layer": "small__roof",
+      "frame": 410,
+      "glass": 12
+    },
+    {
+      "id": "03-C",
+      "layout": "meshes",
+      "layer": "small__transom",
+      "frame": 536,
+      "glass": 20
+    },
+    {
+      "id": "03-C",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__two",
+      "frame": 90,
+      "glass": 10
+    },
+    {
+      "id": "03-C",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__two",
+      "frame": 86,
+      "glass": 10
+    },
+    {
+      "id": "03-C",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__three",
+      "frame": 96,
+      "glass": 12
+    },
+    {
+      "id": "03-C",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__three",
+      "frame": 106,
+      "glass": 14
+    },
+    {
+      "id": "03-C",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__four",
+      "frame": 120,
+      "glass": 14
+    },
+    {
+      "id": "03-C",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__four",
+      "frame": 125,
+      "glass": 15
+    },
+    {
+      "id": "03-C",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__transom",
+      "frame": 212,
+      "glass": 28
+    },
+    {
+      "id": "03-C",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__transom",
+      "frame": 132,
+      "glass": 14
+    },
+    {
+      "id": "03-C",
+      "layout": "unfolded_meshes",
+      "layer": "small__boxed",
+      "frame": 101,
+      "glass": 13
+    },
+    {
+      "id": "03-C",
+      "layout": "unfolded_meshes",
+      "layer": "small__roof",
+      "frame": 123,
+      "glass": 13
+    },
+    {
+      "id": "03-C",
+      "layout": "unfolded_meshes",
+      "layer": "small__transom",
+      "frame": 205,
+      "glass": 25
+    },
+    {
+      "id": "03-D",
+      "layout": "meshes",
+      "layer": "sash_partial__two",
+      "frame": 234,
+      "glass": 12
+    },
+    {
+      "id": "03-D",
+      "layout": "meshes",
+      "layer": "sash_full__two",
+      "frame": 540,
+      "glass": 30
+    },
+    {
+      "id": "03-D",
+      "layout": "meshes",
+      "layer": "sash_partial__three",
+      "frame": 386,
+      "glass": 18
+    },
+    {
+      "id": "03-D",
+      "layout": "meshes",
+      "layer": "sash_full__three",
+      "frame": 594,
+      "glass": 36
+    },
+    {
+      "id": "03-D",
+      "layout": "meshes",
+      "layer": "sash_partial__four",
+      "frame": 404,
+      "glass": 24
+    },
+    {
+      "id": "03-D",
+      "layout": "meshes",
+      "layer": "sash_full__four",
+      "frame": 684,
+      "glass": 42
+    },
+    {
+      "id": "03-D",
+      "layout": "meshes",
+      "layer": "sash_partial__transom",
+      "frame": 636,
+      "glass": 40
+    },
+    {
+      "id": "03-D",
+      "layout": "meshes",
+      "layer": "sash_full__transom",
+      "frame": 542,
+      "glass": 30
+    },
+    {
+      "id": "03-D",
+      "layout": "meshes",
+      "layer": "small__boxed",
+      "frame": 422,
+      "glass": 12
+    },
+    {
+      "id": "03-D",
+      "layout": "meshes",
+      "layer": "small__roof",
+      "frame": 440,
+      "glass": 12
+    },
+    {
+      "id": "03-D",
+      "layout": "meshes",
+      "layer": "small__transom",
+      "frame": 518,
+      "glass": 20
+    },
+    {
+      "id": "03-D",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__two",
+      "frame": 94,
+      "glass": 14
+    },
+    {
+      "id": "03-D",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__two",
+      "frame": 90,
+      "glass": 14
+    },
+    {
+      "id": "03-D",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__three",
+      "frame": 102,
+      "glass": 16
+    },
+    {
+      "id": "03-D",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__three",
+      "frame": 107,
+      "glass": 17
+    },
+    {
+      "id": "03-D",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__four",
+      "frame": 121,
+      "glass": 17
+    },
+    {
+      "id": "03-D",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__four",
+      "frame": 130,
+      "glass": 18
+    },
+    {
+      "id": "03-D",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__transom",
+      "frame": 216,
+      "glass": 32
+    },
+    {
+      "id": "03-D",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__transom",
+      "frame": 135,
+      "glass": 17
+    },
+    {
+      "id": "03-D",
+      "layout": "unfolded_meshes",
+      "layer": "small__boxed",
+      "frame": 98,
+      "glass": 10
+    },
+    {
+      "id": "03-D",
+      "layout": "unfolded_meshes",
+      "layer": "small__roof",
+      "frame": 120,
+      "glass": 10
+    },
+    {
+      "id": "03-D",
+      "layout": "unfolded_meshes",
+      "layer": "small__transom",
+      "frame": 197,
+      "glass": 21
+    },
+    {
+      "id": "04-A",
+      "layout": "meshes",
+      "layer": "sash_partial__two",
+      "frame": 244,
+      "glass": 12
+    },
+    {
+      "id": "04-A",
+      "layout": "meshes",
+      "layer": "sash_full__two",
+      "frame": 470,
+      "glass": 30
+    },
+    {
+      "id": "04-A",
+      "layout": "meshes",
+      "layer": "sash_partial__three",
+      "frame": 302,
+      "glass": 18
+    },
+    {
+      "id": "04-A",
+      "layout": "meshes",
+      "layer": "sash_full__three",
+      "frame": 544,
+      "glass": 36
+    },
+    {
+      "id": "04-A",
+      "layout": "meshes",
+      "layer": "sash_partial__four",
+      "frame": 436,
+      "glass": 24
+    },
+    {
+      "id": "04-A",
+      "layout": "meshes",
+      "layer": "sash_full__four",
+      "frame": 612,
+      "glass": 42
+    },
+    {
+      "id": "04-A",
+      "layout": "meshes",
+      "layer": "sash_partial__transom",
+      "frame": 598,
+      "glass": 40
+    },
+    {
+      "id": "04-A",
+      "layout": "meshes",
+      "layer": "sash_full__transom",
+      "frame": 472,
+      "glass": 30
+    },
+    {
+      "id": "04-A",
+      "layout": "meshes",
+      "layer": "small__boxed",
+      "frame": 844,
+      "glass": 24
+    },
+    {
+      "id": "04-A",
+      "layout": "meshes",
+      "layer": "small__roof",
+      "frame": 780,
+      "glass": 24
+    },
+    {
+      "id": "04-A",
+      "layout": "meshes",
+      "layer": "small__transom",
+      "frame": 1054,
+      "glass": 40
+    },
+    {
+      "id": "04-A",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__two",
+      "frame": 90,
+      "glass": 10
+    },
+    {
+      "id": "04-A",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__two",
+      "frame": 84,
+      "glass": 12
+    },
+    {
+      "id": "04-A",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__three",
+      "frame": 96,
+      "glass": 12
+    },
+    {
+      "id": "04-A",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__three",
+      "frame": 104,
+      "glass": 12
+    },
+    {
+      "id": "04-A",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__four",
+      "frame": 125,
+      "glass": 13
+    },
+    {
+      "id": "04-A",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__four",
+      "frame": 128,
+      "glass": 14
+    },
+    {
+      "id": "04-A",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__transom",
+      "frame": 216,
+      "glass": 28
+    },
+    {
+      "id": "04-A",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__transom",
+      "frame": 129,
+      "glass": 13
+    },
+    {
+      "id": "04-A",
+      "layout": "unfolded_meshes",
+      "layer": "small__boxed",
+      "frame": 101,
+      "glass": 13
+    },
+    {
+      "id": "04-A",
+      "layout": "unfolded_meshes",
+      "layer": "small__roof",
+      "frame": 123,
+      "glass": 13
+    },
+    {
+      "id": "04-A",
+      "layout": "unfolded_meshes",
+      "layer": "small__transom",
+      "frame": 205,
+      "glass": 25
+    },
+    {
+      "id": "04-B",
+      "layout": "meshes",
+      "layer": "sash_partial__two",
+      "frame": 264,
+      "glass": 12
+    },
+    {
+      "id": "04-B",
+      "layout": "meshes",
+      "layer": "sash_full__two",
+      "frame": 456,
+      "glass": 30
+    },
+    {
+      "id": "04-B",
+      "layout": "meshes",
+      "layer": "sash_partial__three",
+      "frame": 300,
+      "glass": 18
+    },
+    {
+      "id": "04-B",
+      "layout": "meshes",
+      "layer": "sash_full__three",
+      "frame": 542,
+      "glass": 36
+    },
+    {
+      "id": "04-B",
+      "layout": "meshes",
+      "layer": "sash_partial__four",
+      "frame": 420,
+      "glass": 24
+    },
+    {
+      "id": "04-B",
+      "layout": "meshes",
+      "layer": "sash_full__four",
+      "frame": 590,
+      "glass": 42
+    },
+    {
+      "id": "04-B",
+      "layout": "meshes",
+      "layer": "sash_partial__transom",
+      "frame": 606,
+      "glass": 40
+    },
+    {
+      "id": "04-B",
+      "layout": "meshes",
+      "layer": "sash_full__transom",
+      "frame": 450,
+      "glass": 30
+    },
+    {
+      "id": "04-B",
+      "layout": "meshes",
+      "layer": "small__boxed",
+      "frame": 828,
+      "glass": 24
+    },
+    {
+      "id": "04-B",
+      "layout": "meshes",
+      "layer": "small__roof",
+      "frame": 814,
+      "glass": 24
+    },
+    {
+      "id": "04-B",
+      "layout": "meshes",
+      "layer": "small__transom",
+      "frame": 1022,
+      "glass": 40
+    },
+    {
+      "id": "04-B",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__two",
+      "frame": 90,
+      "glass": 10
+    },
+    {
+      "id": "04-B",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__two",
+      "frame": 84,
+      "glass": 12
+    },
+    {
+      "id": "04-B",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__three",
+      "frame": 96,
+      "glass": 12
+    },
+    {
+      "id": "04-B",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__three",
+      "frame": 104,
+      "glass": 12
+    },
+    {
+      "id": "04-B",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__four",
+      "frame": 125,
+      "glass": 13
+    },
+    {
+      "id": "04-B",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__four",
+      "frame": 128,
+      "glass": 14
+    },
+    {
+      "id": "04-B",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__transom",
+      "frame": 216,
+      "glass": 28
+    },
+    {
+      "id": "04-B",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__transom",
+      "frame": 129,
+      "glass": 13
+    },
+    {
+      "id": "04-B",
+      "layout": "unfolded_meshes",
+      "layer": "small__boxed",
+      "frame": 101,
+      "glass": 13
+    },
+    {
+      "id": "04-B",
+      "layout": "unfolded_meshes",
+      "layer": "small__roof",
+      "frame": 123,
+      "glass": 13
+    },
+    {
+      "id": "04-B",
+      "layout": "unfolded_meshes",
+      "layer": "small__transom",
+      "frame": 205,
+      "glass": 25
+    },
+    {
+      "id": "04-C",
+      "layout": "meshes",
+      "layer": "sash_partial__two",
+      "frame": 272,
+      "glass": 12
+    },
+    {
+      "id": "04-C",
+      "layout": "meshes",
+      "layer": "sash_full__two",
+      "frame": 494,
+      "glass": 30
+    },
+    {
+      "id": "04-C",
+      "layout": "meshes",
+      "layer": "sash_partial__three",
+      "frame": 366,
+      "glass": 18
+    },
+    {
+      "id": "04-C",
+      "layout": "meshes",
+      "layer": "sash_full__three",
+      "frame": 580,
+      "glass": 36
+    },
+    {
+      "id": "04-C",
+      "layout": "meshes",
+      "layer": "sash_partial__four",
+      "frame": 448,
+      "glass": 24
+    },
+    {
+      "id": "04-C",
+      "layout": "meshes",
+      "layer": "sash_full__four",
+      "frame": 676,
+      "glass": 42
+    },
+    {
+      "id": "04-C",
+      "layout": "meshes",
+      "layer": "sash_partial__transom",
+      "frame": 674,
+      "glass": 40
+    },
+    {
+      "id": "04-C",
+      "layout": "meshes",
+      "layer": "sash_full__transom",
+      "frame": 518,
+      "glass": 30
+    },
+    {
+      "id": "04-C",
+      "layout": "meshes",
+      "layer": "small__boxed",
+      "frame": 478,
+      "glass": 12
+    },
+    {
+      "id": "04-C",
+      "layout": "meshes",
+      "layer": "small__roof",
+      "frame": 410,
+      "glass": 12
+    },
+    {
+      "id": "04-C",
+      "layout": "meshes",
+      "layer": "small__transom",
+      "frame": 536,
+      "glass": 20
+    },
+    {
+      "id": "04-C",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__two",
+      "frame": 90,
+      "glass": 10
+    },
+    {
+      "id": "04-C",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__two",
+      "frame": 86,
+      "glass": 10
+    },
+    {
+      "id": "04-C",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__three",
+      "frame": 96,
+      "glass": 12
+    },
+    {
+      "id": "04-C",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__three",
+      "frame": 106,
+      "glass": 14
+    },
+    {
+      "id": "04-C",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__four",
+      "frame": 120,
+      "glass": 14
+    },
+    {
+      "id": "04-C",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__four",
+      "frame": 125,
+      "glass": 15
+    },
+    {
+      "id": "04-C",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__transom",
+      "frame": 212,
+      "glass": 28
+    },
+    {
+      "id": "04-C",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__transom",
+      "frame": 132,
+      "glass": 14
+    },
+    {
+      "id": "04-C",
+      "layout": "unfolded_meshes",
+      "layer": "small__boxed",
+      "frame": 101,
+      "glass": 13
+    },
+    {
+      "id": "04-C",
+      "layout": "unfolded_meshes",
+      "layer": "small__roof",
+      "frame": 123,
+      "glass": 13
+    },
+    {
+      "id": "04-C",
+      "layout": "unfolded_meshes",
+      "layer": "small__transom",
+      "frame": 205,
+      "glass": 25
+    },
+    {
+      "id": "04-D",
+      "layout": "meshes",
+      "layer": "sash_partial__two",
+      "frame": 234,
+      "glass": 12
+    },
+    {
+      "id": "04-D",
+      "layout": "meshes",
+      "layer": "sash_full__two",
+      "frame": 540,
+      "glass": 30
+    },
+    {
+      "id": "04-D",
+      "layout": "meshes",
+      "layer": "sash_partial__three",
+      "frame": 386,
+      "glass": 18
+    },
+    {
+      "id": "04-D",
+      "layout": "meshes",
+      "layer": "sash_full__three",
+      "frame": 592,
+      "glass": 36
+    },
+    {
+      "id": "04-D",
+      "layout": "meshes",
+      "layer": "sash_partial__four",
+      "frame": 404,
+      "glass": 24
+    },
+    {
+      "id": "04-D",
+      "layout": "meshes",
+      "layer": "sash_full__four",
+      "frame": 672,
+      "glass": 42
+    },
+    {
+      "id": "04-D",
+      "layout": "meshes",
+      "layer": "sash_partial__transom",
+      "frame": 636,
+      "glass": 40
+    },
+    {
+      "id": "04-D",
+      "layout": "meshes",
+      "layer": "sash_full__transom",
+      "frame": 526,
+      "glass": 30
+    },
+    {
+      "id": "04-D",
+      "layout": "meshes",
+      "layer": "small__boxed",
+      "frame": 422,
+      "glass": 12
+    },
+    {
+      "id": "04-D",
+      "layout": "meshes",
+      "layer": "small__roof",
+      "frame": 440,
+      "glass": 12
+    },
+    {
+      "id": "04-D",
+      "layout": "meshes",
+      "layer": "small__transom",
+      "frame": 518,
+      "glass": 20
+    },
+    {
+      "id": "04-D",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__two",
+      "frame": 94,
+      "glass": 14
+    },
+    {
+      "id": "04-D",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__two",
+      "frame": 90,
+      "glass": 14
+    },
+    {
+      "id": "04-D",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__three",
+      "frame": 102,
+      "glass": 16
+    },
+    {
+      "id": "04-D",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__three",
+      "frame": 107,
+      "glass": 17
+    },
+    {
+      "id": "04-D",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__four",
+      "frame": 121,
+      "glass": 17
+    },
+    {
+      "id": "04-D",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__four",
+      "frame": 130,
+      "glass": 18
+    },
+    {
+      "id": "04-D",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__transom",
+      "frame": 216,
+      "glass": 32
+    },
+    {
+      "id": "04-D",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__transom",
+      "frame": 135,
+      "glass": 17
+    },
+    {
+      "id": "04-D",
+      "layout": "unfolded_meshes",
+      "layer": "small__boxed",
+      "frame": 98,
+      "glass": 10
+    },
+    {
+      "id": "04-D",
+      "layout": "unfolded_meshes",
+      "layer": "small__roof",
+      "frame": 120,
+      "glass": 10
+    },
+    {
+      "id": "04-D",
+      "layout": "unfolded_meshes",
+      "layer": "small__transom",
+      "frame": 197,
+      "glass": 21
+    },
+    {
+      "id": "05-A",
+      "layout": "meshes",
+      "layer": "sash_partial__two",
+      "frame": 244,
+      "glass": 12
+    },
+    {
+      "id": "05-A",
+      "layout": "meshes",
+      "layer": "sash_full__two",
+      "frame": 476,
+      "glass": 30
+    },
+    {
+      "id": "05-A",
+      "layout": "meshes",
+      "layer": "sash_partial__three",
+      "frame": 302,
+      "glass": 18
+    },
+    {
+      "id": "05-A",
+      "layout": "meshes",
+      "layer": "sash_full__three",
+      "frame": 548,
+      "glass": 36
+    },
+    {
+      "id": "05-A",
+      "layout": "meshes",
+      "layer": "sash_partial__four",
+      "frame": 432,
+      "glass": 24
+    },
+    {
+      "id": "05-A",
+      "layout": "meshes",
+      "layer": "sash_full__four",
+      "frame": 636,
+      "glass": 42
+    },
+    {
+      "id": "05-A",
+      "layout": "meshes",
+      "layer": "sash_partial__transom",
+      "frame": 598,
+      "glass": 40
+    },
+    {
+      "id": "05-A",
+      "layout": "meshes",
+      "layer": "sash_full__transom",
+      "frame": 476,
+      "glass": 30
+    },
+    {
+      "id": "05-A",
+      "layout": "meshes",
+      "layer": "small__boxed",
+      "frame": 874,
+      "glass": 24
+    },
+    {
+      "id": "05-A",
+      "layout": "meshes",
+      "layer": "small__roof",
+      "frame": 788,
+      "glass": 24
+    },
+    {
+      "id": "05-A",
+      "layout": "meshes",
+      "layer": "small__transom",
+      "frame": 1056,
+      "glass": 40
+    },
+    {
+      "id": "05-A",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__two",
+      "frame": 90,
+      "glass": 10
+    },
+    {
+      "id": "05-A",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__two",
+      "frame": 84,
+      "glass": 12
+    },
+    {
+      "id": "05-A",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__three",
+      "frame": 96,
+      "glass": 12
+    },
+    {
+      "id": "05-A",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__three",
+      "frame": 104,
+      "glass": 12
+    },
+    {
+      "id": "05-A",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__four",
+      "frame": 125,
+      "glass": 13
+    },
+    {
+      "id": "05-A",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__four",
+      "frame": 128,
+      "glass": 14
+    },
+    {
+      "id": "05-A",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__transom",
+      "frame": 216,
+      "glass": 28
+    },
+    {
+      "id": "05-A",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__transom",
+      "frame": 129,
+      "glass": 13
+    },
+    {
+      "id": "05-A",
+      "layout": "unfolded_meshes",
+      "layer": "small__boxed",
+      "frame": 101,
+      "glass": 13
+    },
+    {
+      "id": "05-A",
+      "layout": "unfolded_meshes",
+      "layer": "small__roof",
+      "frame": 123,
+      "glass": 13
+    },
+    {
+      "id": "05-A",
+      "layout": "unfolded_meshes",
+      "layer": "small__transom",
+      "frame": 199,
+      "glass": 25
+    },
+    {
+      "id": "05-B",
+      "layout": "meshes",
+      "layer": "sash_partial__two",
+      "frame": 264,
+      "glass": 12
+    },
+    {
+      "id": "05-B",
+      "layout": "meshes",
+      "layer": "sash_full__two",
+      "frame": 444,
+      "glass": 30
+    },
+    {
+      "id": "05-B",
+      "layout": "meshes",
+      "layer": "sash_partial__three",
+      "frame": 300,
+      "glass": 18
+    },
+    {
+      "id": "05-B",
+      "layout": "meshes",
+      "layer": "sash_full__three",
+      "frame": 544,
+      "glass": 36
+    },
+    {
+      "id": "05-B",
+      "layout": "meshes",
+      "layer": "sash_partial__four",
+      "frame": 420,
+      "glass": 24
+    },
+    {
+      "id": "05-B",
+      "layout": "meshes",
+      "layer": "sash_full__four",
+      "frame": 618,
+      "glass": 42
+    },
+    {
+      "id": "05-B",
+      "layout": "meshes",
+      "layer": "sash_partial__transom",
+      "frame": 612,
+      "glass": 40
+    },
+    {
+      "id": "05-B",
+      "layout": "meshes",
+      "layer": "sash_full__transom",
+      "frame": 454,
+      "glass": 30
+    },
+    {
+      "id": "05-B",
+      "layout": "meshes",
+      "layer": "small__boxed",
+      "frame": 832,
+      "glass": 24
+    },
+    {
+      "id": "05-B",
+      "layout": "meshes",
+      "layer": "small__roof",
+      "frame": 824,
+      "glass": 24
+    },
+    {
+      "id": "05-B",
+      "layout": "meshes",
+      "layer": "small__transom",
+      "frame": 1024,
+      "glass": 40
+    },
+    {
+      "id": "05-B",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__two",
+      "frame": 90,
+      "glass": 10
+    },
+    {
+      "id": "05-B",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__two",
+      "frame": 84,
+      "glass": 12
+    },
+    {
+      "id": "05-B",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__three",
+      "frame": 96,
+      "glass": 12
+    },
+    {
+      "id": "05-B",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__three",
+      "frame": 104,
+      "glass": 12
+    },
+    {
+      "id": "05-B",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__four",
+      "frame": 125,
+      "glass": 13
+    },
+    {
+      "id": "05-B",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__four",
+      "frame": 128,
+      "glass": 14
+    },
+    {
+      "id": "05-B",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__transom",
+      "frame": 216,
+      "glass": 28
+    },
+    {
+      "id": "05-B",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__transom",
+      "frame": 129,
+      "glass": 13
+    },
+    {
+      "id": "05-B",
+      "layout": "unfolded_meshes",
+      "layer": "small__boxed",
+      "frame": 101,
+      "glass": 13
+    },
+    {
+      "id": "05-B",
+      "layout": "unfolded_meshes",
+      "layer": "small__roof",
+      "frame": 123,
+      "glass": 13
+    },
+    {
+      "id": "05-B",
+      "layout": "unfolded_meshes",
+      "layer": "small__transom",
+      "frame": 199,
+      "glass": 25
+    },
+    {
+      "id": "05-C",
+      "layout": "meshes",
+      "layer": "sash_partial__two",
+      "frame": 272,
+      "glass": 12
+    },
+    {
+      "id": "05-C",
+      "layout": "meshes",
+      "layer": "sash_full__two",
+      "frame": 486,
+      "glass": 30
+    },
+    {
+      "id": "05-C",
+      "layout": "meshes",
+      "layer": "sash_partial__three",
+      "frame": 378,
+      "glass": 18
+    },
+    {
+      "id": "05-C",
+      "layout": "meshes",
+      "layer": "sash_full__three",
+      "frame": 566,
+      "glass": 36
+    },
+    {
+      "id": "05-C",
+      "layout": "meshes",
+      "layer": "sash_partial__four",
+      "frame": 450,
+      "glass": 24
+    },
+    {
+      "id": "05-C",
+      "layout": "meshes",
+      "layer": "sash_full__four",
+      "frame": 678,
+      "glass": 42
+    },
+    {
+      "id": "05-C",
+      "layout": "meshes",
+      "layer": "sash_partial__transom",
+      "frame": 674,
+      "glass": 40
+    },
+    {
+      "id": "05-C",
+      "layout": "meshes",
+      "layer": "sash_full__transom",
+      "frame": 510,
+      "glass": 30
+    },
+    {
+      "id": "05-C",
+      "layout": "meshes",
+      "layer": "small__boxed",
+      "frame": 472,
+      "glass": 12
+    },
+    {
+      "id": "05-C",
+      "layout": "meshes",
+      "layer": "small__roof",
+      "frame": 410,
+      "glass": 12
+    },
+    {
+      "id": "05-C",
+      "layout": "meshes",
+      "layer": "small__transom",
+      "frame": 536,
+      "glass": 20
+    },
+    {
+      "id": "05-C",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__two",
+      "frame": 90,
+      "glass": 10
+    },
+    {
+      "id": "05-C",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__two",
+      "frame": 86,
+      "glass": 10
+    },
+    {
+      "id": "05-C",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__three",
+      "frame": 96,
+      "glass": 12
+    },
+    {
+      "id": "05-C",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__three",
+      "frame": 106,
+      "glass": 14
+    },
+    {
+      "id": "05-C",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__four",
+      "frame": 122,
+      "glass": 14
+    },
+    {
+      "id": "05-C",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__four",
+      "frame": 125,
+      "glass": 15
+    },
+    {
+      "id": "05-C",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__transom",
+      "frame": 212,
+      "glass": 28
+    },
+    {
+      "id": "05-C",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__transom",
+      "frame": 134,
+      "glass": 14
+    },
+    {
+      "id": "05-C",
+      "layout": "unfolded_meshes",
+      "layer": "small__boxed",
+      "frame": 101,
+      "glass": 13
+    },
+    {
+      "id": "05-C",
+      "layout": "unfolded_meshes",
+      "layer": "small__roof",
+      "frame": 123,
+      "glass": 13
+    },
+    {
+      "id": "05-C",
+      "layout": "unfolded_meshes",
+      "layer": "small__transom",
+      "frame": 199,
+      "glass": 25
+    },
+    {
+      "id": "05-D",
+      "layout": "meshes",
+      "layer": "sash_partial__two",
+      "frame": 234,
+      "glass": 12
+    },
+    {
+      "id": "05-D",
+      "layout": "meshes",
+      "layer": "sash_full__two",
+      "frame": 546,
+      "glass": 30
+    },
+    {
+      "id": "05-D",
+      "layout": "meshes",
+      "layer": "sash_partial__three",
+      "frame": 406,
+      "glass": 18
+    },
+    {
+      "id": "05-D",
+      "layout": "meshes",
+      "layer": "sash_full__three",
+      "frame": 600,
+      "glass": 36
+    },
+    {
+      "id": "05-D",
+      "layout": "meshes",
+      "layer": "sash_partial__four",
+      "frame": 404,
+      "glass": 24
+    },
+    {
+      "id": "05-D",
+      "layout": "meshes",
+      "layer": "sash_full__four",
+      "frame": 690,
+      "glass": 42
+    },
+    {
+      "id": "05-D",
+      "layout": "meshes",
+      "layer": "sash_partial__transom",
+      "frame": 634,
+      "glass": 40
+    },
+    {
+      "id": "05-D",
+      "layout": "meshes",
+      "layer": "sash_full__transom",
+      "frame": 550,
+      "glass": 30
+    },
+    {
+      "id": "05-D",
+      "layout": "meshes",
+      "layer": "small__boxed",
+      "frame": 420,
+      "glass": 12
+    },
+    {
+      "id": "05-D",
+      "layout": "meshes",
+      "layer": "small__roof",
+      "frame": 440,
+      "glass": 12
+    },
+    {
+      "id": "05-D",
+      "layout": "meshes",
+      "layer": "small__transom",
+      "frame": 520,
+      "glass": 20
+    },
+    {
+      "id": "05-D",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__two",
+      "frame": 92,
+      "glass": 12
+    },
+    {
+      "id": "05-D",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__two",
+      "frame": 88,
+      "glass": 12
+    },
+    {
+      "id": "05-D",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__three",
+      "frame": 98,
+      "glass": 12
+    },
+    {
+      "id": "05-D",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__three",
+      "frame": 105,
+      "glass": 15
+    },
+    {
+      "id": "05-D",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__four",
+      "frame": 118,
+      "glass": 14
+    },
+    {
+      "id": "05-D",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__four",
+      "frame": 127,
+      "glass": 17
+    },
+    {
+      "id": "05-D",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__transom",
+      "frame": 212,
+      "glass": 30
+    },
+    {
+      "id": "05-D",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__transom",
+      "frame": 135,
+      "glass": 15
+    },
+    {
+      "id": "05-D",
+      "layout": "unfolded_meshes",
+      "layer": "small__boxed",
+      "frame": 99,
+      "glass": 11
+    },
+    {
+      "id": "05-D",
+      "layout": "unfolded_meshes",
+      "layer": "small__roof",
+      "frame": 121,
+      "glass": 11
+    },
+    {
+      "id": "05-D",
+      "layout": "unfolded_meshes",
+      "layer": "small__transom",
+      "frame": 193,
+      "glass": 23
+    },
+    {
+      "id": "06-A",
+      "layout": "meshes",
+      "layer": "sash_partial__two",
+      "frame": 244,
+      "glass": 12
+    },
+    {
+      "id": "06-A",
+      "layout": "meshes",
+      "layer": "sash_full__two",
+      "frame": 476,
+      "glass": 30
+    },
+    {
+      "id": "06-A",
+      "layout": "meshes",
+      "layer": "sash_partial__three",
+      "frame": 302,
+      "glass": 18
+    },
+    {
+      "id": "06-A",
+      "layout": "meshes",
+      "layer": "sash_full__three",
+      "frame": 548,
+      "glass": 36
+    },
+    {
+      "id": "06-A",
+      "layout": "meshes",
+      "layer": "sash_partial__four",
+      "frame": 432,
+      "glass": 24
+    },
+    {
+      "id": "06-A",
+      "layout": "meshes",
+      "layer": "sash_full__four",
+      "frame": 636,
+      "glass": 42
+    },
+    {
+      "id": "06-A",
+      "layout": "meshes",
+      "layer": "sash_partial__transom",
+      "frame": 598,
+      "glass": 40
+    },
+    {
+      "id": "06-A",
+      "layout": "meshes",
+      "layer": "sash_full__transom",
+      "frame": 476,
+      "glass": 30
+    },
+    {
+      "id": "06-A",
+      "layout": "meshes",
+      "layer": "small__boxed",
+      "frame": 874,
+      "glass": 24
+    },
+    {
+      "id": "06-A",
+      "layout": "meshes",
+      "layer": "small__roof",
+      "frame": 788,
+      "glass": 24
+    },
+    {
+      "id": "06-A",
+      "layout": "meshes",
+      "layer": "small__transom",
+      "frame": 1056,
+      "glass": 40
+    },
+    {
+      "id": "06-A",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__two",
+      "frame": 90,
+      "glass": 10
+    },
+    {
+      "id": "06-A",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__two",
+      "frame": 84,
+      "glass": 12
+    },
+    {
+      "id": "06-A",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__three",
+      "frame": 96,
+      "glass": 12
+    },
+    {
+      "id": "06-A",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__three",
+      "frame": 104,
+      "glass": 12
+    },
+    {
+      "id": "06-A",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__four",
+      "frame": 125,
+      "glass": 13
+    },
+    {
+      "id": "06-A",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__four",
+      "frame": 128,
+      "glass": 14
+    },
+    {
+      "id": "06-A",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__transom",
+      "frame": 216,
+      "glass": 28
+    },
+    {
+      "id": "06-A",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__transom",
+      "frame": 129,
+      "glass": 13
+    },
+    {
+      "id": "06-A",
+      "layout": "unfolded_meshes",
+      "layer": "small__boxed",
+      "frame": 101,
+      "glass": 13
+    },
+    {
+      "id": "06-A",
+      "layout": "unfolded_meshes",
+      "layer": "small__roof",
+      "frame": 123,
+      "glass": 13
+    },
+    {
+      "id": "06-A",
+      "layout": "unfolded_meshes",
+      "layer": "small__transom",
+      "frame": 205,
+      "glass": 25
+    },
+    {
+      "id": "06-B",
+      "layout": "meshes",
+      "layer": "sash_partial__two",
+      "frame": 264,
+      "glass": 12
+    },
+    {
+      "id": "06-B",
+      "layout": "meshes",
+      "layer": "sash_full__two",
+      "frame": 444,
+      "glass": 30
+    },
+    {
+      "id": "06-B",
+      "layout": "meshes",
+      "layer": "sash_partial__three",
+      "frame": 300,
+      "glass": 18
+    },
+    {
+      "id": "06-B",
+      "layout": "meshes",
+      "layer": "sash_full__three",
+      "frame": 544,
+      "glass": 36
+    },
+    {
+      "id": "06-B",
+      "layout": "meshes",
+      "layer": "sash_partial__four",
+      "frame": 420,
+      "glass": 24
+    },
+    {
+      "id": "06-B",
+      "layout": "meshes",
+      "layer": "sash_full__four",
+      "frame": 618,
+      "glass": 42
+    },
+    {
+      "id": "06-B",
+      "layout": "meshes",
+      "layer": "sash_partial__transom",
+      "frame": 612,
+      "glass": 40
+    },
+    {
+      "id": "06-B",
+      "layout": "meshes",
+      "layer": "sash_full__transom",
+      "frame": 454,
+      "glass": 30
+    },
+    {
+      "id": "06-B",
+      "layout": "meshes",
+      "layer": "small__boxed",
+      "frame": 832,
+      "glass": 24
+    },
+    {
+      "id": "06-B",
+      "layout": "meshes",
+      "layer": "small__roof",
+      "frame": 824,
+      "glass": 24
+    },
+    {
+      "id": "06-B",
+      "layout": "meshes",
+      "layer": "small__transom",
+      "frame": 1024,
+      "glass": 40
+    },
+    {
+      "id": "06-B",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__two",
+      "frame": 90,
+      "glass": 10
+    },
+    {
+      "id": "06-B",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__two",
+      "frame": 84,
+      "glass": 12
+    },
+    {
+      "id": "06-B",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__three",
+      "frame": 96,
+      "glass": 12
+    },
+    {
+      "id": "06-B",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__three",
+      "frame": 104,
+      "glass": 12
+    },
+    {
+      "id": "06-B",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__four",
+      "frame": 125,
+      "glass": 13
+    },
+    {
+      "id": "06-B",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__four",
+      "frame": 128,
+      "glass": 14
+    },
+    {
+      "id": "06-B",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__transom",
+      "frame": 216,
+      "glass": 28
+    },
+    {
+      "id": "06-B",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__transom",
+      "frame": 129,
+      "glass": 13
+    },
+    {
+      "id": "06-B",
+      "layout": "unfolded_meshes",
+      "layer": "small__boxed",
+      "frame": 101,
+      "glass": 13
+    },
+    {
+      "id": "06-B",
+      "layout": "unfolded_meshes",
+      "layer": "small__roof",
+      "frame": 123,
+      "glass": 13
+    },
+    {
+      "id": "06-B",
+      "layout": "unfolded_meshes",
+      "layer": "small__transom",
+      "frame": 205,
+      "glass": 25
+    },
+    {
+      "id": "06-C",
+      "layout": "meshes",
+      "layer": "sash_partial__two",
+      "frame": 272,
+      "glass": 12
+    },
+    {
+      "id": "06-C",
+      "layout": "meshes",
+      "layer": "sash_full__two",
+      "frame": 486,
+      "glass": 30
+    },
+    {
+      "id": "06-C",
+      "layout": "meshes",
+      "layer": "sash_partial__three",
+      "frame": 378,
+      "glass": 18
+    },
+    {
+      "id": "06-C",
+      "layout": "meshes",
+      "layer": "sash_full__three",
+      "frame": 566,
+      "glass": 36
+    },
+    {
+      "id": "06-C",
+      "layout": "meshes",
+      "layer": "sash_partial__four",
+      "frame": 450,
+      "glass": 24
+    },
+    {
+      "id": "06-C",
+      "layout": "meshes",
+      "layer": "sash_full__four",
+      "frame": 678,
+      "glass": 42
+    },
+    {
+      "id": "06-C",
+      "layout": "meshes",
+      "layer": "sash_partial__transom",
+      "frame": 674,
+      "glass": 40
+    },
+    {
+      "id": "06-C",
+      "layout": "meshes",
+      "layer": "sash_full__transom",
+      "frame": 510,
+      "glass": 30
+    },
+    {
+      "id": "06-C",
+      "layout": "meshes",
+      "layer": "small__boxed",
+      "frame": 472,
+      "glass": 12
+    },
+    {
+      "id": "06-C",
+      "layout": "meshes",
+      "layer": "small__roof",
+      "frame": 410,
+      "glass": 12
+    },
+    {
+      "id": "06-C",
+      "layout": "meshes",
+      "layer": "small__transom",
+      "frame": 536,
+      "glass": 20
+    },
+    {
+      "id": "06-C",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__two",
+      "frame": 90,
+      "glass": 10
+    },
+    {
+      "id": "06-C",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__two",
+      "frame": 86,
+      "glass": 10
+    },
+    {
+      "id": "06-C",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__three",
+      "frame": 96,
+      "glass": 12
+    },
+    {
+      "id": "06-C",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__three",
+      "frame": 106,
+      "glass": 14
+    },
+    {
+      "id": "06-C",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__four",
+      "frame": 122,
+      "glass": 14
+    },
+    {
+      "id": "06-C",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__four",
+      "frame": 125,
+      "glass": 15
+    },
+    {
+      "id": "06-C",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__transom",
+      "frame": 212,
+      "glass": 28
+    },
+    {
+      "id": "06-C",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__transom",
+      "frame": 134,
+      "glass": 14
+    },
+    {
+      "id": "06-C",
+      "layout": "unfolded_meshes",
+      "layer": "small__boxed",
+      "frame": 101,
+      "glass": 13
+    },
+    {
+      "id": "06-C",
+      "layout": "unfolded_meshes",
+      "layer": "small__roof",
+      "frame": 123,
+      "glass": 13
+    },
+    {
+      "id": "06-C",
+      "layout": "unfolded_meshes",
+      "layer": "small__transom",
+      "frame": 205,
+      "glass": 25
+    },
+    {
+      "id": "06-D",
+      "layout": "meshes",
+      "layer": "sash_partial__two",
+      "frame": 234,
+      "glass": 12
+    },
+    {
+      "id": "06-D",
+      "layout": "meshes",
+      "layer": "sash_full__two",
+      "frame": 546,
+      "glass": 30
+    },
+    {
+      "id": "06-D",
+      "layout": "meshes",
+      "layer": "sash_partial__three",
+      "frame": 406,
+      "glass": 18
+    },
+    {
+      "id": "06-D",
+      "layout": "meshes",
+      "layer": "sash_full__three",
+      "frame": 600,
+      "glass": 36
+    },
+    {
+      "id": "06-D",
+      "layout": "meshes",
+      "layer": "sash_partial__four",
+      "frame": 404,
+      "glass": 24
+    },
+    {
+      "id": "06-D",
+      "layout": "meshes",
+      "layer": "sash_full__four",
+      "frame": 690,
+      "glass": 42
+    },
+    {
+      "id": "06-D",
+      "layout": "meshes",
+      "layer": "sash_partial__transom",
+      "frame": 634,
+      "glass": 40
+    },
+    {
+      "id": "06-D",
+      "layout": "meshes",
+      "layer": "sash_full__transom",
+      "frame": 550,
+      "glass": 30
+    },
+    {
+      "id": "06-D",
+      "layout": "meshes",
+      "layer": "small__boxed",
+      "frame": 420,
+      "glass": 12
+    },
+    {
+      "id": "06-D",
+      "layout": "meshes",
+      "layer": "small__roof",
+      "frame": 440,
+      "glass": 12
+    },
+    {
+      "id": "06-D",
+      "layout": "meshes",
+      "layer": "small__transom",
+      "frame": 520,
+      "glass": 20
+    },
+    {
+      "id": "06-D",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__two",
+      "frame": 90,
+      "glass": 10
+    },
+    {
+      "id": "06-D",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__two",
+      "frame": 88,
+      "glass": 12
+    },
+    {
+      "id": "06-D",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__three",
+      "frame": 98,
+      "glass": 12
+    },
+    {
+      "id": "06-D",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__three",
+      "frame": 105,
+      "glass": 15
+    },
+    {
+      "id": "06-D",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__four",
+      "frame": 118,
+      "glass": 14
+    },
+    {
+      "id": "06-D",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__four",
+      "frame": 127,
+      "glass": 17
+    },
+    {
+      "id": "06-D",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__transom",
+      "frame": 212,
+      "glass": 30
+    },
+    {
+      "id": "06-D",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__transom",
+      "frame": 135,
+      "glass": 15
+    },
+    {
+      "id": "06-D",
+      "layout": "unfolded_meshes",
+      "layer": "small__boxed",
+      "frame": 99,
+      "glass": 11
+    },
+    {
+      "id": "06-D",
+      "layout": "unfolded_meshes",
+      "layer": "small__roof",
+      "frame": 121,
+      "glass": 11
+    },
+    {
+      "id": "06-D",
+      "layout": "unfolded_meshes",
+      "layer": "small__transom",
+      "frame": 199,
+      "glass": 23
+    },
+    {
+      "id": "07-A",
+      "layout": "meshes",
+      "layer": "sash_partial__two",
+      "frame": 244,
+      "glass": 12
+    },
+    {
+      "id": "07-A",
+      "layout": "meshes",
+      "layer": "sash_full__two",
+      "frame": 476,
+      "glass": 30
+    },
+    {
+      "id": "07-A",
+      "layout": "meshes",
+      "layer": "sash_partial__three",
+      "frame": 302,
+      "glass": 18
+    },
+    {
+      "id": "07-A",
+      "layout": "meshes",
+      "layer": "sash_full__three",
+      "frame": 548,
+      "glass": 36
+    },
+    {
+      "id": "07-A",
+      "layout": "meshes",
+      "layer": "sash_partial__four",
+      "frame": 432,
+      "glass": 24
+    },
+    {
+      "id": "07-A",
+      "layout": "meshes",
+      "layer": "sash_full__four",
+      "frame": 636,
+      "glass": 42
+    },
+    {
+      "id": "07-A",
+      "layout": "meshes",
+      "layer": "sash_partial__transom",
+      "frame": 598,
+      "glass": 40
+    },
+    {
+      "id": "07-A",
+      "layout": "meshes",
+      "layer": "sash_full__transom",
+      "frame": 476,
+      "glass": 30
+    },
+    {
+      "id": "07-A",
+      "layout": "meshes",
+      "layer": "small__boxed",
+      "frame": 874,
+      "glass": 24
+    },
+    {
+      "id": "07-A",
+      "layout": "meshes",
+      "layer": "small__roof",
+      "frame": 788,
+      "glass": 24
+    },
+    {
+      "id": "07-A",
+      "layout": "meshes",
+      "layer": "small__transom",
+      "frame": 1056,
+      "glass": 40
+    },
+    {
+      "id": "07-A",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__two",
+      "frame": 90,
+      "glass": 10
+    },
+    {
+      "id": "07-A",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__two",
+      "frame": 84,
+      "glass": 12
+    },
+    {
+      "id": "07-A",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__three",
+      "frame": 96,
+      "glass": 12
+    },
+    {
+      "id": "07-A",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__three",
+      "frame": 104,
+      "glass": 12
+    },
+    {
+      "id": "07-A",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__four",
+      "frame": 125,
+      "glass": 13
+    },
+    {
+      "id": "07-A",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__four",
+      "frame": 128,
+      "glass": 14
+    },
+    {
+      "id": "07-A",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__transom",
+      "frame": 216,
+      "glass": 28
+    },
+    {
+      "id": "07-A",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__transom",
+      "frame": 129,
+      "glass": 13
+    },
+    {
+      "id": "07-A",
+      "layout": "unfolded_meshes",
+      "layer": "small__boxed",
+      "frame": 101,
+      "glass": 13
+    },
+    {
+      "id": "07-A",
+      "layout": "unfolded_meshes",
+      "layer": "small__roof",
+      "frame": 123,
+      "glass": 13
+    },
+    {
+      "id": "07-A",
+      "layout": "unfolded_meshes",
+      "layer": "small__transom",
+      "frame": 205,
+      "glass": 25
+    },
+    {
+      "id": "07-B",
+      "layout": "meshes",
+      "layer": "sash_partial__two",
+      "frame": 264,
+      "glass": 12
+    },
+    {
+      "id": "07-B",
+      "layout": "meshes",
+      "layer": "sash_full__two",
+      "frame": 444,
+      "glass": 30
+    },
+    {
+      "id": "07-B",
+      "layout": "meshes",
+      "layer": "sash_partial__three",
+      "frame": 300,
+      "glass": 18
+    },
+    {
+      "id": "07-B",
+      "layout": "meshes",
+      "layer": "sash_full__three",
+      "frame": 544,
+      "glass": 36
+    },
+    {
+      "id": "07-B",
+      "layout": "meshes",
+      "layer": "sash_partial__four",
+      "frame": 420,
+      "glass": 24
+    },
+    {
+      "id": "07-B",
+      "layout": "meshes",
+      "layer": "sash_full__four",
+      "frame": 618,
+      "glass": 42
+    },
+    {
+      "id": "07-B",
+      "layout": "meshes",
+      "layer": "sash_partial__transom",
+      "frame": 612,
+      "glass": 40
+    },
+    {
+      "id": "07-B",
+      "layout": "meshes",
+      "layer": "sash_full__transom",
+      "frame": 454,
+      "glass": 30
+    },
+    {
+      "id": "07-B",
+      "layout": "meshes",
+      "layer": "small__boxed",
+      "frame": 832,
+      "glass": 24
+    },
+    {
+      "id": "07-B",
+      "layout": "meshes",
+      "layer": "small__roof",
+      "frame": 824,
+      "glass": 24
+    },
+    {
+      "id": "07-B",
+      "layout": "meshes",
+      "layer": "small__transom",
+      "frame": 1024,
+      "glass": 40
+    },
+    {
+      "id": "07-B",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__two",
+      "frame": 90,
+      "glass": 10
+    },
+    {
+      "id": "07-B",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__two",
+      "frame": 84,
+      "glass": 12
+    },
+    {
+      "id": "07-B",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__three",
+      "frame": 96,
+      "glass": 12
+    },
+    {
+      "id": "07-B",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__three",
+      "frame": 104,
+      "glass": 12
+    },
+    {
+      "id": "07-B",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__four",
+      "frame": 125,
+      "glass": 13
+    },
+    {
+      "id": "07-B",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__four",
+      "frame": 128,
+      "glass": 14
+    },
+    {
+      "id": "07-B",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__transom",
+      "frame": 216,
+      "glass": 28
+    },
+    {
+      "id": "07-B",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__transom",
+      "frame": 129,
+      "glass": 13
+    },
+    {
+      "id": "07-B",
+      "layout": "unfolded_meshes",
+      "layer": "small__boxed",
+      "frame": 101,
+      "glass": 13
+    },
+    {
+      "id": "07-B",
+      "layout": "unfolded_meshes",
+      "layer": "small__roof",
+      "frame": 123,
+      "glass": 13
+    },
+    {
+      "id": "07-B",
+      "layout": "unfolded_meshes",
+      "layer": "small__transom",
+      "frame": 205,
+      "glass": 25
+    },
+    {
+      "id": "07-C",
+      "layout": "meshes",
+      "layer": "sash_partial__two",
+      "frame": 272,
+      "glass": 12
+    },
+    {
+      "id": "07-C",
+      "layout": "meshes",
+      "layer": "sash_full__two",
+      "frame": 486,
+      "glass": 30
+    },
+    {
+      "id": "07-C",
+      "layout": "meshes",
+      "layer": "sash_partial__three",
+      "frame": 378,
+      "glass": 18
+    },
+    {
+      "id": "07-C",
+      "layout": "meshes",
+      "layer": "sash_full__three",
+      "frame": 566,
+      "glass": 36
+    },
+    {
+      "id": "07-C",
+      "layout": "meshes",
+      "layer": "sash_partial__four",
+      "frame": 450,
+      "glass": 24
+    },
+    {
+      "id": "07-C",
+      "layout": "meshes",
+      "layer": "sash_full__four",
+      "frame": 678,
+      "glass": 42
+    },
+    {
+      "id": "07-C",
+      "layout": "meshes",
+      "layer": "sash_partial__transom",
+      "frame": 674,
+      "glass": 40
+    },
+    {
+      "id": "07-C",
+      "layout": "meshes",
+      "layer": "sash_full__transom",
+      "frame": 510,
+      "glass": 30
+    },
+    {
+      "id": "07-C",
+      "layout": "meshes",
+      "layer": "small__boxed",
+      "frame": 472,
+      "glass": 12
+    },
+    {
+      "id": "07-C",
+      "layout": "meshes",
+      "layer": "small__roof",
+      "frame": 410,
+      "glass": 12
+    },
+    {
+      "id": "07-C",
+      "layout": "meshes",
+      "layer": "small__transom",
+      "frame": 536,
+      "glass": 20
+    },
+    {
+      "id": "07-C",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__two",
+      "frame": 90,
+      "glass": 10
+    },
+    {
+      "id": "07-C",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__two",
+      "frame": 86,
+      "glass": 10
+    },
+    {
+      "id": "07-C",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__three",
+      "frame": 96,
+      "glass": 12
+    },
+    {
+      "id": "07-C",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__three",
+      "frame": 106,
+      "glass": 14
+    },
+    {
+      "id": "07-C",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__four",
+      "frame": 122,
+      "glass": 14
+    },
+    {
+      "id": "07-C",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__four",
+      "frame": 125,
+      "glass": 15
+    },
+    {
+      "id": "07-C",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__transom",
+      "frame": 212,
+      "glass": 28
+    },
+    {
+      "id": "07-C",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__transom",
+      "frame": 134,
+      "glass": 14
+    },
+    {
+      "id": "07-C",
+      "layout": "unfolded_meshes",
+      "layer": "small__boxed",
+      "frame": 101,
+      "glass": 13
+    },
+    {
+      "id": "07-C",
+      "layout": "unfolded_meshes",
+      "layer": "small__roof",
+      "frame": 123,
+      "glass": 13
+    },
+    {
+      "id": "07-C",
+      "layout": "unfolded_meshes",
+      "layer": "small__transom",
+      "frame": 205,
+      "glass": 25
+    },
+    {
+      "id": "07-D",
+      "layout": "meshes",
+      "layer": "sash_partial__two",
+      "frame": 234,
+      "glass": 12
+    },
+    {
+      "id": "07-D",
+      "layout": "meshes",
+      "layer": "sash_full__two",
+      "frame": 546,
+      "glass": 30
+    },
+    {
+      "id": "07-D",
+      "layout": "meshes",
+      "layer": "sash_partial__three",
+      "frame": 406,
+      "glass": 18
+    },
+    {
+      "id": "07-D",
+      "layout": "meshes",
+      "layer": "sash_full__three",
+      "frame": 600,
+      "glass": 36
+    },
+    {
+      "id": "07-D",
+      "layout": "meshes",
+      "layer": "sash_partial__four",
+      "frame": 404,
+      "glass": 24
+    },
+    {
+      "id": "07-D",
+      "layout": "meshes",
+      "layer": "sash_full__four",
+      "frame": 690,
+      "glass": 42
+    },
+    {
+      "id": "07-D",
+      "layout": "meshes",
+      "layer": "sash_partial__transom",
+      "frame": 634,
+      "glass": 40
+    },
+    {
+      "id": "07-D",
+      "layout": "meshes",
+      "layer": "sash_full__transom",
+      "frame": 550,
+      "glass": 30
+    },
+    {
+      "id": "07-D",
+      "layout": "meshes",
+      "layer": "small__boxed",
+      "frame": 420,
+      "glass": 12
+    },
+    {
+      "id": "07-D",
+      "layout": "meshes",
+      "layer": "small__roof",
+      "frame": 440,
+      "glass": 12
+    },
+    {
+      "id": "07-D",
+      "layout": "meshes",
+      "layer": "small__transom",
+      "frame": 520,
+      "glass": 20
+    },
+    {
+      "id": "07-D",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__two",
+      "frame": 90,
+      "glass": 10
+    },
+    {
+      "id": "07-D",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__two",
+      "frame": 88,
+      "glass": 12
+    },
+    {
+      "id": "07-D",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__three",
+      "frame": 98,
+      "glass": 12
+    },
+    {
+      "id": "07-D",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__three",
+      "frame": 105,
+      "glass": 15
+    },
+    {
+      "id": "07-D",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__four",
+      "frame": 118,
+      "glass": 14
+    },
+    {
+      "id": "07-D",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__four",
+      "frame": 127,
+      "glass": 17
+    },
+    {
+      "id": "07-D",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__transom",
+      "frame": 212,
+      "glass": 30
+    },
+    {
+      "id": "07-D",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__transom",
+      "frame": 135,
+      "glass": 15
+    },
+    {
+      "id": "07-D",
+      "layout": "unfolded_meshes",
+      "layer": "small__boxed",
+      "frame": 99,
+      "glass": 11
+    },
+    {
+      "id": "07-D",
+      "layout": "unfolded_meshes",
+      "layer": "small__roof",
+      "frame": 121,
+      "glass": 11
+    },
+    {
+      "id": "07-D",
+      "layout": "unfolded_meshes",
+      "layer": "small__transom",
+      "frame": 199,
+      "glass": 23
+    },
+    {
+      "id": "08-A",
+      "layout": "meshes",
+      "layer": "sash_partial__two",
+      "frame": 244,
+      "glass": 12
+    },
+    {
+      "id": "08-A",
+      "layout": "meshes",
+      "layer": "sash_full__two",
+      "frame": 476,
+      "glass": 30
+    },
+    {
+      "id": "08-A",
+      "layout": "meshes",
+      "layer": "sash_partial__three",
+      "frame": 302,
+      "glass": 18
+    },
+    {
+      "id": "08-A",
+      "layout": "meshes",
+      "layer": "sash_full__three",
+      "frame": 548,
+      "glass": 36
+    },
+    {
+      "id": "08-A",
+      "layout": "meshes",
+      "layer": "sash_partial__four",
+      "frame": 432,
+      "glass": 24
+    },
+    {
+      "id": "08-A",
+      "layout": "meshes",
+      "layer": "sash_full__four",
+      "frame": 636,
+      "glass": 42
+    },
+    {
+      "id": "08-A",
+      "layout": "meshes",
+      "layer": "sash_partial__transom",
+      "frame": 598,
+      "glass": 40
+    },
+    {
+      "id": "08-A",
+      "layout": "meshes",
+      "layer": "sash_full__transom",
+      "frame": 476,
+      "glass": 30
+    },
+    {
+      "id": "08-A",
+      "layout": "meshes",
+      "layer": "small__boxed",
+      "frame": 874,
+      "glass": 24
+    },
+    {
+      "id": "08-A",
+      "layout": "meshes",
+      "layer": "small__roof",
+      "frame": 788,
+      "glass": 24
+    },
+    {
+      "id": "08-A",
+      "layout": "meshes",
+      "layer": "small__transom",
+      "frame": 1056,
+      "glass": 40
+    },
+    {
+      "id": "08-A",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__two",
+      "frame": 90,
+      "glass": 10
+    },
+    {
+      "id": "08-A",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__two",
+      "frame": 84,
+      "glass": 12
+    },
+    {
+      "id": "08-A",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__three",
+      "frame": 96,
+      "glass": 12
+    },
+    {
+      "id": "08-A",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__three",
+      "frame": 104,
+      "glass": 12
+    },
+    {
+      "id": "08-A",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__four",
+      "frame": 125,
+      "glass": 13
+    },
+    {
+      "id": "08-A",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__four",
+      "frame": 128,
+      "glass": 14
+    },
+    {
+      "id": "08-A",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__transom",
+      "frame": 216,
+      "glass": 28
+    },
+    {
+      "id": "08-A",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__transom",
+      "frame": 129,
+      "glass": 13
+    },
+    {
+      "id": "08-A",
+      "layout": "unfolded_meshes",
+      "layer": "small__boxed",
+      "frame": 101,
+      "glass": 13
+    },
+    {
+      "id": "08-A",
+      "layout": "unfolded_meshes",
+      "layer": "small__roof",
+      "frame": 123,
+      "glass": 13
+    },
+    {
+      "id": "08-A",
+      "layout": "unfolded_meshes",
+      "layer": "small__transom",
+      "frame": 205,
+      "glass": 25
+    },
+    {
+      "id": "08-B",
+      "layout": "meshes",
+      "layer": "sash_partial__two",
+      "frame": 264,
+      "glass": 12
+    },
+    {
+      "id": "08-B",
+      "layout": "meshes",
+      "layer": "sash_full__two",
+      "frame": 444,
+      "glass": 30
+    },
+    {
+      "id": "08-B",
+      "layout": "meshes",
+      "layer": "sash_partial__three",
+      "frame": 300,
+      "glass": 18
+    },
+    {
+      "id": "08-B",
+      "layout": "meshes",
+      "layer": "sash_full__three",
+      "frame": 544,
+      "glass": 36
+    },
+    {
+      "id": "08-B",
+      "layout": "meshes",
+      "layer": "sash_partial__four",
+      "frame": 420,
+      "glass": 24
+    },
+    {
+      "id": "08-B",
+      "layout": "meshes",
+      "layer": "sash_full__four",
+      "frame": 618,
+      "glass": 42
+    },
+    {
+      "id": "08-B",
+      "layout": "meshes",
+      "layer": "sash_partial__transom",
+      "frame": 612,
+      "glass": 40
+    },
+    {
+      "id": "08-B",
+      "layout": "meshes",
+      "layer": "sash_full__transom",
+      "frame": 454,
+      "glass": 30
+    },
+    {
+      "id": "08-B",
+      "layout": "meshes",
+      "layer": "small__boxed",
+      "frame": 832,
+      "glass": 24
+    },
+    {
+      "id": "08-B",
+      "layout": "meshes",
+      "layer": "small__roof",
+      "frame": 824,
+      "glass": 24
+    },
+    {
+      "id": "08-B",
+      "layout": "meshes",
+      "layer": "small__transom",
+      "frame": 1024,
+      "glass": 40
+    },
+    {
+      "id": "08-B",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__two",
+      "frame": 90,
+      "glass": 10
+    },
+    {
+      "id": "08-B",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__two",
+      "frame": 84,
+      "glass": 12
+    },
+    {
+      "id": "08-B",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__three",
+      "frame": 96,
+      "glass": 12
+    },
+    {
+      "id": "08-B",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__three",
+      "frame": 104,
+      "glass": 12
+    },
+    {
+      "id": "08-B",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__four",
+      "frame": 125,
+      "glass": 13
+    },
+    {
+      "id": "08-B",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__four",
+      "frame": 128,
+      "glass": 14
+    },
+    {
+      "id": "08-B",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__transom",
+      "frame": 216,
+      "glass": 28
+    },
+    {
+      "id": "08-B",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__transom",
+      "frame": 129,
+      "glass": 13
+    },
+    {
+      "id": "08-B",
+      "layout": "unfolded_meshes",
+      "layer": "small__boxed",
+      "frame": 101,
+      "glass": 13
+    },
+    {
+      "id": "08-B",
+      "layout": "unfolded_meshes",
+      "layer": "small__roof",
+      "frame": 123,
+      "glass": 13
+    },
+    {
+      "id": "08-B",
+      "layout": "unfolded_meshes",
+      "layer": "small__transom",
+      "frame": 205,
+      "glass": 25
+    },
+    {
+      "id": "08-C",
+      "layout": "meshes",
+      "layer": "sash_partial__two",
+      "frame": 272,
+      "glass": 12
+    },
+    {
+      "id": "08-C",
+      "layout": "meshes",
+      "layer": "sash_full__two",
+      "frame": 486,
+      "glass": 30
+    },
+    {
+      "id": "08-C",
+      "layout": "meshes",
+      "layer": "sash_partial__three",
+      "frame": 378,
+      "glass": 18
+    },
+    {
+      "id": "08-C",
+      "layout": "meshes",
+      "layer": "sash_full__three",
+      "frame": 566,
+      "glass": 36
+    },
+    {
+      "id": "08-C",
+      "layout": "meshes",
+      "layer": "sash_partial__four",
+      "frame": 450,
+      "glass": 24
+    },
+    {
+      "id": "08-C",
+      "layout": "meshes",
+      "layer": "sash_full__four",
+      "frame": 678,
+      "glass": 42
+    },
+    {
+      "id": "08-C",
+      "layout": "meshes",
+      "layer": "sash_partial__transom",
+      "frame": 674,
+      "glass": 40
+    },
+    {
+      "id": "08-C",
+      "layout": "meshes",
+      "layer": "sash_full__transom",
+      "frame": 510,
+      "glass": 30
+    },
+    {
+      "id": "08-C",
+      "layout": "meshes",
+      "layer": "small__boxed",
+      "frame": 472,
+      "glass": 12
+    },
+    {
+      "id": "08-C",
+      "layout": "meshes",
+      "layer": "small__roof",
+      "frame": 410,
+      "glass": 12
+    },
+    {
+      "id": "08-C",
+      "layout": "meshes",
+      "layer": "small__transom",
+      "frame": 536,
+      "glass": 20
+    },
+    {
+      "id": "08-C",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__two",
+      "frame": 90,
+      "glass": 10
+    },
+    {
+      "id": "08-C",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__two",
+      "frame": 86,
+      "glass": 10
+    },
+    {
+      "id": "08-C",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__three",
+      "frame": 96,
+      "glass": 12
+    },
+    {
+      "id": "08-C",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__three",
+      "frame": 106,
+      "glass": 14
+    },
+    {
+      "id": "08-C",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__four",
+      "frame": 122,
+      "glass": 14
+    },
+    {
+      "id": "08-C",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__four",
+      "frame": 125,
+      "glass": 15
+    },
+    {
+      "id": "08-C",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__transom",
+      "frame": 212,
+      "glass": 28
+    },
+    {
+      "id": "08-C",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__transom",
+      "frame": 134,
+      "glass": 14
+    },
+    {
+      "id": "08-C",
+      "layout": "unfolded_meshes",
+      "layer": "small__boxed",
+      "frame": 101,
+      "glass": 13
+    },
+    {
+      "id": "08-C",
+      "layout": "unfolded_meshes",
+      "layer": "small__roof",
+      "frame": 123,
+      "glass": 13
+    },
+    {
+      "id": "08-C",
+      "layout": "unfolded_meshes",
+      "layer": "small__transom",
+      "frame": 205,
+      "glass": 25
+    },
+    {
+      "id": "08-D",
+      "layout": "meshes",
+      "layer": "sash_partial__two",
+      "frame": 234,
+      "glass": 12
+    },
+    {
+      "id": "08-D",
+      "layout": "meshes",
+      "layer": "sash_full__two",
+      "frame": 546,
+      "glass": 30
+    },
+    {
+      "id": "08-D",
+      "layout": "meshes",
+      "layer": "sash_partial__three",
+      "frame": 406,
+      "glass": 18
+    },
+    {
+      "id": "08-D",
+      "layout": "meshes",
+      "layer": "sash_full__three",
+      "frame": 600,
+      "glass": 36
+    },
+    {
+      "id": "08-D",
+      "layout": "meshes",
+      "layer": "sash_partial__four",
+      "frame": 404,
+      "glass": 24
+    },
+    {
+      "id": "08-D",
+      "layout": "meshes",
+      "layer": "sash_full__four",
+      "frame": 690,
+      "glass": 42
+    },
+    {
+      "id": "08-D",
+      "layout": "meshes",
+      "layer": "sash_partial__transom",
+      "frame": 634,
+      "glass": 40
+    },
+    {
+      "id": "08-D",
+      "layout": "meshes",
+      "layer": "sash_full__transom",
+      "frame": 550,
+      "glass": 30
+    },
+    {
+      "id": "08-D",
+      "layout": "meshes",
+      "layer": "small__boxed",
+      "frame": 420,
+      "glass": 12
+    },
+    {
+      "id": "08-D",
+      "layout": "meshes",
+      "layer": "small__roof",
+      "frame": 440,
+      "glass": 12
+    },
+    {
+      "id": "08-D",
+      "layout": "meshes",
+      "layer": "small__transom",
+      "frame": 520,
+      "glass": 20
+    },
+    {
+      "id": "08-D",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__two",
+      "frame": 90,
+      "glass": 10
+    },
+    {
+      "id": "08-D",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__two",
+      "frame": 88,
+      "glass": 12
+    },
+    {
+      "id": "08-D",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__three",
+      "frame": 98,
+      "glass": 12
+    },
+    {
+      "id": "08-D",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__three",
+      "frame": 105,
+      "glass": 15
+    },
+    {
+      "id": "08-D",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__four",
+      "frame": 118,
+      "glass": 14
+    },
+    {
+      "id": "08-D",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__four",
+      "frame": 127,
+      "glass": 17
+    },
+    {
+      "id": "08-D",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__transom",
+      "frame": 212,
+      "glass": 30
+    },
+    {
+      "id": "08-D",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__transom",
+      "frame": 135,
+      "glass": 15
+    },
+    {
+      "id": "08-D",
+      "layout": "unfolded_meshes",
+      "layer": "small__boxed",
+      "frame": 99,
+      "glass": 11
+    },
+    {
+      "id": "08-D",
+      "layout": "unfolded_meshes",
+      "layer": "small__roof",
+      "frame": 121,
+      "glass": 11
+    },
+    {
+      "id": "08-D",
+      "layout": "unfolded_meshes",
+      "layer": "small__transom",
+      "frame": 199,
+      "glass": 23
+    },
+    {
+      "id": "09-A",
+      "layout": "meshes",
+      "layer": "sash_partial__two",
+      "frame": 238,
+      "glass": 12
+    },
+    {
+      "id": "09-A",
+      "layout": "meshes",
+      "layer": "sash_full__two",
+      "frame": 464,
+      "glass": 30
+    },
+    {
+      "id": "09-A",
+      "layout": "meshes",
+      "layer": "sash_partial__three",
+      "frame": 290,
+      "glass": 18
+    },
+    {
+      "id": "09-A",
+      "layout": "meshes",
+      "layer": "sash_full__three",
+      "frame": 548,
+      "glass": 36
+    },
+    {
+      "id": "09-A",
+      "layout": "meshes",
+      "layer": "sash_partial__four",
+      "frame": 420,
+      "glass": 24
+    },
+    {
+      "id": "09-A",
+      "layout": "meshes",
+      "layer": "sash_full__four",
+      "frame": 610,
+      "glass": 42
+    },
+    {
+      "id": "09-A",
+      "layout": "meshes",
+      "layer": "sash_partial__transom",
+      "frame": 576,
+      "glass": 40
+    },
+    {
+      "id": "09-A",
+      "layout": "meshes",
+      "layer": "sash_full__transom",
+      "frame": 480,
+      "glass": 30
+    },
+    {
+      "id": "09-A",
+      "layout": "meshes",
+      "layer": "small__boxed",
+      "frame": 930,
+      "glass": 24
+    },
+    {
+      "id": "09-A",
+      "layout": "meshes",
+      "layer": "small__roof",
+      "frame": 794,
+      "glass": 24
+    },
+    {
+      "id": "09-A",
+      "layout": "meshes",
+      "layer": "small__transom",
+      "frame": 1050,
+      "glass": 40
+    },
+    {
+      "id": "09-A",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__two",
+      "frame": 90,
+      "glass": 10
+    },
+    {
+      "id": "09-A",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__two",
+      "frame": 84,
+      "glass": 12
+    },
+    {
+      "id": "09-A",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__three",
+      "frame": 96,
+      "glass": 12
+    },
+    {
+      "id": "09-A",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__three",
+      "frame": 104,
+      "glass": 12
+    },
+    {
+      "id": "09-A",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__four",
+      "frame": 121,
+      "glass": 13
+    },
+    {
+      "id": "09-A",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__four",
+      "frame": 128,
+      "glass": 14
+    },
+    {
+      "id": "09-A",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__transom",
+      "frame": 216,
+      "glass": 28
+    },
+    {
+      "id": "09-A",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__transom",
+      "frame": 129,
+      "glass": 13
+    },
+    {
+      "id": "09-A",
+      "layout": "unfolded_meshes",
+      "layer": "small__boxed",
+      "frame": 77,
+      "glass": 13
+    },
+    {
+      "id": "09-A",
+      "layout": "unfolded_meshes",
+      "layer": "small__roof",
+      "frame": 99,
+      "glass": 13
+    },
+    {
+      "id": "09-A",
+      "layout": "unfolded_meshes",
+      "layer": "small__transom",
+      "frame": 174,
+      "glass": 26
+    },
+    {
+      "id": "09-B",
+      "layout": "meshes",
+      "layer": "sash_partial__two",
+      "frame": 232,
+      "glass": 12
+    },
+    {
+      "id": "09-B",
+      "layout": "meshes",
+      "layer": "sash_full__two",
+      "frame": 462,
+      "glass": 30
+    },
+    {
+      "id": "09-B",
+      "layout": "meshes",
+      "layer": "sash_partial__three",
+      "frame": 286,
+      "glass": 18
+    },
+    {
+      "id": "09-B",
+      "layout": "meshes",
+      "layer": "sash_full__three",
+      "frame": 534,
+      "glass": 36
+    },
+    {
+      "id": "09-B",
+      "layout": "meshes",
+      "layer": "sash_partial__four",
+      "frame": 394,
+      "glass": 24
+    },
+    {
+      "id": "09-B",
+      "layout": "meshes",
+      "layer": "sash_full__four",
+      "frame": 592,
+      "glass": 42
+    },
+    {
+      "id": "09-B",
+      "layout": "meshes",
+      "layer": "sash_partial__transom",
+      "frame": 580,
+      "glass": 40
+    },
+    {
+      "id": "09-B",
+      "layout": "meshes",
+      "layer": "sash_full__transom",
+      "frame": 450,
+      "glass": 30
+    },
+    {
+      "id": "09-B",
+      "layout": "meshes",
+      "layer": "small__boxed",
+      "frame": 826,
+      "glass": 24
+    },
+    {
+      "id": "09-B",
+      "layout": "meshes",
+      "layer": "small__roof",
+      "frame": 816,
+      "glass": 24
+    },
+    {
+      "id": "09-B",
+      "layout": "meshes",
+      "layer": "small__transom",
+      "frame": 1040,
+      "glass": 40
+    },
+    {
+      "id": "09-B",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__two",
+      "frame": 90,
+      "glass": 10
+    },
+    {
+      "id": "09-B",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__two",
+      "frame": 84,
+      "glass": 12
+    },
+    {
+      "id": "09-B",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__three",
+      "frame": 96,
+      "glass": 12
+    },
+    {
+      "id": "09-B",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__three",
+      "frame": 104,
+      "glass": 12
+    },
+    {
+      "id": "09-B",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__four",
+      "frame": 121,
+      "glass": 13
+    },
+    {
+      "id": "09-B",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__four",
+      "frame": 128,
+      "glass": 14
+    },
+    {
+      "id": "09-B",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__transom",
+      "frame": 216,
+      "glass": 28
+    },
+    {
+      "id": "09-B",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__transom",
+      "frame": 129,
+      "glass": 13
+    },
+    {
+      "id": "09-B",
+      "layout": "unfolded_meshes",
+      "layer": "small__boxed",
+      "frame": 77,
+      "glass": 13
+    },
+    {
+      "id": "09-B",
+      "layout": "unfolded_meshes",
+      "layer": "small__roof",
+      "frame": 99,
+      "glass": 13
+    },
+    {
+      "id": "09-B",
+      "layout": "unfolded_meshes",
+      "layer": "small__transom",
+      "frame": 174,
+      "glass": 26
+    },
+    {
+      "id": "09-C",
+      "layout": "meshes",
+      "layer": "sash_partial__two",
+      "frame": 264,
+      "glass": 12
+    },
+    {
+      "id": "09-C",
+      "layout": "meshes",
+      "layer": "sash_full__two",
+      "frame": 482,
+      "glass": 30
+    },
+    {
+      "id": "09-C",
+      "layout": "meshes",
+      "layer": "sash_partial__three",
+      "frame": 378,
+      "glass": 18
+    },
+    {
+      "id": "09-C",
+      "layout": "meshes",
+      "layer": "sash_full__three",
+      "frame": 560,
+      "glass": 36
+    },
+    {
+      "id": "09-C",
+      "layout": "meshes",
+      "layer": "sash_partial__four",
+      "frame": 460,
+      "glass": 24
+    },
+    {
+      "id": "09-C",
+      "layout": "meshes",
+      "layer": "sash_full__four",
+      "frame": 670,
+      "glass": 42
+    },
+    {
+      "id": "09-C",
+      "layout": "meshes",
+      "layer": "sash_partial__transom",
+      "frame": 666,
+      "glass": 40
+    },
+    {
+      "id": "09-C",
+      "layout": "meshes",
+      "layer": "sash_full__transom",
+      "frame": 506,
+      "glass": 30
+    },
+    {
+      "id": "09-C",
+      "layout": "meshes",
+      "layer": "small__boxed",
+      "frame": 470,
+      "glass": 12
+    },
+    {
+      "id": "09-C",
+      "layout": "meshes",
+      "layer": "small__roof",
+      "frame": 404,
+      "glass": 12
+    },
+    {
+      "id": "09-C",
+      "layout": "meshes",
+      "layer": "small__transom",
+      "frame": 536,
+      "glass": 20
+    },
+    {
+      "id": "09-C",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__two",
+      "frame": 90,
+      "glass": 10
+    },
+    {
+      "id": "09-C",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__two",
+      "frame": 86,
+      "glass": 10
+    },
+    {
+      "id": "09-C",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__three",
+      "frame": 96,
+      "glass": 12
+    },
+    {
+      "id": "09-C",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__three",
+      "frame": 106,
+      "glass": 14
+    },
+    {
+      "id": "09-C",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__four",
+      "frame": 120,
+      "glass": 14
+    },
+    {
+      "id": "09-C",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__four",
+      "frame": 128,
+      "glass": 14
+    },
+    {
+      "id": "09-C",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__transom",
+      "frame": 212,
+      "glass": 28
+    },
+    {
+      "id": "09-C",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__transom",
+      "frame": 134,
+      "glass": 14
+    },
+    {
+      "id": "09-C",
+      "layout": "unfolded_meshes",
+      "layer": "small__boxed",
+      "frame": 77,
+      "glass": 13
+    },
+    {
+      "id": "09-C",
+      "layout": "unfolded_meshes",
+      "layer": "small__roof",
+      "frame": 99,
+      "glass": 13
+    },
+    {
+      "id": "09-C",
+      "layout": "unfolded_meshes",
+      "layer": "small__transom",
+      "frame": 174,
+      "glass": 26
+    },
+    {
+      "id": "09-D",
+      "layout": "meshes",
+      "layer": "sash_partial__two",
+      "frame": 234,
+      "glass": 12
+    },
+    {
+      "id": "09-D",
+      "layout": "meshes",
+      "layer": "sash_full__two",
+      "frame": 532,
+      "glass": 30
+    },
+    {
+      "id": "09-D",
+      "layout": "meshes",
+      "layer": "sash_partial__three",
+      "frame": 416,
+      "glass": 18
+    },
+    {
+      "id": "09-D",
+      "layout": "meshes",
+      "layer": "sash_full__three",
+      "frame": 582,
+      "glass": 36
+    },
+    {
+      "id": "09-D",
+      "layout": "meshes",
+      "layer": "sash_partial__four",
+      "frame": 406,
+      "glass": 24
+    },
+    {
+      "id": "09-D",
+      "layout": "meshes",
+      "layer": "sash_full__four",
+      "frame": 672,
+      "glass": 42
+    },
+    {
+      "id": "09-D",
+      "layout": "meshes",
+      "layer": "sash_partial__transom",
+      "frame": 640,
+      "glass": 40
+    },
+    {
+      "id": "09-D",
+      "layout": "meshes",
+      "layer": "sash_full__transom",
+      "frame": 530,
+      "glass": 30
+    },
+    {
+      "id": "09-D",
+      "layout": "meshes",
+      "layer": "small__boxed",
+      "frame": 414,
+      "glass": 12
+    },
+    {
+      "id": "09-D",
+      "layout": "meshes",
+      "layer": "small__roof",
+      "frame": 422,
+      "glass": 12
+    },
+    {
+      "id": "09-D",
+      "layout": "meshes",
+      "layer": "small__transom",
+      "frame": 522,
+      "glass": 20
+    },
+    {
+      "id": "09-D",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__two",
+      "frame": 90,
+      "glass": 10
+    },
+    {
+      "id": "09-D",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__two",
+      "frame": 88,
+      "glass": 12
+    },
+    {
+      "id": "09-D",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__three",
+      "frame": 98,
+      "glass": 12
+    },
+    {
+      "id": "09-D",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__three",
+      "frame": 105,
+      "glass": 15
+    },
+    {
+      "id": "09-D",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__four",
+      "frame": 120,
+      "glass": 16
+    },
+    {
+      "id": "09-D",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__four",
+      "frame": 132,
+      "glass": 18
+    },
+    {
+      "id": "09-D",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__transom",
+      "frame": 214,
+      "glass": 32
+    },
+    {
+      "id": "09-D",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__transom",
+      "frame": 137,
+      "glass": 17
+    },
+    {
+      "id": "09-D",
+      "layout": "unfolded_meshes",
+      "layer": "small__boxed",
+      "frame": 75,
+      "glass": 11
+    },
+    {
+      "id": "09-D",
+      "layout": "unfolded_meshes",
+      "layer": "small__roof",
+      "frame": 97,
+      "glass": 11
+    },
+    {
+      "id": "09-D",
+      "layout": "unfolded_meshes",
+      "layer": "small__transom",
+      "frame": 176,
+      "glass": 24
+    },
+    {
+      "id": "10-A",
+      "layout": "meshes",
+      "layer": "sash_partial__two",
+      "frame": 256,
+      "glass": 12
+    },
+    {
+      "id": "10-A",
+      "layout": "meshes",
+      "layer": "sash_full__two",
+      "frame": 490,
+      "glass": 30
+    },
+    {
+      "id": "10-A",
+      "layout": "meshes",
+      "layer": "sash_partial__three",
+      "frame": 302,
+      "glass": 18
+    },
+    {
+      "id": "10-A",
+      "layout": "meshes",
+      "layer": "sash_full__three",
+      "frame": 544,
+      "glass": 36
+    },
+    {
+      "id": "10-A",
+      "layout": "meshes",
+      "layer": "sash_partial__four",
+      "frame": 408,
+      "glass": 24
+    },
+    {
+      "id": "10-A",
+      "layout": "meshes",
+      "layer": "sash_full__four",
+      "frame": 630,
+      "glass": 42
+    },
+    {
+      "id": "10-A",
+      "layout": "meshes",
+      "layer": "sash_partial__transom",
+      "frame": 568,
+      "glass": 40
+    },
+    {
+      "id": "10-A",
+      "layout": "meshes",
+      "layer": "sash_full__transom",
+      "frame": 486,
+      "glass": 30
+    },
+    {
+      "id": "10-A",
+      "layout": "meshes",
+      "layer": "small__boxed",
+      "frame": 940,
+      "glass": 24
+    },
+    {
+      "id": "10-A",
+      "layout": "meshes",
+      "layer": "small__roof",
+      "frame": 786,
+      "glass": 24
+    },
+    {
+      "id": "10-A",
+      "layout": "meshes",
+      "layer": "small__transom",
+      "frame": 1054,
+      "glass": 40
+    },
+    {
+      "id": "10-A",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__two",
+      "frame": 92,
+      "glass": 12
+    },
+    {
+      "id": "10-A",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__two",
+      "frame": 86,
+      "glass": 14
+    },
+    {
+      "id": "10-A",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__three",
+      "frame": 97,
+      "glass": 13
+    },
+    {
+      "id": "10-A",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__three",
+      "frame": 106,
+      "glass": 14
+    },
+    {
+      "id": "10-A",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__four",
+      "frame": 123,
+      "glass": 15
+    },
+    {
+      "id": "10-A",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__four",
+      "frame": 130,
+      "glass": 16
+    },
+    {
+      "id": "10-A",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__transom",
+      "frame": 218,
+      "glass": 30
+    },
+    {
+      "id": "10-A",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__transom",
+      "frame": 131,
+      "glass": 15
+    },
+    {
+      "id": "10-A",
+      "layout": "unfolded_meshes",
+      "layer": "small__boxed",
+      "frame": 77,
+      "glass": 13
+    },
+    {
+      "id": "10-A",
+      "layout": "unfolded_meshes",
+      "layer": "small__roof",
+      "frame": 99,
+      "glass": 13
+    },
+    {
+      "id": "10-A",
+      "layout": "unfolded_meshes",
+      "layer": "small__transom",
+      "frame": 174,
+      "glass": 26
+    },
+    {
+      "id": "10-B",
+      "layout": "meshes",
+      "layer": "sash_partial__two",
+      "frame": 234,
+      "glass": 12
+    },
+    {
+      "id": "10-B",
+      "layout": "meshes",
+      "layer": "sash_full__two",
+      "frame": 464,
+      "glass": 30
+    },
+    {
+      "id": "10-B",
+      "layout": "meshes",
+      "layer": "sash_partial__three",
+      "frame": 316,
+      "glass": 18
+    },
+    {
+      "id": "10-B",
+      "layout": "meshes",
+      "layer": "sash_full__three",
+      "frame": 564,
+      "glass": 36
+    },
+    {
+      "id": "10-B",
+      "layout": "meshes",
+      "layer": "sash_partial__four",
+      "frame": 410,
+      "glass": 24
+    },
+    {
+      "id": "10-B",
+      "layout": "meshes",
+      "layer": "sash_full__four",
+      "frame": 602,
+      "glass": 42
+    },
+    {
+      "id": "10-B",
+      "layout": "meshes",
+      "layer": "sash_partial__transom",
+      "frame": 588,
+      "glass": 40
+    },
+    {
+      "id": "10-B",
+      "layout": "meshes",
+      "layer": "sash_full__transom",
+      "frame": 452,
+      "glass": 30
+    },
+    {
+      "id": "10-B",
+      "layout": "meshes",
+      "layer": "small__boxed",
+      "frame": 822,
+      "glass": 24
+    },
+    {
+      "id": "10-B",
+      "layout": "meshes",
+      "layer": "small__roof",
+      "frame": 806,
+      "glass": 24
+    },
+    {
+      "id": "10-B",
+      "layout": "meshes",
+      "layer": "small__transom",
+      "frame": 1038,
+      "glass": 40
+    },
+    {
+      "id": "10-B",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__two",
+      "frame": 92,
+      "glass": 12
+    },
+    {
+      "id": "10-B",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__two",
+      "frame": 86,
+      "glass": 14
+    },
+    {
+      "id": "10-B",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__three",
+      "frame": 97,
+      "glass": 13
+    },
+    {
+      "id": "10-B",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__three",
+      "frame": 106,
+      "glass": 14
+    },
+    {
+      "id": "10-B",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__four",
+      "frame": 123,
+      "glass": 15
+    },
+    {
+      "id": "10-B",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__four",
+      "frame": 130,
+      "glass": 16
+    },
+    {
+      "id": "10-B",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__transom",
+      "frame": 218,
+      "glass": 30
+    },
+    {
+      "id": "10-B",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__transom",
+      "frame": 131,
+      "glass": 15
+    },
+    {
+      "id": "10-B",
+      "layout": "unfolded_meshes",
+      "layer": "small__boxed",
+      "frame": 77,
+      "glass": 13
+    },
+    {
+      "id": "10-B",
+      "layout": "unfolded_meshes",
+      "layer": "small__roof",
+      "frame": 99,
+      "glass": 13
+    },
+    {
+      "id": "10-B",
+      "layout": "unfolded_meshes",
+      "layer": "small__transom",
+      "frame": 174,
+      "glass": 26
+    },
+    {
+      "id": "10-C",
+      "layout": "meshes",
+      "layer": "sash_partial__two",
+      "frame": 286,
+      "glass": 12
+    },
+    {
+      "id": "10-C",
+      "layout": "meshes",
+      "layer": "sash_full__two",
+      "frame": 478,
+      "glass": 30
+    },
+    {
+      "id": "10-C",
+      "layout": "meshes",
+      "layer": "sash_partial__three",
+      "frame": 352,
+      "glass": 18
+    },
+    {
+      "id": "10-C",
+      "layout": "meshes",
+      "layer": "sash_full__three",
+      "frame": 572,
+      "glass": 36
+    },
+    {
+      "id": "10-C",
+      "layout": "meshes",
+      "layer": "sash_partial__four",
+      "frame": 456,
+      "glass": 24
+    },
+    {
+      "id": "10-C",
+      "layout": "meshes",
+      "layer": "sash_full__four",
+      "frame": 686,
+      "glass": 42
+    },
+    {
+      "id": "10-C",
+      "layout": "meshes",
+      "layer": "sash_partial__transom",
+      "frame": 634,
+      "glass": 40
+    },
+    {
+      "id": "10-C",
+      "layout": "meshes",
+      "layer": "sash_full__transom",
+      "frame": 488,
+      "glass": 30
+    },
+    {
+      "id": "10-C",
+      "layout": "meshes",
+      "layer": "small__boxed",
+      "frame": 470,
+      "glass": 12
+    },
+    {
+      "id": "10-C",
+      "layout": "meshes",
+      "layer": "small__roof",
+      "frame": 404,
+      "glass": 12
+    },
+    {
+      "id": "10-C",
+      "layout": "meshes",
+      "layer": "small__transom",
+      "frame": 536,
+      "glass": 20
+    },
+    {
+      "id": "10-C",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__two",
+      "frame": 92,
+      "glass": 12
+    },
+    {
+      "id": "10-C",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__two",
+      "frame": 88,
+      "glass": 12
+    },
+    {
+      "id": "10-C",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__three",
+      "frame": 97,
+      "glass": 13
+    },
+    {
+      "id": "10-C",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__three",
+      "frame": 105,
+      "glass": 15
+    },
+    {
+      "id": "10-C",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__four",
+      "frame": 121,
+      "glass": 15
+    },
+    {
+      "id": "10-C",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__four",
+      "frame": 134,
+      "glass": 16
+    },
+    {
+      "id": "10-C",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__transom",
+      "frame": 214,
+      "glass": 30
+    },
+    {
+      "id": "10-C",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__transom",
+      "frame": 135,
+      "glass": 15
+    },
+    {
+      "id": "10-C",
+      "layout": "unfolded_meshes",
+      "layer": "small__boxed",
+      "frame": 77,
+      "glass": 13
+    },
+    {
+      "id": "10-C",
+      "layout": "unfolded_meshes",
+      "layer": "small__roof",
+      "frame": 99,
+      "glass": 13
+    },
+    {
+      "id": "10-C",
+      "layout": "unfolded_meshes",
+      "layer": "small__transom",
+      "frame": 174,
+      "glass": 26
+    },
+    {
+      "id": "10-D",
+      "layout": "meshes",
+      "layer": "sash_partial__two",
+      "frame": 250,
+      "glass": 12
+    },
+    {
+      "id": "10-D",
+      "layout": "meshes",
+      "layer": "sash_full__two",
+      "frame": 522,
+      "glass": 30
+    },
+    {
+      "id": "10-D",
+      "layout": "meshes",
+      "layer": "sash_partial__three",
+      "frame": 344,
+      "glass": 18
+    },
+    {
+      "id": "10-D",
+      "layout": "meshes",
+      "layer": "sash_full__three",
+      "frame": 598,
+      "glass": 36
+    },
+    {
+      "id": "10-D",
+      "layout": "meshes",
+      "layer": "sash_partial__four",
+      "frame": 428,
+      "glass": 24
+    },
+    {
+      "id": "10-D",
+      "layout": "meshes",
+      "layer": "sash_full__four",
+      "frame": 690,
+      "glass": 42
+    },
+    {
+      "id": "10-D",
+      "layout": "meshes",
+      "layer": "sash_partial__transom",
+      "frame": 646,
+      "glass": 40
+    },
+    {
+      "id": "10-D",
+      "layout": "meshes",
+      "layer": "sash_full__transom",
+      "frame": 544,
+      "glass": 30
+    },
+    {
+      "id": "10-D",
+      "layout": "meshes",
+      "layer": "small__boxed",
+      "frame": 414,
+      "glass": 12
+    },
+    {
+      "id": "10-D",
+      "layout": "meshes",
+      "layer": "small__roof",
+      "frame": 422,
+      "glass": 12
+    },
+    {
+      "id": "10-D",
+      "layout": "meshes",
+      "layer": "small__transom",
+      "frame": 522,
+      "glass": 20
+    },
+    {
+      "id": "10-D",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__two",
+      "frame": 92,
+      "glass": 12
+    },
+    {
+      "id": "10-D",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__two",
+      "frame": 88,
+      "glass": 12
+    },
+    {
+      "id": "10-D",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__three",
+      "frame": 100,
+      "glass": 14
+    },
+    {
+      "id": "10-D",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__three",
+      "frame": 105,
+      "glass": 15
+    },
+    {
+      "id": "10-D",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__four",
+      "frame": 121,
+      "glass": 17
+    },
+    {
+      "id": "10-D",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__four",
+      "frame": 136,
+      "glass": 18
+    },
+    {
+      "id": "10-D",
+      "layout": "unfolded_meshes",
+      "layer": "sash_partial__transom",
+      "frame": 214,
+      "glass": 32
+    },
+    {
+      "id": "10-D",
+      "layout": "unfolded_meshes",
+      "layer": "sash_full__transom",
+      "frame": 137,
+      "glass": 17
+    },
+    {
+      "id": "10-D",
+      "layout": "unfolded_meshes",
+      "layer": "small__boxed",
+      "frame": 75,
+      "glass": 11
+    },
+    {
+      "id": "10-D",
+      "layout": "unfolded_meshes",
+      "layer": "small__roof",
+      "frame": 97,
+      "glass": 11
+    },
+    {
+      "id": "10-D",
+      "layout": "unfolded_meshes",
+      "layer": "small__transom",
+      "frame": 176,
+      "glass": 24
+    }
+  ]
+}

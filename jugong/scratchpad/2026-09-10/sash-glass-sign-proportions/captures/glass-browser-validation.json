@@ -1,0 +1,21 @@
+{
+  "only_optional_sash_transparent": true,
+  "mark_remains_opaque": true,
+  "frame_finishes": [
+    {
+      "finish": "metal",
+      "glass_triangles": 54
+    },
+    {
+      "finish": "light",
+      "glass_triangles": 54
+    },
+    {
+      "finish": "dark",
+      "glass_triangles": 54
+    }
+  ],
+  "small_room_glass": true,
+  "orbit_gl_errors": 0,
+  "material_slots": 4
+}

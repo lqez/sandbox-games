@@ -6,8 +6,8 @@
       147.5,
       1.58
     ],
-    "triangles": 13678,
-    "volume_mm3": 93895.268,
+    "triangles": 14654,
+    "volume_mm3": 93760.036,
     "watertight": true,
     "winding_consistent": true,
     "positive_volume": true,
@@ -66,42 +66,42 @@
     "302": {
       "z_base_mm": 44.0,
       "dimensions_mm": [
-        0.47,
-        15.6,
-        10.0
+        0.08,
+        9.809,
+        9.3
       ],
       "project_glyph": true,
-      "emboss_depth_mm": 0.18
+      "emboss_depth_mm": 0.025
     },
     "324": {
       "z_base_mm": 48.5,
       "dimensions_mm": [
-        0.47,
-        15.6,
-        10.0
+        0.08,
+        10.021,
+        9.3
       ],
       "project_glyph": true,
-      "emboss_depth_mm": 0.18
+      "emboss_depth_mm": 0.025
     },
     "420": {
       "z_base_mm": 25.5,
       "dimensions_mm": [
-        0.47,
-        15.6,
-        10.0
+        0.08,
+        10.021,
+        9.3
       ],
       "project_glyph": true,
-      "emboss_depth_mm": 0.18
+      "emboss_depth_mm": 0.025
     },
     "123-1": {
       "z_base_mm": 48.5,
       "dimensions_mm": [
-        0.47,
-        15.6,
-        10.0
+        0.08,
+        12.5,
+        8.954
       ],
       "project_glyph": true,
-      "emboss_depth_mm": 0.18
+      "emboss_depth_mm": 0.025
     }
   },
   "flat_on_print_bed": true,

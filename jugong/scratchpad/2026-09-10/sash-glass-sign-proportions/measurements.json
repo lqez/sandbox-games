@@ -1,0 +1,30 @@
+{
+  "mark": {
+    "width_mm": 8.599999994039536,
+    "height_mm": 5.799999997019768,
+    "source": "17.51.41-mark.png"
+  },
+  "324": {
+    "width_mm": 8.32099997997284,
+    "height_mm": 5.299999997019768,
+    "source": "17.51.37-number.png"
+  },
+  "comparison": {
+    "previous_mark_mm": [
+      13.2,
+      8.8
+    ],
+    "previous_number_width_mm": 13,
+    "current_frame_outer_mm": [
+      0.26,
+      0.32
+    ],
+    "previous_frame_outer_mm": [
+      0.55,
+      0.75
+    ],
+    "leaf_frame_mm": 0.16,
+    "glass_thickness_mm": 0.12,
+    "paint_depth_mm": 0.025
+  }
+}

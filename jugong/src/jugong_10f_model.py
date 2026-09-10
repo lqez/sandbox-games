@@ -40,6 +40,8 @@ from xml.sax.saxutils import escape, quoteattr
 import numpy as np
 import manifold3d as md
 import trimesh
+from facade_signs import (traced_digit, symbol, SIGN_HEIGHT, SIGN_GAP, SIGN_MAX_WIDTH,
+    SIGN_CENTER_U, SIGN_PAINT_DEPTH, SIGN_MARGIN_X, SIGN_MARGIN_Z, MARK_PANEL)
 from facade_variants import (CATALOG, DEFAULTS, LAYER_NAMES, SASH_PROFILES,
     normalize_seed, resolve_state, selected_layers)
 
@@ -110,7 +112,7 @@ class Solids(list):
 
 def add_material(parts,shape,material):
     if isinstance(parts,Solids):parts.add(shape,material)
-    else:parts.append(shape)
+    else:parts.append(materialized(shape,2) if material=='glass' else shape)
 
 
 def materialized(shape,index):
@@ -131,37 +133,37 @@ class Facade:
         return self.transform(md.Manifold.hull_points(p))
 
 
-def frame(parts,fac,u0,u1,z0,z1,depth,panes=2,outer=.65,inner=.45,glaze=True,ratios=None):
+def frame(parts,fac,u0,u1,z0,z1,depth,panes=2,outer=.30,inner=.16,glaze=True,ratios=None):
     """Outer jamb + separate sliding sash perimeter + inset backing per pane."""
     b=fac.b
     # Main perimeter projects farther than the individual sliding leaves.
     for a,c in ((u0,u0+outer),(u1-outer,u1)):
-        add_material(parts,b(a,c,depth-.95,depth,z0,z1),'metal')
+        add_material(parts,b(a,c,depth-.45,depth,z0,z1),'metal')
     for e,f in ((z0,z0+outer),(z1-outer,z1)):
-        add_material(parts,b(u0,u1,depth-.95,depth,e,f),'metal')
-    left=u0+outer-.12;right=u1-outer+.12
-    bottom=z0+outer-.12;top=z1-outer+.12
+        add_material(parts,b(u0,u1,depth-.45,depth,e,f),'metal')
+    left=u0+outer-.06;right=u1-outer+.06
+    bottom=z0+outer-.06;top=z1-outer+.06
     ratios=ratios or [1]*panes
     breaks=np.concatenate(([0],np.cumsum(ratios)/sum(ratios)))
     for i in range(len(ratios)):
         a=left+breaks[i]*(right-left)-.04;c=left+breaks[i+1]*(right-left)+.04
         # Alternating tracks make the individual overlapping leaves legible.
-        p=depth-.16-(.27 if i%2 else 0)
+        p=depth-.07-(.12 if i%2 else 0)
         for x,y in ((a,a+inner),(c-inner,c)):
-            add_material(parts,b(x,y,p-.65,p,bottom,top),'metal')
+            add_material(parts,b(x,y,p-.28,p,bottom,top),'metal')
         for e,f in ((bottom,bottom+inner),(top-inner,top)):
-            add_material(parts,b(a,c,p-.65,p,e,f),'metal')
+            add_material(parts,b(a,c,p-.28,p,e,f),'metal')
         if glaze:
-            add_material(parts,b(a+.18,c-.18,depth-1.12,depth-.70,bottom+.18,top-.18),'glass')
+            add_material(parts,b(a+inner-.025,c-inner+.025,p-.23,p-.11,bottom+inner-.025,top-inner-.18),'glass')
     # Two narrow, visibly separate bottom tracks.
-    add_material(parts,b(u0,u1,depth-.55,depth+.18,z0-.13,z0+.29),'metal')
+    add_material(parts,b(u0,u1,depth-.40,depth+.07,z0-.08,z0+.16),'metal')
 
 
 def wall_window(parts,cuts,fac,u,w,z,h=7.0,panes=2):
     a=u-w/2;c=u+w/2
     cuts.append(fac.b(a+.50,c-.50,-1.75,.35,z+.48,z+h-.48))
     target=parts.window_details
-    frame(target,fac,a,c,z,z+h,.36,panes=panes,outer=.60,glaze=False)
+    frame(target,fac,a,c,z,z+h,.36,panes=panes,outer=.30,glaze=False)
     target.add(fac.b(a+.44,c-.44,-1.90,-.34,z+.42,z+h-.42),'glass')
 
 
@@ -227,15 +229,15 @@ def balcony(parts,cuts,households,fac,start,line):
         # Enclosure end return: two individual panes across the balcony depth.
         full_frame_count=len(sash_full)
         for d0,d1 in ((.10,3.50),(3.50,7.45)):
-            sash_full.append(fac.b(c-.56,c+.02,d0,d1,z+1.82,z+2.36))
-            sash_full.append(fac.b(c-.56,c+.02,d0,d1,top-1.35,top-.79))
-            for dd in (d0,d1-.5):
-                sash_full.append(fac.b(c-.56,c+.02,dd,dd+.50,z+1.82,top-.79))
+            sash_full.append(fac.b(c-.26,c+.02,d0,d1,z+1.82,z+2.10))
+            sash_full.append(fac.b(c-.26,c+.02,d0,d1,top-1.07,top-.79))
+            for dd in (d0,d1-.24):
+                sash_full.append(fac.b(c-.26,c+.02,dd,dd+.24,z+1.82,top-.79))
         # Glazed return at the 300 mm depth step.
-        sash_full.append(fac.b(split-.34,split+.24,5.65,7.50,z+4.52,z+5.09))
-        sash_full.append(fac.b(split-.34,split+.24,5.65,7.50,top-1.32,top-.77))
-        for dd in (5.65,7.00):
-            sash_full.append(fac.b(split-.34,split+.24,dd,dd+.50,z+4.52,top-.79))
+        sash_full.append(fac.b(split-.16,split+.12,5.65,7.50,z+4.52,z+4.80))
+        sash_full.append(fac.b(split-.16,split+.12,5.65,7.50,top-1.05,top-.77))
+        for dd in (5.65,7.26):
+            sash_full.append(fac.b(split-.16,split+.12,dd,dd+.24,z+4.52,top-.79))
         # Every dwelling gets an addressable empty rack.  ``unit`` adds the
         # outdoor condenser body while retaining this rack underneath it.
         l=b+2.0;r=l+4.6;zz=z+2.25
@@ -256,6 +258,11 @@ def balcony(parts,cuts,households,fac,start,line):
             profile_frame(living,fac,split+.12,c-.12,z+1.82,top-.79,7.49,ratios,thickness,transom)
             profile_frame(bed,fac,b-.06,split+.12,z+4.48,top-.79,6.20,(1,1,1) if variant=='three' else ratios if variant=='four' else (1,1),thickness,False)
             bed.extend(sash_full[full_frame_count:])
+            # Thin return glazing joins the rails; the open top gap vents the
+            # balcony cavity so the fused printable model has no sealed void.
+            for d0,d1 in ((.10,3.50),(3.50,7.45)):
+                add_material(bed,fac.b(c-.20,c-.08,d0+.20,d1-.20,z+2.05,top-1.32),'glass')
+            add_material(bed,fac.b(split-.10,split+.02,5.84,7.30,z+4.75,top-1.30),'glass')
         # Photographed main-wall and corner racks; separate position layers.
         ac_attachment(household,'bedroom',fac,b+4.3,5.85,z+2.2)
         ac_attachment(household,'corner',fac,split+2.6,6.98,z+1.0)
@@ -265,18 +272,18 @@ def balcony(parts,cuts,households,fac,start,line):
 
 
 def profile_frame(parts,fac,a,c,z0,z1,depth,ratios,thickness,transom):
-    frame(parts,fac,a,c,z0,z1,depth,outer=thickness,inner=.45,glaze=False,ratios=ratios)
+    frame(parts,fac,a,c,z0,z1,depth,outer=thickness,inner=.16,glaze=True,ratios=ratios)
     if transom:
-        parts.append(fac.b(a,c,depth-.75,depth+.03,z0+2.5,z0+3.05))
+        parts.append(fac.b(a,c,depth-.43,depth+.02,z0+2.5,z0+2.72))
 
 
 def small_attachments(household,fac,u,z,*,narrow=None,ac=True):
     for variant in ('boxed','roof','transom'):
         target=household[f'small__{variant}'];a=u-4.0;c=u+4.0
-        profile_frame(target,fac,a,c,z+5.10,z+11.55,3.15,(1,1),.60,variant=='transom')
-        for x in (a,c-.55):
-            target.append(fac.b(x,x+.55,-.15,3.2,z+4.2,z+5.70))
-            target.append(fac.b(x,x+.55,-.15,3.2,z+11.0,z+11.55))
+        profile_frame(target,fac,a,c,z+5.10,z+11.55,3.15,(1,1),.28,variant=='transom')
+        for x in (a,c-.28):
+            target.append(fac.b(x,x+.28,-.15,3.2,z+4.95,z+5.40))
+            target.append(fac.b(x,x+.28,-.15,3.2,z+11.25,z+11.55))
         if variant!='boxed':
             target.append(fac.hull([(x,d,h) for x in (a-.4,c+.4) for d,h in
                 ((-.2,z+12.0),(3.75,z+11.6),(3.75,z+12.08),(-.2,z+12.48))]))
@@ -474,45 +481,22 @@ def _stroke_polygon(a,b,width=.18):
     return [(ax+nx,ay+ny),(bx+nx,by+ny),(bx-nx,by-ny),(ax-nx,ay-ny)]
 
 
-def _bezier_points(a,b,c,d,steps=12):
-    return [tuple((1-t)**3*a[j]+3*(1-t)**2*t*b[j]+3*(1-t)*t*t*c[j]+t**3*d[j] for j in (0,1)) for t in np.linspace(0,1,steps+1)]
-
-
-def _numeral_path(char):
-    # Rounded bowls and square-cut terminals traced from the 324 detail crop.
-    curves={
-        '3': [((.17,.77),(.17,1.03),(.78,1.03),(.78,.76)),
-              ((.78,.76),(.78,.60),(.69,.53),(.47,.52)),
-              ((.47,.52),(.72,.52),(.80,.42),(.80,.27)),
-              ((.80,.27),(.80,-.025),(.17,-.025),(.17,.24))],
-        '2': [((.17,.77),(.17,1.035),(.80,1.035),(.80,.77)),
-              ((.80,.77),(.80,.55),(.55,.35),(.20,.07))],
-        '0': [((.48,.95),(.17,.95),(.17,.86),(.17,.50)),
-              ((.17,.50),(.17,.13),(.17,.05),(.48,.05)),
-              ((.48,.05),(.79,.05),(.79,.13),(.79,.50)),
-              ((.79,.50),(.79,.86),(.79,.95),(.48,.95))],
-    }
-    if char not in curves:return None
-    path=[]
-    for points in curves[char]:path.extend(_bezier_points(*points)[1:] if path else _bezier_points(*points))
-    if char=='2':path.append((.82,.07))
-    return path
-
-
 def _glyph_cross_section(text,height):
-    advance=.76;gap=.16;width=max(.01,len(text)*advance+(len(text)-1)*gap)
-    shapes=[]
-    for index,char in enumerate(text):
-        path=_numeral_path(char)
-        strokes=list(zip(path,path[1:])) if path else DONG_GLYPH_STROKES[char]
-        polygons=[]
-        for a,b in strokes:
-            polygons.append([((x+index*(advance+gap))*height,y*height) for x,y in _stroke_polygon(a,b)])
-        shapes.append(md.CrossSection(polygons,md.FillRule.NonZero))
-        # Interior round joins only: the photographed terminals are flat cuts.
-        joints=path[1:-1] if path else [b for a,b in strokes[:-1]]
-        for x,y in joints:shapes.append(md.CrossSection.circle(.09*height,16).translate(((x+index*(advance+gap))*height,y*height)))
-    return md.CrossSection.batch_boolean(shapes,md.OpType.Add),width*height
+    shapes=[];cursor=0.0
+    for char in text:
+        traced=traced_digit(char)
+        if traced:section,width=traced
+        else:
+            strokes=DONG_GLYPH_STROKES[char]
+            section=md.CrossSection([_stroke_polygon(a,b) for a,b in strokes],md.FillRule.NonZero)
+            for a,b in strokes[:-1]:section+=md.CrossSection.circle(.09,16).translate(b)
+            lo_x,lo_y,hi_x,hi_y=section.bounds()
+            width=.28 if char=='1' else .32 if char=='-' else .44
+            section=section.translate((-lo_x,-lo_y)).scale((width/(hi_x-lo_x),1/(hi_y-lo_y)))
+            if char=='-':section=section.scale((1,.14)).translate((0,.43))
+        shapes.append(section.translate((cursor,0)).scale((height,height)))
+        cursor+=width+SIGN_GAP
+    return md.CrossSection.batch_boolean(shapes,md.OpType.Add),(cursor-SIGN_GAP)*height
 
 
 def _extrude_x(section,depth):
@@ -522,16 +506,14 @@ def _extrude_x(section,depth):
 
 
 def jugong_symbol():
-    oval=md.CrossSection.circle(1,64).scale((6.6,4.4))
-    house=md.CrossSection([[(-5.0,.35),(0,3.35),(5.0,.35),(3.05,.35),(3.05,-2.5),
-        (1.05,-2.5),(1.05,1.15),(.45,1.85),(-.45,1.85),(-1.05,1.15),(-1.05,-2.5),(-3.05,-2.5),(-3.05,.35)]],md.FillRule.NonZero)
-    return oval-house
+    return symbol()
 
 
 def jugong_mark(side=1):
-    panel=box(51.35,51.68,-48.8,-33.6,LEVELS[8]+.9,LEVELS[8]+11.6)
-    symbol=_extrude_x(jugong_symbol(),.18).translate((51.64,-41.2,LEVELS[8]+6.25))
-    shapes=[(panel,'metal'),(symbol,'glass')]
+    w,h=MARK_PANEL;z=LEVELS[8]+6.25
+    panel=box(51.48,51.54,SIGN_CENTER_U-w/2,SIGN_CENTER_U+w/2,z-h/2,z+h/2)
+    mark=_extrude_x(jugong_symbol(),SIGN_PAINT_DEPTH).translate((51.535,SIGN_CENTER_U,z))
+    shapes=[(panel,'metal'),(mark,'glass')]
     return shapes if side==1 else [(shape.mirror((1,0,0)),mat) for shape,mat in shapes]
 
 
@@ -554,19 +536,22 @@ def normalize_dong(value, *, allow_empty=True):
     return text
 
 
+def sign_section(text):
+    section,width=_glyph_cross_section(text,SIGN_HEIGHT)
+    if width>SIGN_MAX_WIDTH:
+        scale=SIGN_MAX_WIDTH/width
+        section=section.scale((scale,scale));height=SIGN_HEIGHT*scale;width=SIGN_MAX_WIDTH
+    else:height=SIGN_HEIGHT
+    return section,width,height
+
+
 def dong_label(value):
-    """Create a shallow embossed sign on the photographed blank side wall."""
     text=normalize_dong(value)
     if not text:return None
-    glyph,glyph_width=_glyph_cross_section(text,7.0)
-    if glyph_width>13.0:
-        glyph=glyph.scale((13.0/glyph_width,1));glyph_width=13.0
-    width=glyph_width+2.6;z0=dong_label_position(text);y0=-49.0
-    pieces=[materialized(box(51.35,51.68,y0,y0+width,z0,z0+10.0),1)]
-    # Convert section horizontal coordinate to world Y and vertical to world Z.
-    raised=_extrude_x(glyph,.18).translate((51.64,y0+1.3,z0+.9))
-    pieces.append(materialized(raised,3))
-    return union(pieces).simplify(.0005)
+    glyph,width,height=sign_section(text);z0=dong_label_position(text);y0=SIGN_CENTER_U-width/2
+    plate=materialized(box(51.48,51.54,y0-SIGN_MARGIN_X,y0+width+SIGN_MARGIN_X,z0,z0+height+2*SIGN_MARGIN_Z),1)
+    raised=materialized(_extrude_x(glyph,SIGN_PAINT_DEPTH).translate((51.535,y0,z0+SIGN_MARGIN_Z)),3)
+    return union([plate,raised]).simplify(.0005)
 
 
 def normalize_palette(value=None):
@@ -617,10 +602,14 @@ def configuration_material_shape(base,households,config):
     return _configuration_colored(base,households,config,dong_label)
 
 
+def option_material(shape,finish):
+    return shape.set_properties(1,lambda _p,old:[2.0 if len(old) and old[0]==2 else float(finish)])
+
+
 def _configuration_colored(base,households,config,label_builder):
     config=normalize_configuration(config);parts=[base]
     for key,state in config['households'].items():
-        for name,mat in selected_layers(state):parts.extend(materialized(shape,mat) for shape in households[key][name])
+        for name,mat in selected_layers(state):parts.extend(option_material(shape,mat) for shape in households[key][name])
     label=label_builder(config['dong'])
     if label is not None:parts.append(label)
     return union(parts).simplify(.0005)
@@ -636,9 +625,9 @@ def _strip_layout():
     return result
 
 
-def _frame_relief(parts,x0,x1,y0,y1,z,material='metal',thickness=.42):
-    """Add a nozzle-safe four-sided raised frame to a flat facade panel."""
-    w=max(MIN_FRAME,thickness)
+def _frame_relief(parts,x0,x1,y0,y1,z,material='metal',thickness=.26):
+    """Add a slender four-sided raised frame to a flat facade panel."""
+    w=thickness
     parts.add(box(x0,x1,y0,y0+w,z,z+.42),material)
     parts.add(box(x0,x1,y1-w,y1,z,z+.42),material)
     parts.add(box(x0,x0+w,y0,y1,z,z+.42),material)
@@ -706,8 +695,8 @@ def build_unfolded_layers(*, material=True):
             _frame_relief(parts,cx-5,cx+5,y+4.8,y+10.5,z,'metal')
     for panel in (right,left):
         xx=panel[0]+16;yy=LEVELS[8]-BASE+6.25
-        parts.add(box(xx-7.6,xx+7.6,yy-5.35,yy+5.35,z,PANEL_THICKNESS+.18),'metal')
-        parts.add(md.Manifold.extrude(jugong_symbol(),.18).translate((xx,yy,PANEL_THICKNESS+.14)),'glass')
+        parts.add(box(xx-MARK_PANEL[0]/2,xx+MARK_PANEL[0]/2,yy-MARK_PANEL[1]/2,yy+MARK_PANEL[1]/2,z,PANEL_THICKNESS+.04),'metal')
+        parts.add(md.Manifold.extrude(jugong_symbol(),SIGN_PAINT_DEPTH).translate((xx,yy,PANEL_THICKNESS+.035)),'glass')
     # Raised seam IDs provide subtle assembly keys without a fifth material.
     for index,x in enumerate(seams,1):
         parts.add(box(x-3.0,x+3.0,FACADE_HEIGHT-7.0,FACADE_HEIGHT-1.0,z,PANEL_THICKNESS+.35),'accent')
@@ -739,18 +728,22 @@ def _unfolded_option_geometry(target,x0,x1,y,z):
     target['ac_unit'].append(box(x0+5.4,x0+10.6,y+3.0,y+6.0,z,PANEL_THICKNESS+1.15))
     for variant,(ratios,thickness,transom) in SASH_PROFILES.items():
         for name,a,c,bottom in (('sash_partial',mid,x1-8.5,2.1),('sash_full',x0+2,mid,4.0)):
-            out=target[f'{name}__{variant}'];out.extend(target[name])
+            out=target[f'{name}__{variant}']
+            for yy in (y+bottom,y+11.75-thickness):out.append(box(a,c,yy,yy+thickness,z,PANEL_THICKNESS+.55))
+            for xx in (a,c-thickness):out.append(box(xx,xx+thickness,y+bottom,y+11.75,z,PANEL_THICKNESS+.55))
+            add_material(out,box(a+thickness-.02,c-thickness+.02,y+bottom+thickness-.02,y+11.75-thickness+.02,z,PANEL_THICKNESS+.43),'glass')
             breaks=np.cumsum(ratios)/sum(ratios)
             for t in breaks[:-1]:
-                xx=a+(c-a)*t;out.append(box(xx-thickness/2,xx+thickness/2,y+bottom,y+11.75,z,PANEL_THICKNESS+.55))
-            if transom and name=='sash_partial':out.append(box(a,c,y+4.6,y+5.15,z,PANEL_THICKNESS+.56))
+                xx=a+(c-a)*t;out.append(box(xx-.08,xx+.08,y+bottom,y+11.75,z,PANEL_THICKNESS+.55))
+            if transom and name=='sash_partial':out.append(box(a,c,y+4.6,y+4.82,z,PANEL_THICKNESS+.56))
     sx=x1-6.5
     for variant in ('boxed','roof','transom'):
         out=target[f'small__{variant}']
-        for xx in (sx,sx+2.5,sx+5):out.append(box(xx,xx+.45,y+5.1,y+11.55,z,PANEL_THICKNESS+.65))
-        for yy in (5.1,11.1):out.append(box(sx,sx+5.45,y+yy,y+yy+.45,z,PANEL_THICKNESS+.65))
+        add_material(out,box(sx+.20,sx+5.25,y+5.30,y+11.35,z,PANEL_THICKNESS+.53),'glass')
+        for xx in (sx,sx+2.5,sx+5.2):out.append(box(xx,xx+.25,y+5.1,y+11.55,z,PANEL_THICKNESS+.65))
+        for yy in (5.1,11.3):out.append(box(sx,sx+5.45,y+yy,y+yy+.25,z,PANEL_THICKNESS+.65))
         if variant!='boxed':out.append(box(sx-.3,sx+5.8,y+11.47,y+12.15,z,PANEL_THICKNESS+.90))
-        if variant=='transom':out.append(box(sx,sx+5.45,y+7.5,y+8,z,PANEL_THICKNESS+.70))
+        if variant=='transom':out.append(box(sx,sx+5.45,y+7.5,y+7.72,z,PANEL_THICKNESS+.70))
     for position,dx,dy in (('bedroom',0,0),('corner',mid-x0-3,-1.2),('small_rail',sx-x0-6,2),('small_wall',sx-x0-12,-.8),('small_top',sx-x0-6,7.5)):
         for name in ('ac_bracket','ac_unit'):
             target[f'{name}__{position}']=[shape.translate((dx,dy,0)) for shape in target[name]]
@@ -760,12 +753,10 @@ def _unfolded_option_geometry(target,x0,x1,y,z):
 def unfolded_dong_label(value):
     text=normalize_dong(value)
     if not text:return None
-    section,glyph_width=_glyph_cross_section(text,7.0)
-    if glyph_width>13.0:
-        section=section.scale((13.0/glyph_width,1));glyph_width=13.0
-    right=_strip_layout()['right'];x0=right[0]+8.0;y0=dong_label_position(text)-BASE
-    plate=materialized(box(x0,x0+glyph_width+2.6,y0,y0+10.0,PANEL_THICKNESS-.08,PANEL_THICKNESS+.18),1)
-    glyph=materialized(md.Manifold.extrude(section,.18).translate((x0+1.3,y0+.9,PANEL_THICKNESS+.14)),3)
+    section,width,height=sign_section(text)
+    center=_strip_layout()['right'][0]+16;x0=center-width/2;y0=dong_label_position(text)-BASE
+    plate=materialized(box(x0-SIGN_MARGIN_X,x0+width+SIGN_MARGIN_X,y0,y0+height+2*SIGN_MARGIN_Z,PANEL_THICKNESS-.02,PANEL_THICKNESS+.04),1)
+    glyph=materialized(md.Manifold.extrude(section,SIGN_PAINT_DEPTH).translate((x0,y0+SIGN_MARGIN_Z,PANEL_THICKNESS+.035)),3)
     return union([plate,glyph]).simplify(.0005)
 
 
@@ -809,11 +800,11 @@ def export_display_layers(base,households,root):
         item['unfolded_meshes']={}
         for name in LAYER_NAMES:
             path=root/f'{key}_{name}.stl'
-            to_trimesh(union(source[name]).simplify(.0005)).export(path,file_type='stl')
+            export_material_stl(union([option_material(shape,0) for shape in source[name]]).simplify(.0005),path)
             item['meshes'][name]=dict(file=path.name,solid_count=len(source[name]))
             unfolded_source=unfolded_households[key][name]
             unfolded_path=root/f'{key}_unfolded_{name}.stl'
-            to_trimesh(union(unfolded_source).simplify(.0005)).export(unfolded_path,file_type='stl')
+            export_material_stl(union([option_material(shape,0) for shape in unfolded_source]).simplify(.0005),unfolded_path)
             item['unfolded_meshes'][name]=dict(file=unfolded_path.name,solid_count=len(unfolded_source))
         manifest['households'].append(item)
     (root/'manifest.json').write_text(json.dumps(manifest,ensure_ascii=False,indent=2),encoding='utf-8')

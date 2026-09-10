@@ -50,3 +50,7 @@
 최신 사용자 사진 5장과 확대 관찰표를 기반으로 상층 주공 마크, 저층 동 번호, 대창 네 유형, 작은방 섀시 세 유형, 실외기 다섯 위치를 추가했다. `src/facade_variants.py`의 가중치·필드 규약을 뷰어에 함께 내장하며 seed/필드별 직접 지정 우선순위를 JSON·URL·완성/전개 3MF·STL에서 공유한다. 303·304동을 사진 확인 후보에 추가했다. 원래 4색 슬롯과 처음 전체 부착물 없음은 유지한다.
 
 최신 관찰·구현·검증·배포 보고서는 `scratchpad/2026-09-10/facade-mark-window-ac-variants/REPORT.md`다. 확대 분석·브라우저 캡처·재현성 및 조합 검증 도구는 `tools/inspect_facade_photos.py`, `tools/capture_facade_browser.py`, `tools/verify_facade_browser.py`, `tools/verify_facade_variants.py`다. 사진에서 정확한 실측 깊이·방위·가림 뒤 상태는 확정하지 않는다.
+
+## 2026-09-10 추가 보정
+
+사용자가 섀시 두께·유리 부재·마크와 숫자 폭을 다시 지적하여, 얇은 창틀과 슬롯 2 유리판, 외곽선을 다시 만든 숫자 및 축소한 마크를 구현했다. 표식의 공유 치수·윤곽은 `src/facade_signs.py`에 있다. 뷰어의 유리 패스는 선택형 섀시에만 적용하며 기본형의 파란 마크는 불투명하다. 최신 검토 기록은 `scratchpad/2026-09-10/sash-glass-sign-proportions/REPORT.md`다.

@@ -6,10 +6,10 @@
       132.0,
       174.2
     ],
-    "triangles": 84400,
+    "triangles": 104444,
     "watertight": true,
     "connected_bodies": 1,
-    "file_bytes": 4220084,
+    "file_bytes": 5222284,
     "external_sashes": false,
     "ac_brackets": false,
     "compatibility": "all 40 households: full sash / empty rack"
@@ -21,10 +21,10 @@
       132.0,
       174.2
     ],
-    "triangles": 127202,
+    "triangles": 158738,
     "watertight": true,
     "connected_bodies": 1,
-    "file_bytes": 6360184,
+    "file_bytes": 7936984,
     "external_sashes": true,
     "ac_brackets": false,
     "compatibility": "all 40 households: full sash / empty rack"
@@ -36,10 +36,10 @@
       132.0,
       174.2
     ],
-    "triangles": 91036,
+    "triangles": 111080,
     "watertight": true,
     "connected_bodies": 1,
-    "file_bytes": 4551884,
+    "file_bytes": 5554084,
     "external_sashes": false,
     "ac_brackets": true,
     "compatibility": "all 40 households: full sash / empty rack"
@@ -51,10 +51,10 @@
       132.0,
       174.2
     ],
-    "triangles": 134754,
+    "triangles": 164728,
     "watertight": true,
     "connected_bodies": 1,
-    "file_bytes": 6737784,
+    "file_bytes": 8236484,
     "external_sashes": true,
     "ac_brackets": true,
     "compatibility": "all 40 households: full sash / empty rack"
@@ -62,27 +62,27 @@
   {
     "four_color_viewer_mesh": {
       "file": "base_material.stl",
-      "triangles": 84400,
+      "triangles": 104452,
       "materials": {
-        "concrete": 20090,
-        "metal": 62191,
-        "glass": 1625,
-        "accent": 494
+        "concrete": 28263,
+        "metal": 74490,
+        "glass": 1182,
+        "accent": 517
       }
     },
     "four_color_3mf": {
       "file": "jugong_10f_four_color.3mf",
       "unit": "millimeter",
       "objects": 1,
-      "triangles": 84400,
+      "triangles": 104452,
       "material_slots": 4,
       "material_triangles": {
-        "concrete": 20090,
-        "metal": 62191,
-        "glass": 1625,
-        "accent": 494
+        "concrete": 28263,
+        "metal": 74490,
+        "glass": 1182,
+        "accent": 517
       },
-      "file_bytes": 855512
+      "file_bytes": 1071781
     }
   }
 ]
