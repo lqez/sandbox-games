@@ -73,7 +73,11 @@
 
 ## 커밋·배포
 
-검증된 변경을 main에 선별 커밋하고 force 없이 origin/main에 push한다. 실제 커밋과 Pages 결과는 배포 확인 후 아래에 기록한다.
+구현·검증 커밋 `61d5ea8d2a5db5d2b0fa52a01c628b61d26bfecb`를 `origin/main`에 force 없이 push했다. Pages가 `2026-09-10T11:15:52Z`에 해당 커밋을 `built`로 보고했으며, 공개 HTML 응답 200·6,684,947 bytes·SHA256 `914f2eef4c28e956cfa9f7793f9396ba3fcf097b49e1d7be138bd8da68226415`가 로컬과 일치했다. [배포 기록](deployment.json)과 [배포 페이지의 유리 검사](deployed-captures/glass-browser-validation.json)를 보존했다.
+
+공개 뷰어: https://lqez.github.io/sandbox-games/jugong/dist/dunchon_jugong_viewer.html
+
+배포 확인 기록만 별도 후속 커밋으로 push한다. 해당 커밋은 모델·뷰어 바이트를 바꾸지 않는다.
 
 ## 남은 한계
 
