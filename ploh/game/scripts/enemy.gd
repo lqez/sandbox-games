@@ -1,23 +1,26 @@
 extends CharacterBody3D
-## 적. 다가와서 공격을 예고(바닥의 붉은 원)한 뒤 내려친다.
+## 적(KayKit 스켈레톤). 바닥에서 깨어난 뒤 다가와 공격을 예고(바닥의 붉은 원)하고 내려친다.
 ## 예고가 끝나기 직전에 맞으면 카운터로 경직된다.
 
 const Fx := preload("res://scripts/fx.gd")
+const SK := "res://assets/kaykit/skeletons/%s.glb"
+const WEAPON := "res://assets/kaykit/skeletons/weapons/%s.gltf"
 
 const KINDS := {
-	"grunt": {"hp": 150.0, "atk": 9.0, "speed": 3.4, "reach": 1.7, "wind": 0.75, "area": 1.4, "scale": 1.0, "radius": 0.5, "poise": 1.0},
-	"brute": {"hp": 560.0, "atk": 20.0, "speed": 2.4, "reach": 2.4, "wind": 1.05, "area": 2.6, "scale": 1.5, "radius": 0.8, "poise": 0.4},
-	"boss": {"hp": 4200.0, "atk": 26.0, "speed": 2.7, "reach": 3.0, "wind": 1.1, "area": 3.2, "scale": 2.3, "radius": 1.2, "poise": 0.1},
+	"minion": {"model": "Skeleton_Minion", "weapon": "Skeleton_Blade", "hp": 140.0, "atk": 9.0, "speed": 3.6, "reach": 1.7, "wind": 0.75, "area": 1.4, "scale": 1.0, "radius": 0.5, "poise": 1.0},
+	"rogue": {"model": "Skeleton_Rogue", "weapon": "Skeleton_Blade", "hp": 110.0, "atk": 11.0, "speed": 4.8, "reach": 1.6, "wind": 0.6, "area": 1.3, "scale": 1.0, "radius": 0.45, "poise": 1.0},
+	"warrior": {"model": "Skeleton_Warrior", "weapon": "Skeleton_Axe", "hp": 520.0, "atk": 20.0, "speed": 2.6, "reach": 2.3, "wind": 1.0, "area": 2.4, "scale": 1.3, "radius": 0.7, "poise": 0.4},
+	"boss": {"model": "Skeleton_Warrior", "weapon": "Skeleton_Axe", "hp": 4200.0, "atk": 26.0, "speed": 2.8, "reach": 3.0, "wind": 1.1, "area": 3.2, "scale": 2.2, "radius": 1.1, "poise": 0.1},
 }
 const COUNTER_WINDOW := 0.35
 
 var game: Node
-var kind := "grunt"
+var kind := "minion"
 var stats: Dictionary
 var max_hp := 0.0
 var hp := 0.0
 var radius := 0.5
-var state := "chase"      # chase, wind, recover, stagger, dead
+var state := "spawn"      # spawn, chase, wind, recover, stagger, dead
 var t := 0.0
 var wind_time := 0.0
 var strike_area := 1.4
@@ -26,9 +29,10 @@ var attacks := 0
 var knock := Vector3.ZERO
 var flash := 0.0
 var face := Vector3(0, 0, 1)
-var walk_t := 0.0
 var model: Node3D
+var anim: AnimationPlayer
 var telegraph: MeshInstance3D
+var _current := ""
 var _overlay: StandardMaterial3D
 var _flashing := false
 
@@ -48,11 +52,39 @@ func setup(g: Node, k: String) -> void:
 	shape.shape = cap
 	shape.position.y = stats.scale
 	add_child(shape)
-	model = Fx.build_enemy(k)
+	model = load(SK % stats.model).instantiate()
 	model.scale = Vector3.ONE * stats.scale
 	add_child(model)
-	add_child(Fx.disc(radius * 1.2, Color(0, 0, 0, 0.35)))
+	var skel: Skeleton3D = model.find_children("*", "Skeleton3D", true, false)[0]
+	var slot := BoneAttachment3D.new()
+	slot.bone_name = "handslot.r"
+	skel.add_child(slot)
+	slot.add_child(load(WEAPON % stats.weapon).instantiate())
+	if kind == "boss":
+		# 보스는 붉은 기운을 덧씌운다
+		var aura := Fx.mat(Color(1.0, 0.25, 0.3, 0.18), 1.5, true)
+		aura.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+		for mi in model.find_children("*", "MeshInstance3D", true, false):
+			mi.material_overlay = aura
+	anim = model.find_children("*", "AnimationPlayer", true, false)[0]
+	for loop_name in ["Idle_Combat", "Running_A", "Walking_D_Skeletons"]:
+		if anim.has_animation(loop_name):
+			anim.get_animation(loop_name).loop_mode = Animation.LOOP_LINEAR
+	add_child(Fx.disc(radius * 1.3, Color(0, 0, 0, 0.4)))
 	_overlay = Fx.mat(Color(1, 1, 1, 0.8), 0.0, true)
+	_play("Skeletons_Awaken_Floor", 1.6)
+	t = -randf() * 0.4
+
+
+func _play(name: String, speed := 1.0, blend := 0.1, restart := false) -> void:
+	if not anim.has_animation(name):
+		return
+	if name == _current and not restart:
+		anim.speed_scale = speed
+		return
+	_current = name
+	anim.play(name, blend)
+	anim.speed_scale = speed
 
 
 func _physics_process(delta: float) -> void:
@@ -67,6 +99,9 @@ func _physics_process(delta: float) -> void:
 	velocity = knock
 	knock = knock.move_toward(Vector3.ZERO, delta * 30.0)
 	match state:
+		"spawn":
+			if t >= 1.1:
+				state = "chase"
 		"chase":
 			if dist > 0.01:
 				face = to.normalized()
@@ -74,6 +109,9 @@ func _physics_process(delta: float) -> void:
 				_start_wind(hero)
 			elif hero.state != "dead":
 				velocity += face * stats.speed + _separation()
+				_play("Running_A" if stats.speed > 3.0 else "Walking_D_Skeletons", stats.speed / 3.5)
+			else:
+				_play("Idle_Combat")
 		"wind":
 			_update_telegraph()
 			if t >= wind_time:
@@ -86,7 +124,13 @@ func _physics_process(delta: float) -> void:
 				state = "chase"
 	move_and_slide()
 	position.y = 0.0
-	_animate(delta)
+	if face.length() > 0.01 and state != "spawn":
+		model.rotation.y = lerp_angle(model.rotation.y, atan2(face.x, face.z), minf(delta * 10.0, 1.0))
+	var want := flash > 0.0
+	if want != _flashing and kind != "boss":
+		_flashing = want
+		for mi in model.find_children("*", "MeshInstance3D", true, false):
+			mi.material_overlay = _overlay if want else null
 
 
 func _separation() -> Vector3:
@@ -109,18 +153,25 @@ func _start_wind(hero: Node3D) -> void:
 	attacks += 1
 	wind_time = stats.wind
 	strike_area = stats.area
+	var anim_name := "1H_Melee_Attack_Chop"
 	# 보스는 세 번째마다 넓은 내려찍기
 	if kind == "boss" and attacks % 3 == 0:
 		wind_time = 1.6
 		strike_area = 5.5
 		strike_at = global_position
-	elif kind == "grunt":
+		anim_name = "2H_Melee_Attack_Spin"
+	elif kind in ["minion", "rogue"]:
 		strike_at = global_position + face * (stats.reach * 0.6)
+		anim_name = "1H_Melee_Attack_Slice_Diagonal" if kind == "rogue" else "1H_Melee_Attack_Chop"
 	else:
 		strike_at = hero.global_position
+		anim_name = "2H_Melee_Attack_Chop"
+	# 내려치는 순간(애니메이션의 약 45%)이 예고 끝과 맞도록 속도를 맞춘다
+	if anim.has_animation(anim_name):
+		_play(anim_name, anim.get_animation(anim_name).length * 0.45 / wind_time, 0.1, true)
 	telegraph = Fx.disc(strike_area, Color(1, 0.15, 0.15, 0.15))
 	game.add_child(telegraph)
-	telegraph.global_position = Vector3(strike_at.x, 0.04, strike_at.z)
+	telegraph.global_position = Vector3(strike_at.x, 0.06, strike_at.z)
 
 
 func _update_telegraph() -> void:
@@ -130,7 +181,7 @@ func _update_telegraph() -> void:
 	telegraph.scale = Vector3(k, 1, k)
 	var m: StandardMaterial3D = telegraph.material_override
 	var late := wind_time - t <= COUNTER_WINDOW
-	m.albedo_color = Color(1, 0.85, 0.3, 0.45) if late else Color(1, 0.15, 0.15, 0.15 + 0.3 * k)
+	m.albedo_color = Color(1, 0.85, 0.3, 0.5) if late else Color(1, 0.15, 0.15, 0.15 + 0.3 * k)
 
 
 func _clear_telegraph() -> void:
@@ -143,6 +194,7 @@ func _strike() -> void:
 	_clear_telegraph()
 	state = "recover"
 	t = 0.0
+	anim.speed_scale = 1.0
 	game.enemy_strike(self, strike_at, strike_area, stats.atk * (1.8 if strike_area > 4.0 else 1.0))
 
 
@@ -157,13 +209,14 @@ func take_hit(dmg: float, dir: Vector3, power: float) -> String:
 		_clear_telegraph()
 		state = "stagger"
 		t = 0.0
+		_play("Hit_B", 1.0, 0.05, true)
 	hp = maxf(hp - dmg, 0.0)
 	flash = 0.1
 	knock = dir * power * stats.poise
-	if state == "chase" or state == "recover":
-		if stats.poise >= 1.0:
-			state = "stagger"
-			t = 0.75
+	if state in ["chase", "recover", "spawn"] and stats.poise >= 1.0:
+		state = "stagger"
+		t = 0.7
+		_play("Hit_A", 1.4, 0.05, true)
 	if hp <= 0.0:
 		_die(dir)
 		return "dead"
@@ -175,37 +228,9 @@ func _die(dir: Vector3) -> void:
 	_clear_telegraph()
 	collision_layer = 0
 	collision_mask = 0
+	_play("Death_C_Skeletons" if anim.has_animation("Death_C_Skeletons") else "Death_A", 1.2, 0.05, true)
 	var tw := create_tween()
-	tw.tween_property(model, "rotation:x", -PI / 2, 0.25)
-	tw.parallel().tween_property(self, "position", position + dir * 1.5, 0.25)
-	tw.tween_property(model, "scale", Vector3.ONE * 0.01, 0.35)
+	tw.tween_property(self, "position", position + dir * 1.2, 0.25)
+	tw.tween_interval(1.2)
+	tw.tween_property(model, "position:y", -1.5, 0.6)
 	tw.tween_callback(queue_free)
-
-
-func _animate(delta: float) -> void:
-	if face.length() > 0.01:
-		model.rotation.y = lerp_angle(model.rotation.y, atan2(-face.x, -face.z), minf(delta * 10.0, 1.0))
-	var speed := Vector2(velocity.x, velocity.z).length()
-	walk_t += delta * speed * 1.6
-	var swing := sin(walk_t) * minf(speed / 3.0, 1.0) * 0.6
-	(model.get_node("legL") as Node3D).rotation.x = swing
-	(model.get_node("legR") as Node3D).rotation.x = -swing
-	var pivot: Node3D = model.get_node("pivot")
-	match state:
-		"wind":
-			pivot.rotation.x = lerpf(pivot.rotation.x, 2.2, minf(delta * 8.0, 1.0))
-			model.position.y = 0.0
-		"recover":
-			pivot.rotation.x = lerpf(pivot.rotation.x, -1.0, minf(delta * 30.0, 1.0))
-		"stagger":
-			model.rotation.x = -0.25
-			pivot.rotation.x = lerpf(pivot.rotation.x, 0.0, minf(delta * 6.0, 1.0))
-		_:
-			pivot.rotation.x = lerpf(pivot.rotation.x, 0.0, minf(delta * 6.0, 1.0))
-	if state != "stagger":
-		model.rotation.x = 0.0
-	var want := flash > 0.0
-	if want != _flashing:
-		_flashing = want
-		for mi in model.find_children("*", "MeshInstance3D", true, false):
-			mi.material_overlay = _overlay if want else null

@@ -1,21 +1,36 @@
 extends Node3D
 ## 아이소메트릭 액션 전투 시제품의 진행.
 ##
-## 전장과 카메라를 만들고, 파티 교대와 웨이브, 피해 처리, 타격 연출을 맡는다.
+## 미로(방 다섯 개)를 만들고, 영웅이 방을 차례로 지나며 싸우게 한다.
+## 카메라, 파티 교대, 방 진입과 정리, 피해 처리, 타격 연출을 맡는다.
 ## 입력은 hud.gd가 제스처로 해석해 넘긴다.
 
 const Fx := preload("res://scripts/fx.gd")
 const Hero := preload("res://scripts/hero.gd")
 const Enemy := preload("res://scripts/enemy.gd")
 const Hud := preload("res://scripts/hud.gd")
+const Dungeon := preload("res://scripts/dungeon.gd")
 
-const ARENA := 15.0          # 전장 반지름(m)
+const KAYKIT := "res://assets/kaykit/heroes/%s.glb"
 const CAM_YAW := 45.0        # 디아블로식 고정 방향
 const CAM_PITCH := 38.0      # 디아블로(약 55도)보다 낮춰 캐릭터를 크게 본다
-const WAVES := [
-	{"grunt": 5},
-	{"grunt": 6, "brute": 2},
-	{"grunt": 4, "boss": 1},
+## 영웅 정의. 모델은 CC0 KayKit 모험가. 원작 모델이 준비되면 model과 anims만 바꾼다
+const HEROES := [
+	{"name": "검기사", "model": "Knight", "color": Color(0.55, 0.7, 1.0), "max_hp": 460.0, "atk": 34.0, "speed": 6.0, "reach": 2.3, "guard": 0.85, "ranged": false,
+		"weapons": ["1H_Sword", "Badge_Shield"], "weapon_pool": ["1H_Sword_Offhand", "Badge_Shield", "Rectangle_Shield", "Round_Shield", "Spike_Shield", "1H_Sword", "2H_Sword"],
+		"skill_name": "돌진 찌르기", "skill": "dash",
+		"anims": {"idle": "Idle", "run": "Running_A", "combo": ["1H_Melee_Attack_Slice_Diagonal", "1H_Melee_Attack_Slice_Horizontal", "1H_Melee_Attack_Stab", "1H_Melee_Attack_Chop"],
+			"spin": "2H_Melee_Attack_Spin", "dodge": "Dodge_Forward", "hit": "Hit_A", "death": "Death_A", "charge": "Blocking", "skill": "1H_Melee_Attack_Stab", "ult": "2H_Melee_Attack_Spinning"}},
+	{"name": "도끼전사", "model": "Barbarian", "color": Color(1.0, 0.55, 0.3), "max_hp": 600.0, "atk": 40.0, "speed": 5.4, "reach": 2.6, "guard": 0.6, "ranged": false,
+		"weapons": ["2H_Axe"], "weapon_pool": ["1H_Axe_Offhand", "Barbarian_Round_Shield", "1H_Axe", "2H_Axe", "Mug"],
+		"skill_name": "대지 가르기", "skill": "wave",
+		"anims": {"idle": "2H_Melee_Idle", "run": "Running_A", "combo": ["2H_Melee_Attack_Slice", "2H_Melee_Attack_Chop", "2H_Melee_Attack_Stab", "2H_Melee_Attack_Spin"],
+			"spin": "2H_Melee_Attack_Spinning", "dodge": "Dodge_Forward", "hit": "Hit_A", "death": "Death_A", "charge": "2H_Melee_Idle", "skill": "2H_Melee_Attack_Chop", "ult": "2H_Melee_Attack_Spinning"}},
+	{"name": "마법사", "model": "Mage", "color": Color(0.6, 0.85, 1.0), "max_hp": 340.0, "atk": 32.0, "speed": 5.8, "reach": 2.0, "guard": 1.0, "ranged": true,
+		"weapons": ["2H_Staff"], "weapon_pool": ["Spellbook", "Spellbook_open", "1H_Wand", "2H_Staff"],
+		"skill_name": "얼음 창", "skill": "beam",
+		"anims": {"idle": "Idle", "run": "Running_A", "combo": ["Spellcast_Shoot", "Spellcast_Shoot", "Spellcast_Shoot", "Spellcast_Long"],
+			"spin": "Spellcast_Raise", "dodge": "Dodge_Forward", "hit": "Hit_A", "death": "Death_A", "charge": "Spellcasting", "skill": "Spellcast_Shoot", "ult": "Spellcast_Summon"}},
 ]
 
 var party: Array = []        # 영웅 데이터. 전장에는 active 한 명만 나와 있다
@@ -23,7 +38,10 @@ var active := 0
 var player: CharacterBody3D
 var enemies: Array = []
 var orbs: Array = []
-var wave := -1
+var dungeon: Dungeon
+var world: Node3D
+var room := -1               # 지금 싸우는 방
+var route_i := 0             # 자동 이동 경로에서 다음으로 갈 지점
 var state := "play"          # play, clear, dead
 var auto_mode := false
 var elapsed := 0.0
@@ -44,7 +62,7 @@ var _slow_scale := 1.0
 
 func _ready() -> void:
 	randomize()
-	_build_world()
+	_build_env()
 	camera = Camera3D.new()
 	camera.fov = 42.0
 	add_child(camera)
@@ -80,17 +98,25 @@ func reset() -> void:
 	orbs.clear()
 	if player != null:
 		player.queue_free()
-	party = [
-		{"name": "창기사", "kind": "spear", "color": Color(0.9, 0.42, 0.28), "max_hp": 420.0, "atk": 34.0, "speed": 6.2, "reach": 2.6, "guard": 1.0},
-		{"name": "수호기사", "kind": "sword", "color": Color(0.5, 0.72, 0.36), "max_hp": 620.0, "atk": 28.0, "speed": 5.4, "reach": 2.1, "guard": 0.55},
-		{"name": "물의 무녀", "kind": "staff", "color": Color(0.35, 0.6, 0.95), "max_hp": 330.0, "atk": 30.0, "speed": 6.0, "reach": 2.0, "guard": 1.0},
-	]
-	for h in party:
-		h.hp = h.max_hp
-		h.ult = 0.0
+	if world != null:
+		world.queue_free()
+	world = Node3D.new()
+	add_child(world)
+	var rng := RandomNumberGenerator.new()
+	rng.randomize()
+	dungeon = Dungeon.new()
+	dungeon.build(world, rng)
+	party = []
+	for h in HEROES:
+		var d: Dictionary = h.duplicate(true)
+		d.model = KAYKIT % h.model
+		d.hp = d.max_hp
+		d.ult = 0.0
+		party.append(d)
 	active = 0
-	_spawn_player(Vector3(0, 0, 6))
-	wave = -1
+	_spawn_player(dungeon.rooms[0].center + Vector3(0, 0, 3.0))
+	room = -1
+	route_i = 0
 	state = "play"
 	elapsed = 0.0
 	combo = 0
@@ -99,7 +125,7 @@ func reset() -> void:
 	swap_cd = 0.0
 	boss = null
 	Engine.time_scale = 1.0
-	_next_wave()
+	hud.banner("균열의 지하 미궁")
 
 
 func _spawn_player(pos: Vector3) -> void:
@@ -109,27 +135,52 @@ func _spawn_player(pos: Vector3) -> void:
 	player.global_position = pos
 
 
-func _next_wave() -> void:
-	wave += 1
-	if wave >= WAVES.size():
-		state = "clear"
-		return
-	var spec: Dictionary = WAVES[wave]
+func _enter_room(i: int) -> void:
+	## 방에 들어서면 바닥에서 적이 깨어난다
+	room = i
+	var r: Dictionary = dungeon.rooms[i]
+	r.active = true
 	var n := 0
-	for kind in spec:
-		for i in spec[kind]:
+	for kind in r.spawn:
+		for k in r.spawn[kind]:
 			var e := Enemy.new()
 			e.setup(self, kind)
-			add_child(e)
-			var a := TAU * (n * 0.37 + randf() * 0.2)
-			var r := 0.0 if kind == "boss" else ARENA * randf_range(0.55, 0.85)
-			var center := Vector3(0, 0, -6) if kind == "boss" else Vector3.ZERO
-			e.global_position = center + Vector3(cos(a) * r, 0, sin(a) * r)
+			world.add_child(e)
+			var a := TAU * (n * 0.37 + randf() * 0.15)
+			var dist := 0.0 if kind == "boss" else randf_range(2.5, 4.5)
+			var pos: Vector3 = r.center + Vector3(cos(a) * dist, 0, sin(a) * dist)
+			if kind == "boss":
+				pos = r.center + Vector3(0, 0, -2.5)
+			e.global_position = pos
 			enemies.append(e)
 			if kind == "boss":
 				boss = e
 			n += 1
-	hud.banner("웨이브 %d / %d" % [wave + 1, WAVES.size()] if wave < WAVES.size() - 1 else "보스 · 균열의 군주")
+	var last := i == dungeon.rooms.size() - 1
+	hud.banner("보스 · 균열의 군주" if last else "방 %d / %d" % [i + 1, dungeon.rooms.size()])
+
+
+func _update_rooms() -> void:
+	if room >= 0 and not dungeon.rooms[room].cleared and enemies.is_empty():
+		dungeon.rooms[room].cleared = true
+		if room == dungeon.rooms.size() - 1:
+			state = "clear"
+			return
+		hud.banner("방 정리 · 다음 방으로")
+	var here: int = dungeon.room_at(player.global_position)
+	if here >= 0 and not dungeon.rooms[here].active and (room < 0 or dungeon.rooms[room].cleared):
+		_enter_room(here)
+
+
+## 자동 이동이 향할 다음 지점. 지금 방을 정리하기 전에는 방 중앙을 넘지 않는다
+func next_waypoint(from: Vector3) -> Vector3:
+	var route: Array = dungeon.route
+	while route_i < route.size() - 1 and Vector2(from.x - route[route_i].x, from.z - route[route_i].z).length() < 1.2:
+		var r: int = dungeon.room_at(route[route_i])
+		if r >= 0 and not dungeon.rooms[r].cleared:
+			break
+		route_i += 1
+	return route[route_i]
 
 
 func _process(delta: float) -> void:
@@ -149,8 +200,7 @@ func _process(delta: float) -> void:
 				party[i].hp = minf(party[i].hp + party[i].max_hp * 0.02 * delta, party[i].max_hp)
 		_update_orbs(delta)
 		enemies = enemies.filter(func(e): return is_instance_valid(e) and e.state != "dead")
-		if enemies.is_empty():
-			_next_wave()
+		_update_rooms()
 	_update_camera(delta)
 
 
@@ -162,7 +212,7 @@ func _update_camera(delta: float) -> void:
 	for e in enemies:
 		if e.global_position.distance_to(player.global_position) < 9.0:
 			near += 1
-	var want := 7.0 + minf(near, 6) * 0.45 + (2.5 if boss != null and is_instance_valid(boss) else 0.0)
+	var want := 8.0 + minf(near, 6) * 0.45 + (2.5 if boss != null and is_instance_valid(boss) else 0.0)
 	var vs := get_viewport().get_visible_rect().size
 	if vs.x > vs.y:
 		want *= 1.45   # 가로 화면은 세로 시야가 좁아 조금 더 물러난다
@@ -193,6 +243,27 @@ func tap_down() -> void:
 func tap_up() -> void:
 	if state == "play":
 		player.tap_up()
+
+
+func set_move(v: Vector2) -> void:
+	## 직접 이동 입력(화면 방향, 길이 0~1). 0이면 자동 이동으로 돌아간다
+	if player != null and is_instance_valid(player):
+		player.move_input = screen_to_world(v) * minf(v.length(), 1.0) if v.length() > 0.01 else Vector3.ZERO
+
+
+func aim(v: Vector2) -> void:
+	if state == "play":
+		player.aim(screen_to_world(v))
+
+
+func release_aim() -> void:
+	if state == "play":
+		player.release_aim()
+
+
+func tap_cancel() -> void:
+	if state == "play":
+		player.cancel_hold()
 
 
 func swipe(v: Vector2) -> void:
@@ -318,10 +389,65 @@ func ultimate_burst(hero: Node3D) -> void:
 	ring(hero.global_position, 6.0, hero.data.color.lightened(0.4))
 	for e in enemies_in(hero.global_position, hero.face, 6.0, 360.0):
 		hit_enemy(e, hero.data.atk * 6.0, hero, true, "")
-	if hero.data.kind == "staff":
+	if hero.data.ranged:
 		for h in party:
 			if h.hp > 0.0:
 				h.hp = minf(h.hp + h.max_hp * 0.35, h.max_hp)
+
+
+func hero_skill(hero: Node3D, dir: Vector3) -> void:
+	## 롱터치 후 드래그로 쏘는 영웅 고유 스킬
+	var from: Vector3 = hero.global_position
+	popup(from + Vector3(0, 3.0, 0), hero.data.skill_name, Color(0.8, 0.95, 1), 60)
+	shake(0.45)
+	match hero.data.skill:
+		"dash":
+			# 앞으로 6m 돌진하며 지나는 적을 모두 찌른다
+			var dest := from + dir * 6.0
+			for e in enemies_in_line(from, dir, 6.5, 1.4):
+				hit_enemy(e, hero.data.atk * 2.6, hero, true, "")
+			var tw := hero.create_tween()
+			tw.tween_property(hero, "global_position", dest, 0.18)
+			beam(from, dir, 6.0, hero.data.color)
+		"wave":
+			for e in enemies_in(from, dir, 7.0, 70.0):
+				hit_enemy(e, hero.data.atk * 2.8, hero, true, "")
+			slash(from, dir, 7.0, 70.0, hero.data.color)
+			ring(from + dir * 3.0, 3.0, hero.data.color)
+		"beam":
+			for e in enemies_in_line(from, dir, 12.0, 1.2):
+				hit_enemy(e, hero.data.atk * 3.0, hero, true, "")
+			beam(from, dir, 12.0, hero.data.color)
+
+
+func enemies_in_line(from: Vector3, dir: Vector3, length: float, width: float) -> Array:
+	var out: Array = []
+	for e in enemies:
+		if not is_instance_valid(e) or e.state == "dead":
+			continue
+		var to: Vector3 = e.global_position - from
+		to.y = 0
+		var along := to.dot(dir)
+		if along < -0.5 or along > length:
+			continue
+		if (to - dir * along).length() <= width + e.radius:
+			out.append(e)
+	return out
+
+
+func beam(from: Vector3, dir: Vector3, length: float, color: Color) -> void:
+	var mi := MeshInstance3D.new()
+	mi.mesh = Fx.box(1.0, 0.5, length)
+	var m := Fx.mat(Color(color.lightened(0.3), 0.8), 2.0, true)
+	m.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	mi.material_override = m
+	add_child(mi)
+	mi.global_position = from + dir * (length / 2.0) + Vector3(0, 1.0, 0)
+	mi.rotation.y = atan2(dir.x, dir.z)
+	var tw := mi.create_tween()
+	tw.tween_property(mi, "scale", Vector3(0.1, 0.1, 1), 0.3)
+	tw.parallel().tween_property(m, "albedo_color:a", 0.0, 0.3)
+	tw.tween_callback(mi.queue_free)
 
 
 func spawn_orb(hero: Node3D, target: Node3D, dmg: float, just: bool) -> void:
@@ -451,81 +577,28 @@ func spark(pos: Vector3, color: Color) -> void:
 
 # 전장 -------------------------------------------------------------------
 
-func _build_world() -> void:
+func _build_env() -> void:
 	var env := WorldEnvironment.new()
 	var e := Environment.new()
 	e.background_mode = Environment.BG_COLOR
-	e.background_color = Color(0.05, 0.04, 0.08)
+	e.background_color = Color(0.02, 0.02, 0.04)
 	e.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	e.ambient_light_color = Color(0.45, 0.4, 0.6)
-	e.ambient_light_energy = 0.8
+	e.ambient_light_color = Color(0.42, 0.42, 0.62)
+	e.ambient_light_energy = 0.7
+	e.tonemap_mode = Environment.TONE_MAPPER_FILMIC
+	e.tonemap_exposure = 1.1
+	e.glow_enabled = true
+	e.glow_intensity = 0.6
+	e.glow_bloom = 0.08
 	e.fog_enabled = true
-	e.fog_light_color = Color(0.12, 0.08, 0.16)
-	e.fog_density = 0.012
+	e.fog_light_color = Color(0.06, 0.05, 0.1)
+	e.fog_density = 0.02
 	env.environment = e
 	add_child(env)
-	var sun := DirectionalLight3D.new()
-	sun.rotation_degrees = Vector3(-55, 30, 0)
-	sun.light_color = Color(1.0, 0.86, 0.75)
-	sun.light_energy = 1.1
-	sun.shadow_enabled = true
-	sun.directional_shadow_max_distance = 40.0
-	add_child(sun)
-	# 바닥: 흔들린 석판 타일
-	var mm := MultiMesh.new()
-	mm.transform_format = MultiMesh.TRANSFORM_3D
-	mm.use_colors = true
-	mm.mesh = Fx.box(1.9, 0.3, 1.9)
-	var tiles: Array = []
-	var half := int(ARENA) + 3
-	for x in range(-half, half + 1, 2):
-		for z in range(-half, half + 1, 2):
-			tiles.append(Vector3(x, randf_range(-0.2, -0.12), z))
-	mm.instance_count = tiles.size()
-	for i in tiles.size():
-		mm.set_instance_transform(i, Transform3D(Basis(Vector3.UP, randf_range(-0.03, 0.03)), tiles[i]))
-		var g := randf_range(0.2, 0.3)
-		mm.set_instance_color(i, Color(g * 1.05, g * 0.95, g * 1.1))
-	var floor_mi := MultiMeshInstance3D.new()
-	floor_mi.multimesh = mm
-	var fm := Fx.mat(Color.WHITE)
-	fm.vertex_color_use_as_albedo = true
-	floor_mi.material_override = fm
-	add_child(floor_mi)
-	var body := StaticBody3D.new()
-	add_child(body)
-	# 둘레: 무너진 기둥과 화로, 보이지 않는 벽
-	for i in 16:
-		var a := TAU * i / 16.0
-		var p := Vector3(cos(a), 0, sin(a)) * (ARENA + 1.2)
-		# 카메라 쪽(+x+z) 반원에는 낮은 잔해만 두어 시야를 가리지 않는다
-		var front := p.x + p.z > 0.0
-		var h := randf_range(0.3, 0.7) if front else randf_range(1.5, 5.0)
-		var col := Fx.part(self, Fx.cylinder(0.55, 0.7, h, 8), Color(0.32, 0.3, 0.36), p + Vector3(0, h / 2.0, 0))
-		col.rotation.z = randf_range(-0.08, 0.08)
-		var cs := CollisionShape3D.new()
-		var box := BoxShape3D.new()
-		box.size = Vector3(4.0, 3.0, 1.0)
-		cs.shape = box
-		cs.position = Vector3(cos(a), 0, sin(a)) * (ARENA + 0.5) + Vector3(0, 1.5, 0)
-		cs.rotation.y = -a + PI / 2
-		body.add_child(cs)
-		if i % 4 == 1 and not front:
-			Fx.part(self, Fx.cylinder(0.35, 0.25, 0.5), Color(0.25, 0.22, 0.2), p * 0.93 + Vector3(0, 0.25, 0))
-			Fx.part(self, Fx.sphere(0.25), Color(1.0, 0.55, 0.2), p * 0.93 + Vector3(0, 0.6, 0), "", 4.0)
-			var light := OmniLight3D.new()
-			light.light_color = Color(1.0, 0.55, 0.25)
-			light.light_energy = 2.2
-			light.omni_range = 8.0
-			light.position = p * 0.93 + Vector3(0, 1.2, 0)
-			add_child(light)
-	# 뒤쪽의 균열 수정
-	for k in 5:
-		var c := Fx.part(self, Fx.cylinder(0.0, 0.5, randf_range(2.0, 4.0), 5), Color(0.85, 0.2, 0.4), Vector3(randf_range(-3, 3), 1.2, -ARENA - 2.0 + randf_range(-1, 1)), "", 2.5)
-		c.rotation.z = randf_range(-0.4, 0.4)
-	var rift := OmniLight3D.new()
-	rift.light_color = Color(0.9, 0.2, 0.4)
-	rift.light_energy = 3.0
-	rift.omni_range = 14.0
-	rift.position = Vector3(0, 3, -ARENA)
-	add_child(rift)
+	var moon := DirectionalLight3D.new()
+	moon.rotation_degrees = Vector3(-60, 20, 0)
+	moon.light_color = Color(0.75, 0.8, 1.0)
+	moon.light_energy = 0.55
+	moon.shadow_enabled = true
+	moon.directional_shadow_max_distance = 35.0
+	add_child(moon)

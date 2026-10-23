@@ -1,13 +1,17 @@
 extends Control
 ## 화면 UI와 제스처 입력.
 ##
-## 화면 어디든 누르면 공격(터치), 누르고 있으면 차지(롱터치), 밀면 회피(드래그)다.
+## 화면 어디든 누르면 공격(터치), 누르고 있으면 차지(롱터치), 롱터치한 채 끌면 스킬 조준,
+## 빠르게 튕기면 회피(플릭), 천천히 끌면 누른 자리를 중심으로 직접 이동(드래그)한다.
+## 직접 이동을 멈추면 잠시 뒤 다시 자동 이동이다.
 ## 교대와 궁극기, 자동 전투는 구석의 작은 버튼으로 둔다.
 
 const FONT := preload("res://fonts/NotoSansKR-subset.ttf")
 const GOLD := Color(0.95, 0.8, 0.45)
-const SWIPE_DIST := 55.0     # 이만큼 밀면 회피
-const SWIPE_TIME := 0.35     # 이 시간 안에 밀어야 회피로 본다
+const SWIPE_DIST := 55.0     # 이만큼 빠르게 밀면 회피(플릭)
+const SWIPE_TIME := 0.2      # 이 시간 안에 밀어야 플릭으로 본다
+const MOVE_DIST := 28.0      # 플릭이 아닌 채로 이만큼 끌면 직접 이동
+const STICK_R := 90.0        # 이동 스틱이 최대 속도가 되는 거리
 const BEAT_R := 74.0         # 박자 링의 기준 반지름
 
 var game: Node
@@ -17,6 +21,9 @@ var _touch_start := Vector2.ZERO
 var _touch_time := 0
 var _touch_pos := Vector2.ZERO
 var _swiped := false
+var _moving := false
+var _aiming := false
+var _key_moving := false
 var _ripples: Array = []     # {pos, t}
 var _trail: Array = []       # {a, b, t}
 var _banner := ""
@@ -32,6 +39,7 @@ func _process(delta: float) -> void:
 	# CanvasLayer 아래 Control은 앵커만으로 크기가 따라오지 않아 직접 맞춘다
 	position = Vector2.ZERO
 	size = get_viewport().get_visible_rect().size
+	_key_move()
 	var rd := delta / maxf(Engine.time_scale, 0.05)   # 슬로모션과 무관하게 흐르는 시간
 	_banner_t = maxf(_banner_t - rd, 0.0)
 	_combo_pulse = maxf(_combo_pulse - rd * 4.0, 0.0)
@@ -67,28 +75,65 @@ func _input(event: InputEvent) -> void:
 				_touch_pos = event.position
 				_touch_time = Time.get_ticks_msec()
 				_swiped = false
+				_moving = false
+				_aiming = false
 				_ripples.append({"pos": event.position, "t": 0.0})
 				game.tap_down()
 		elif event.index == _touch:
 			_touch = -1
-			if not _swiped:
+			if _aiming:
+				_aiming = false
+				game.release_aim()
+			elif _moving:
+				_moving = false
+				game.set_move(Vector2.ZERO)
+			elif not _swiped:
 				game.tap_up()
 		get_viewport().set_input_as_handled()
 	elif event is InputEventScreenDrag and event.index == _touch:
 		_touch_pos = event.position
 		var d: Vector2 = event.position - _touch_start
-		if not _swiped and d.length() >= SWIPE_DIST and Time.get_ticks_msec() - _touch_time <= SWIPE_TIME * 1000:
+		var quick: bool = Time.get_ticks_msec() - _touch_time <= SWIPE_TIME * 1000
+		var charging: bool = game.player.state in ["charge", "aim"]
+		if _aiming or (charging and not _moving and d.length() >= MOVE_DIST):
+			_aiming = true
+			game.aim(d.normalized())
+		elif _moving:
+			game.set_move(d.limit_length(STICK_R) / STICK_R)
+		elif not _swiped and quick and d.length() >= SWIPE_DIST:
 			_swiped = true
 			_trail.append({"a": _touch_start, "b": event.position, "t": 0.0})
 			game.swipe(d.normalized())
+		elif not _swiped and not quick and d.length() >= MOVE_DIST:
+			_moving = true
+			game.tap_cancel()
+			game.set_move(d.limit_length(STICK_R) / STICK_R)
 		get_viewport().set_input_as_handled()
 	elif event is InputEventKey and not event.echo:
 		_key(event)
 
 
+func _key_move() -> void:
+	## WASD를 누르고 있는 동안 직접 이동
+	var v := Vector2.ZERO
+	if Input.is_key_pressed(KEY_W):
+		v.y -= 1
+	if Input.is_key_pressed(KEY_S):
+		v.y += 1
+	if Input.is_key_pressed(KEY_A):
+		v.x -= 1
+	if Input.is_key_pressed(KEY_D):
+		v.x += 1
+	if v != Vector2.ZERO:
+		_key_moving = true
+		game.set_move(v.normalized())
+	elif _key_moving:
+		_key_moving = false
+		game.set_move(Vector2.ZERO)
+
+
 func _key(event: InputEventKey) -> void:
-	var dirs := {KEY_W: Vector2.UP, KEY_UP: Vector2.UP, KEY_S: Vector2.DOWN, KEY_DOWN: Vector2.DOWN,
-		KEY_A: Vector2.LEFT, KEY_LEFT: Vector2.LEFT, KEY_D: Vector2.RIGHT, KEY_RIGHT: Vector2.RIGHT}
+	var dirs := {KEY_UP: Vector2.UP, KEY_DOWN: Vector2.DOWN, KEY_LEFT: Vector2.LEFT, KEY_RIGHT: Vector2.RIGHT}
 	if event.keycode in [KEY_SPACE, KEY_J]:
 		if event.pressed:
 			game.tap_down()
@@ -143,7 +188,18 @@ func _draw() -> void:
 	for t in _trail:
 		var k: float = t.t / 0.3
 		draw_line(t.a, t.b, Color(0.6, 0.9, 1, 0.8 * (1 - k)), 10 * (1 - k) + 2)
-	if _touch != -1 and game.player.state == "charge":
+	if _touch != -1 and _moving:
+		var knob := _touch_start + (_touch_pos - _touch_start).limit_length(STICK_R)
+		draw_arc(_touch_start, STICK_R, 0, TAU, 40, Color(1, 1, 1, 0.3), 3)
+		draw_circle(knob, 30, Color(1, 1, 1, 0.35))
+	if _touch != -1 and _aiming:
+		var c: Vector2 = game.camera.unproject_position(game.player.global_position + Vector3(0, 0.2, 0))
+		var dir := (_touch_pos - _touch_start).normalized()
+		var tip := c + dir * 260
+		draw_line(c, tip, Color(0.6, 0.9, 1, 0.8), 14)
+		draw_colored_polygon(PackedVector2Array([tip + dir * 40, tip + dir.orthogonal() * 26, tip - dir.orthogonal() * 26]), Color(0.6, 0.9, 1, 0.9))
+		_text_center(c + dir * 150 + Vector2(0, -40), game.party[game.active].skill_name, 30, Color(0.8, 0.95, 1))
+	elif _touch != -1 and game.player.state == "charge":
 		draw_arc(_touch_pos, 60, 0, TAU, 40, Color(1, 0.85, 0.4, 0.8), 6)
 	if _banner_t > 0.0:
 		_text_center(Vector2(s.x / 2, s.y * 0.3), _banner, 46, Color(1, 0.92, 0.75, minf(_banner_t, 1.0)))
@@ -199,7 +255,7 @@ func _draw_top(s: Vector2) -> void:
 		draw_rect(r.grow(3), Color(0, 0, 0, 0.7))
 		draw_rect(Rect2(r.position, Vector2(r.size.x * b.hp / b.max_hp, r.size.y)), Color(0.85, 0.2, 0.3))
 	elif game.state == "play":
-		_text_center(Vector2(s.x / 2, 150), "웨이브 %d / %d · 남은 적 %d" % [game.wave + 1, game.WAVES.size(), game.enemies.size()], 26, Color(0.9, 0.9, 0.95, 0.85))
+		_text_center(Vector2(s.x / 2, 150), "방 %d / %d · 남은 적 %d" % [maxi(game.room + 1, 1), game.dungeon.rooms.size(), game.enemies.size()], 26, Color(0.9, 0.9, 0.95, 0.85))
 	_round_button("auto", Vector2(s.x - 56, 54), 36, "자동" if game.auto_mode else "수동", Color(0.15, 0.45, 0.3) if game.auto_mode else Color(0.2, 0.2, 0.28), true)
 
 
@@ -226,7 +282,7 @@ func _draw_controls(s: Vector2, portrait: bool) -> void:
 	_round_button("swap", sw, 38, "교대", Color(0.16, 0.25, 0.42) if can else Color(0.18, 0.18, 0.22), can)
 	if game.swap_cd > 0.0:
 		draw_arc(sw, 44, -PI / 2, -PI / 2 + TAU * (1.0 - game.swap_cd / 3.0), 32, Color(0.6, 0.8, 1), 4)
-	_text_left(Vector2(20, s.y - 26), "터치 공격 · 길게 눌러 차지 · 밀어서 회피", 24, Color(1, 1, 1, 0.55))
+	_text_left(Vector2(20, s.y - 26), "터치 공격 · 길게 차지 · 길게 끌어 스킬 · 튕겨 회피 · 끌어 이동", 24, Color(1, 1, 1, 0.55))
 
 
 func _draw_result(s: Vector2) -> void:
