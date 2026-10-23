@@ -30,6 +30,7 @@ var max_hp := 0.0
 var hp := 0.0
 var radius := 0.5
 var state := "spawn"      # spawn, chase, wind, recover, stagger, dead
+var dormant := false      # 방에 미리 서 있는 보초(영웅이 들어오면 activate)
 var t := 0.0
 var wind_time := 0.0
 var strike_area := 1.4
@@ -114,6 +115,21 @@ func _ready() -> void:
 	ragdoll = Ragdoll.build(skel, Ragdoll.BONES_MESHY if meshy else Ragdoll.BONES_KAYKIT)
 
 
+func look_toward(p: Vector3) -> void:
+	var d := p - global_position
+	d.y = 0
+	if d.length() > 0.01:
+		face = d.normalized()
+		model.rotation.y = atan2(face.x, face.z)
+
+
+## 영웅이 방에 들어왔다: 잠깐 알아채는 틈(0.3~0.8초) 뒤에 달려든다
+func activate() -> void:
+	dormant = false
+	state = "spawn"
+	t = 1.1 - randf_range(0.3, 0.8)
+
+
 func freeze(sec: float) -> void:
 	freeze_t = maxf(freeze_t, sec)
 	# 맞은 자세를 붙잡은 채 잘게 떤다
@@ -129,6 +145,8 @@ func _physics_process(delta: float) -> void:
 	_trail_wait -= delta
 	if _trail_wait <= 0.0:
 		hp_trail = move_toward(hp_trail, hp, max_hp * 1.2 * delta)
+	if dormant:
+		return
 	if freeze_t > 0.0:
 		freeze_t -= delta / maxf(Engine.time_scale, 0.05)
 		anim.speed_scale = 0.0
@@ -189,7 +207,7 @@ func _physics_process(delta: float) -> void:
 				_play("idle", 1.0, 0.15)
 	move_and_slide()
 	position.y = lerpf(position.y, game.height_at(position.x, position.z), 1.0 - exp(-delta * 25.0))
-	proc.look(hero.global_position if state in ["chase", "wind"] else null)
+	proc.look(hero.global_position if state in ["spawn", "chase", "wind"] else null)
 	if face.length() > 0.01 and state != "spawn":
 		var diff := angle_difference(model.rotation.y, atan2(face.x, face.z))
 		var cap := 8.0 * delta

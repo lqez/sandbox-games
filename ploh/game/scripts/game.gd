@@ -57,6 +57,7 @@ var state := "play"          # play, clear, dead
 var auto_mode := false
 var elapsed := 0.0
 var combo := 0
+var dormant := {}            # 방 번호 → 미리 세워 둔(아직 깨지 않은) 적
 var max_combo := 0
 var just_count := 0
 var swap_cd := 0.0
@@ -150,6 +151,7 @@ func reset() -> void:
 		if is_instance_valid(e):
 			e.queue_free()
 	enemies.clear()
+	dormant.clear()
 	for o in orbs:
 		o.node.queue_free()
 	orbs.clear()
@@ -174,6 +176,7 @@ func reset() -> void:
 		party.append(d)
 	active = 0
 	_spawn_player(dungeon.rooms[0].center + Vector3(1.5, 0, 1.5))
+	_populate(0)
 	room = -1
 	route_i = 0
 	_cam_ready = false
@@ -195,16 +198,18 @@ func _spawn_player(pos: Vector3) -> void:
 	player.global_position = pos
 
 
-func _enter_room(i: int) -> void:
-	## 방에 들어서면 바닥에서 적이 깨어난다
-	room = i
+## 방의 적을 미리 세워 둔다(경계 중인 보초). 들어서는 순간 눈앞에 갑자기 나타나지 않게, 다음 방까지 미리 둔다
+func _populate(i: int) -> void:
+	if i < 0 or i >= dungeon.rooms.size() or dormant.has(i):
+		return
 	var r: Dictionary = dungeon.rooms[i]
-	r.active = true
+	var list: Array = []
 	var n := 0
 	for kind in r.spawn:
 		for k in r.spawn[kind]:
 			var e := Enemy.new()
 			e.setup(self, kind)
+			e.dormant = true
 			world.add_child(e)
 			var a := TAU * (n * 0.37 + randf() * 0.15)
 			var dist := 0.0 if kind == "boss" else randf_range(0.35, 0.7)
@@ -212,11 +217,30 @@ func _enter_room(i: int) -> void:
 			var pos: Vector3 = r.center + Vector3(off.x, 0, off.y)
 			if kind == "boss":
 				pos = r.center + Vector3(-1.5, 0, -1.5)
+			pos.y = height_at(pos.x, pos.z)
 			e.global_position = pos
-			enemies.append(e)
-			if kind == "boss":
-				boss = e
+			# 들어올 길(앞 방) 쪽을 보고 서 있다
+			var from: Vector3 = dungeon.rooms[maxi(i - 1, 0)].center if i > 0 else player.global_position
+			e.look_toward(from)
+			list.append(e)
 			n += 1
+	dormant[i] = list
+
+
+func _enter_room(i: int) -> void:
+	## 방에 들어서면 세워 둔 적이 알아채고 달려든다
+	room = i
+	var r: Dictionary = dungeon.rooms[i]
+	r.active = true
+	_populate(i)
+	for e in dormant[i]:
+		if is_instance_valid(e):
+			e.activate()
+			enemies.append(e)
+			if e.kind == "boss":
+				boss = e
+	dormant.erase(i)
+	_populate(i + 1)
 	var last := i == dungeon.rooms.size() - 1
 	hud.banner("보스 · 균열의 군주" if last else "방 %d / %d" % [i + 1, dungeon.rooms.size()])
 
