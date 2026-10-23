@@ -17,6 +17,11 @@
 | `wall_stone_roughness.png` | 1024×1024 | 그레이스케일 | 벽 거칠기. 세로로 흐른 습기 자국이 더 매끈함 |
 | `moss_grime.png` | 512×512 | RGBA | 이끼와 때 오버레이. 알파 약 43%(평균), 알파 0.5 초과 면적 32% |
 | `water_normal.png` | 512×512 | RGB, 선형 | 웅덩이 잔물결 노멀 맵 |
+| `flagstone_albedo.png`, `flagstone_normal.png` | 1024×1024 | RGB | 큰 직사각 판석 바닥(4m/장). 지금 바닥에 쓴다 |
+| `cave_rock_albedo.png`, `cave_rock_normal.png` | 1024×1024 | RGB | 벽 위쪽 동굴 암반, 벽 너머 가장자리 |
+| `earth_roots_albedo.png` | 1024×1024 | RGB | 벽 위와 벽 너머의 흙과 뿌리 |
+
+판석·암반·흙 텍스처는 던전 아트 디렉션 작업에서 만들었습니다. 만든 방법과 프롬프트는 `../../../research/dungeon/TASKS.md` 3장에 있습니다.
 
 - 노멀 맵은 OpenGL 규약(초록 = +Y)입니다. Godot가 기대하는 방식이라 뒤집지 않아도 됩니다.
 - 거칠기 맵에서 밝을수록 거칩니다. 젖은 부분은 어둡게(더 매끈하게) 만들었습니다. 평균값은 바닥 돌 0.75, 흙 0.66, 벽 0.82입니다.

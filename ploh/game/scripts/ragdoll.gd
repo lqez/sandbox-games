@@ -39,7 +39,8 @@ static func build(skel: Skeleton3D, table: Array) -> RefCounted:
 		pb.angular_damp = 2.5
 		pb.friction = 0.9
 		pb.collision_layer = 8
-		pb.collision_mask = 1 | 2
+		# 바닥(2)하고만 부딪힌다. 벽 충돌체(오목한 삼각형 면)에 끼면 관절이 터져 메시가 늘어난다
+		pb.collision_mask = 2
 		pb.joint_type = PhysicalBone3D.JOINT_TYPE_CONE if row[0] not in ["Hips", "hips"] else PhysicalBone3D.JOINT_TYPE_NONE
 		pb.set("joint_constraints/swing_span", row[3])
 		pb.set("joint_constraints/twist_span", row[3] * 0.4)
@@ -67,6 +68,17 @@ static func build(skel: Skeleton3D, table: Array) -> RefCounted:
 		r.bodies.append(pb)
 	r.sim.active = false
 	return r
+
+
+## 몸통에서 가장 멀리 떨어진 뼈까지의 거리. 관절이 터졌는지 확인한다
+func spread() -> float:
+	if bodies.is_empty():
+		return 0.0
+	var c: Vector3 = bodies[0].global_position
+	var far := 0.0
+	for pb: PhysicalBone3D in bodies:
+		far = maxf(far, pb.global_position.distance_to(c))
+	return far
 
 
 ## 래그돌 시작: impulse는 월드 충격(방향 × 세기)

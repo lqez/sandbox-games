@@ -13,10 +13,12 @@ uniform vec4 rim_color : source_color = vec4(1.0, 0.92, 0.8, 1.0);
 uniform float rim_amount : hint_range(0.0, 1.0) = 0.16;
 uniform float flash : hint_range(0.0, 1.0) = 0.0;                    // 피격 하양
 uniform vec4 glow_color : source_color = vec4(1.0, 0.85, 0.4, 1.0);
-uniform float glow : hint_range(0.0, 1.0) = 0.0;                     // JUST 순간 몸이 달아오르는 빛
+uniform float glow : hint_range(0.0, 1.0) = 0.0;
+uniform float saturation : hint_range(0.0, 1.0) = 1.0;               // 배경 소품은 낮춰서 차분하게                     // JUST 순간 몸이 달아오르는 빛
 
 void fragment() {
 	vec4 c = use_tex ? texture(albedo_tex, UV) * albedo : albedo;
+	c.rgb = mix(vec3(dot(c.rgb, vec3(0.299, 0.587, 0.114))), c.rgb, saturation);
 	ALBEDO = c.rgb;
 	float rim = pow(1.0 - clamp(dot(NORMAL, VIEW), 0.0, 1.0), 3.0);
 	// 글로우는 몸 전체가 아니라 윤곽(림)에만 실어 실루엣이 달아오르게 한다

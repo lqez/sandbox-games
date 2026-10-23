@@ -62,9 +62,9 @@ func _process(delta: float) -> void:
 		log_lines.append("%.3f state %s -> %s  vel=%.2f chain_i=%d" % [t, _last_state, p.state, p._vel.length(), p.chain_i])
 		_last_state = p.state
 	if int(t * 10.0) != int((t - delta) * 10.0) and t > WARM - 0.5 and t < WARM + RUN:
-		var tg: Node3D = p.target
+		var tg: Node3D = p.target if is_instance_valid(p.target) else null
 		var gap := -1.0
-		if tg != null and is_instance_valid(tg):
+		if tg != null:
 			gap = p.global_position.distance_to(tg.global_position) - tg.radius - p._strike_range()
 		log_lines.append("%.3f   [%s/%s/%s] t=%.2f due-now=%+.2f buf=%s fum=%s vel=%.2f gap=%.2f anim=%s" % [t, p.state, p.move_kind, p.phase, p.t, p._due - g.beat_clock(), p._buffered, p._fumbled, p._vel.length(), gap, p._current])
 	if p.state == "attack" and p.phase == "swing" and p.weapon != null:
@@ -87,6 +87,12 @@ func _process(delta: float) -> void:
 			log_lines.append("%.3f KILL #%d (%s)" % [t, kills, e.kind])
 	if p.state == "stumble" and _last_state == "stumble" and log_lines[-1].find("-> stumble") >= 0:
 		fumbles += 1
+	if mode == "boss" and t > 1.0 and t < 1.05:
+		# 보스 방 앞으로 옮겨 본다(배경 확인용)
+		var r: Dictionary = g.dungeon.rooms[g.dungeon.rooms.size() - 1]
+		p.global_position = r.center + Vector3(1.5, 0, 1.5)
+	if mode == "boss" and t > 3.0:
+		mode = "beat"
 	if mode == "swap" and (absf(t - (WARM + 2.0)) < delta * 0.6 or absf(t - (WARM + 5.5)) < delta * 0.6):
 		g.swap()
 		log_lines.append("%.3f SWAP -> %s" % [t, g.party[g.active].name])

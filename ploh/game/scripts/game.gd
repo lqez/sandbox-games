@@ -269,7 +269,7 @@ func _process(delta: float) -> void:
 	if cine_t > 0.0:
 		cine_t -= delta / maxf(Engine.time_scale, 0.05)
 	if dungeon != null:
-		dungeon.flicker(Time.get_ticks_msec() / 1000.0)
+		dungeon.flicker(Time.get_ticks_msec() / 1000.0, player.global_position if player != null and is_instance_valid(player) else Vector3.INF)
 		if player != null and is_instance_valid(player):
 			for m in [dungeon.wall_mat, dungeon.top_mat]:
 				m.set_shader_parameter("player_pos", player.global_position)
@@ -937,9 +937,10 @@ func _build_env() -> void:
 	var env := WorldEnvironment.new()
 	var e := Environment.new()
 	e.background_mode = Environment.BG_COLOR
-	e.background_color = Color(0.03, 0.03, 0.05)
+	# 아트 디렉션 3.2: 보랏빛을 뺀 회청. 밝기는 그대로(바닥은 이미 충분히 밝다)
+	e.background_color = Color(0.08, 0.1, 0.12)
 	e.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	e.ambient_light_color = Color(0.42, 0.44, 0.6)
+	e.ambient_light_color = Color(0.44, 0.47, 0.52)
 	e.ambient_light_energy = 0.62
 	e.tonemap_mode = Environment.TONE_MAPPER_FILMIC
 	e.tonemap_exposure = 1.1
@@ -948,15 +949,16 @@ func _build_env() -> void:
 	e.glow_hdr_threshold = 1.3
 	e.glow_bloom = 0.0
 	e.fog_enabled = true
-	e.fog_light_color = Color(0.06, 0.05, 0.1)
-	e.fog_density = 0.02
+	e.fog_light_color = Color(0.12, 0.15, 0.17)
+	e.fog_density = 0.018
 	env.environment = e
 	add_child(env)
 	self.env = e
 	moon = DirectionalLight3D.new()
 	moon.rotation_degrees = Vector3(-60, 20, 0)
-	moon.light_color = Color(0.75, 0.8, 1.0)
-	moon.light_energy = 0.7
+	# 천장 균열로 드는 차가운 낮빛(횃불의 따뜻한 빛과 대비)
+	moon.light_color = Color(0.79, 0.83, 0.86)
+	moon.light_energy = 0.6
 	# 모바일은 실시간 그림자를 끄고 발밑 원형 그림자만 쓴다
 	moon.shadow_enabled = not mobile
 	moon.directional_shadow_mode = DirectionalLight3D.SHADOW_ORTHOGONAL

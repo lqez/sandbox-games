@@ -22,7 +22,10 @@ func setup(g: Node, scene: PackedScene, r: float, h: float, scale_: float, tint:
 	model.scale = Vector3.ONE * scale_
 	add_child(model)
 	# 장난감처럼 튀지 않게 채도와 밝기를 눌러 던전에 섞는다
-	Fx.toonify(model, 0.0, Color(0.55, 0.5, 0.7), PALETTE)
+	var ms := Fx.toonify(model, 0.0, Color(0.62, 0.64, 0.7), PALETTE)
+	Fx.set_param(ms, "rim_amount", 0.0)
+	Fx.set_param(ms, "albedo", Color(0.8, 0.72, 0.62))
+	Fx.set_param(ms, "saturation", 0.4)
 	var cs := CollisionShape3D.new()
 	var cyl := CylinderShape3D.new()
 	cyl.radius = radius

@@ -119,6 +119,9 @@ func freeze(sec: float) -> void:
 
 func _physics_process(delta: float) -> void:
 	if state == "dead":
+		# 래그돌 감시: 관절이 터져 뼈가 비정상적으로 벌어지면(메시가 늘어나 보인다) 바로 감춘다
+		if model.visible and ragdoll != null and not ragdoll.bodies.is_empty() and ragdoll.spread() > 1.6 * stats.scale:
+			model.visible = false
 		return
 	_trail_wait -= delta
 	if _trail_wait <= 0.0:
@@ -317,10 +320,10 @@ func _die(dir: Vector3) -> void:
 	anim.stop()
 	proc.active = false
 	if ragdoll != null and not ragdoll.bodies.is_empty():
-		ragdoll.start(dir * 6.0 * stats.scale)
+		ragdoll.start(dir * 4.5 * stats.scale)
 	else:
 		_play("death", 1.2, 0.05, true)
 	var tw := create_tween()
-	tw.tween_interval(4.0)
-	tw.tween_property(model, "position:y", -1.5, 1.0)
+	tw.tween_interval(2.4)
+	tw.tween_property(model, "position:y", -1.5, 0.8)
 	tw.tween_callback(queue_free)
