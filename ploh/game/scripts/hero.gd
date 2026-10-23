@@ -5,7 +5,7 @@ extends CharacterBody3D
 ## 손을 떼고 잠시 지나면 다시 자동 이동으로 돌아간다. 몸에는 관성이 있다. 출발할 때는 몸을 앞으로 싣고,
 ## 빠를수록 크게 돌며, 빨리 달리다 급히 서거나 크게 꺾으면 미끄러지며 몸을 낮춰 버티느라 잠깐 멈칫한다.
 ##
-## 빨리 누르는 게임이 아니라 타이밍과 패턴의 게임이다. 누르면 바로 반응하고(누른 뒤 0.24초에 칼이 닿는다), 박자는 보상이다.
+## 빨리 누르는 게임이 아니라 타이밍과 패턴의 게임이다. 누르면 바로 반응하고(누른 뒤 0.28초에 칼이 닿는다), 박자는 보상이다.
 ## 박자에 정확히(±0.07초) 누른 타는 JUST, 칼이 아직 지나가는 중에 서둘러 누른 타는 약하고, 연타하면 JUST를 잃는다.
 ## JUST가 세 번 이어지면 무거운 일격. 휘두르는 중에 누른 입력은 받아 두었다가 칼이 지나가자마자 낸다.
 ## - 터치: 3콤보 고리와 4콤보 고리(마지막은 피니시)를 번갈아 잇는다. 칼을 뻗은 뒤 0.74초 안에 누르면 이어진다
@@ -35,7 +35,7 @@ const GOOD_WINDOW := 0.15            # 박자 ±0.15초: 차지를 박자에 맞
 const AND_WINDOW := 0.09             # 한 박 쉰 패턴 판정 폭
 const MIN_HOLD := 0.12               # 칼을 뻗은 자세가 머무는 최소 시간(레퍼런스 100~250ms). 연타해도 이보다 빨라지지 않는다
 const CHAIN_WINDOW := 0.74           # 칼을 뻗은 자세 뒤 이 시간 안에 누르면 고리가 이어진다(레퍼런스 Pre Recover 0.74초)
-const STRIKE_TIME := 0.24            # 누른 뒤 칼이 닿기까지(예비 + 베기). 레퍼런스: 예비 150~250ms, 베기 50~130ms
+const STRIKE_TIME := 0.28            # 누른 뒤 칼이 닿기까지(예비 + 베기). 레퍼런스: 예비 150~250ms, 베기 50~130ms
 const CHARGE_TIME := 0.42            # 이만큼 누르고 있으면 차지
 const DODGE_TIME := 0.7             # 구르기 전체 길이(레퍼런스 0.74초)
 const DODGE_MOVE := 0.42            # 이 동안 실제로 굴러 이동한다
@@ -220,23 +220,32 @@ func _analyze(name: String) -> Dictionary:
 	for i in speeds.size():
 		if speeds[i] > speeds[peak]:
 			peak = i
+	# 두 구간: 시간표(예비 → 베기 → 머묾)는 칼끝 속도 50% 넘는 짧은 베기로 나누고(레퍼런스 베기 50~130ms, 그 앞은 예비 동작),
+	# 칼날 판정은 25% 넘는 넓은 구간에서 한다(칼이 지나가는 동안 적을 놓치지 않게)
+	var w50 := _window(speeds, peak, 0.5, dt, length)
+	var w25 := _window(speeds, peak, 0.25, dt, length)
+	# 칼이 가장 빠를 때 칼날이 몸에서 떨어진 거리(실제로 닿는 사거리)
+	var reach: float = reach_at[peak]
+	return {"len": length, "start": w50.x, "end": w50.y, "sweep_start": w25.x, "sweep_end": w25.y, "reach": reach}
+
+
+## 정점 둘레에서 속도가 frac 이상인 구간(초). 너무 짧으면 정점 둘레로 넓힌다
+func _window(speeds: Array, peak: int, frac: float, dt: float, length: float) -> Vector2:
+	var n := speeds.size() - 1
 	var lo := peak
 	var hi := peak
-	var cut: float = speeds[peak] * 0.25
+	var cut: float = speeds[peak] * frac
 	while lo > 1 and speeds[lo - 1] >= cut:
 		lo -= 1
 	while hi < n and speeds[hi + 1] >= cut:
 		hi += 1
-	# 칼이 빨라지는 순간부터 다 지나갈 때까지. 너무 짧으면 정점 둘레로 넓힌다
 	var start := maxf((lo - 1) * dt, 0.0)
 	var end := minf((hi + 1) * dt, length)
 	if end - start < 0.08:
 		var mid := peak * dt
 		start = maxf(mid - 0.05, 0.0)
 		end = minf(mid + 0.03, length)
-	# 칼이 가장 빠를 때 칼날이 몸에서 떨어진 거리(실제로 닿는 사거리)
-	var reach: float = reach_at[peak]
-	return {"len": length, "start": start, "end": end, "reach": reach}
+	return Vector2(start, end)
 
 
 func _play(name: String, speed := 1.0, blend := 0.08, restart := false) -> void:
@@ -1007,12 +1016,14 @@ func _update_attack(delta: float) -> void:
 	# 클립에 원래 있던 내딛기(모션캡처의 런지)를 몸 이동으로 되살린다
 	_vel += _root_velocity(delta)
 	var cutting: bool = pos >= cl.start and _end_t < 0.0
+	# 칼날 판정·궤적은 넓은 구간(속도 25% 이상)에서
+	var sweeping: bool = pos >= cl.get("sweep_start", cl.start) and pos <= cl.get("sweep_end", cl.end) and anim.current_animation == _clip
 	if not _whooshed and cutting:
 		_whooshed = true
 		game.sfx("whoosh_heavy" if _move_weight >= 1.0 else "whoosh", 0.12)
 	# 칼날 판정은 이번 프레임의 칼 위치를 갱신한 뒤에 한다(_physics_process 끝). 프레임 경계를 넘는 몫까지 조금 더 본다
-	_sweeping = (cutting or (_end_t >= 0.0 and t - _end_t <= 0.03)) and not data.ranged
-	if cutting:
+	_sweeping = (cutting or sweeping or (_end_t >= 0.0 and t - _end_t <= 0.03)) and not data.ranged
+	if cutting or sweeping:
 		trail.emitting = true
 		if weapon != null and weapon.speed > _peak_vel.length():
 			_peak_vel = weapon.tip_vel

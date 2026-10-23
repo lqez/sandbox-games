@@ -34,7 +34,7 @@ const HEROES := [
 	# 슈나이더(온화한 수인기사): 양손 철퇴. 예비 동작이 길고 한 방이 무겁다
 	{"name": "슈나이더", "model": "res://assets/schneider/schneider.glb", "scale": 1.6, "color": Color(0.55, 0.8, 1.0),
 		"max_hp": 600.0, "atk": 56.0, "speed": 5.2, "reach": 2.8, "guard": 0.75, "ranged": false,
-		"blade": ["weapon_mace"], "weapon_bone": "RightHand", "attack_speed": 1.0, "weapon_mass": 1.9, "strike_time": 0.31,
+		"blade": ["weapon_mace"], "weapon_bone": "RightHand", "attack_speed": 1.0, "weapon_mass": 1.9, "strike_time": 0.34,
 		"skill_name": "대지 강타", "skill": "quake",
 		"anims": {"moves": {"idle": "idle", "run": "run", "a1": "attack_1", "a2": "attack_2", "a3": "attack_3", "a4": "cast",
 			"spin": "spin", "dodge": "dodge", "hit": "hit", "death": "death", "charge": "idle", "skill": "attack_3", "ult": "spin"}}},
