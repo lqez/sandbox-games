@@ -352,12 +352,14 @@ func _beat_tick() -> void:
 			player.on_beat()
 
 
-func tap_down() -> void:
+## at: 누른 순간의 박자 시계(화면이 탭인지 가리느라 조금 늦게 알려 준다). 음수면 지금
+func tap_down(at := -1.0) -> void:
 	if not music.playing:
 		music.play()
 		_clock0 = Time.get_ticks_msec()
+		at = -1.0
 	if state == "play":
-		player.tap_down()
+		player.tap_down(at)
 
 
 func tap_up() -> void:
@@ -391,9 +393,9 @@ func swipe(v: Vector2) -> void:
 		player.flick(screen_to_world(v))
 
 
-func double_tap() -> void:
+func double_tap(at := -1.0) -> void:
 	if state == "play":
-		player.double_tap()
+		player.double_tap(at)
 
 
 func circle() -> void:

@@ -52,6 +52,7 @@ const BRAKE_SPEED := 3.4             # 이보다 빨리 달리다 급히 서거�
 const PAUSE_MOVES := {1: "dash_thrust", 2: "whirl", 3: "flurry"}
 
 static var _clip_cache := {}         # 모델 경로 → 클립 분석 결과
+static var _root_cache := {}         # 모델 경로 → 클립별 루트 이동 기록({클립: PackedVector2Array}, 30fps, 몸 기준 +Z 앞)
 
 var game: Node
 var data: Dictionary
@@ -116,6 +117,8 @@ var _wind_spd := 1.0                 # 예비 동작 재생 속도(클립 초/�
 var _strike_spd := 1.0               # 베기 재생 속도
 var _sweeping := false
 var _end_t := -1.0                   # 칼이 실제로 다 지나간 시각(t). 단계는 클립의 실제 재생 위치로 나눈다
+var root_motion := {}                # 클립이 원래 갖고 있던 수평 이동(클립에서는 지우고 몸을 그만큼 움직인다)
+var _rm_prev := Vector2.INF
 var _lunge := 0.0                    # 예비 동작 동안 내디뎌 좁힐 거리
 var _bite := 0.0                     # 베고 지나가는 동안 칼이 무거워지는 남은 시간
 var _whooshed := false
@@ -174,6 +177,9 @@ func _ready() -> void:
 				found[n] = _analyze(n)
 		_clip_cache[key] = found
 	clips = _clip_cache[key]
+	if not _root_cache.has(key):
+		_root_cache[key] = load_root_motion(key)
+	root_motion = _root_cache[key]
 	_play(_anim("idle"))
 
 
@@ -270,12 +276,13 @@ const MOVES := {
 
 # 제스처 입력 -------------------------------------------------------------
 
-func tap_down() -> void:
+## at: 누른 순간의 박자 시계(음수면 지금). 판정은 누른 순간 기준으로 한다
+func tap_down(at := -1.0) -> void:
 	if state == "dead":
 		return
 	holding = true
 	hold_t = 0.0
-	_tap(game.beat_clock(), false)
+	_tap(at if at >= 0.0 else game.beat_clock(), false)
 
 
 ## 박자 판정이 들어간 터치. auto는 자동 전투의 입력이다(JUST는 나오지 않는다)
@@ -355,8 +362,8 @@ func tap_up() -> void:
 
 
 ## 화면이 빠른 두 번 탭으로 알려 준 두 번째 탭. 판정은 같은 박자 규칙을 따른다
-func double_tap() -> void:
-	tap_down()
+func double_tap(at := -1.0) -> void:
+	tap_down(at)
 
 
 ## 원을 그리는 드래그: 회오리 베기
@@ -765,7 +772,8 @@ func _start_hit() -> void:
 			phase = "approach"
 			_play(_anim("run"), 1.3, 0.15)
 			return
-		_lunge = maxf(gap, 0.0)
+		# 클립 자체가 앞으로 내딛는 만큼은 빼고 좁힌다
+		_lunge = maxf(gap - _root_forward(_anim(_hits[_hit_i].clip)), 0.0)
 	_begin_swing()
 
 
@@ -777,6 +785,7 @@ func _begin_swing() -> void:
 	phase = "swing"
 	t = 0.0
 	_end_t = -1.0
+	_rm_prev = Vector2.INF
 	_rate = data.get("attack_speed", 1.0) * h.get("rate", 1.0)
 	_hold_len = HOLD
 	_wind_spd = _rate * WIND_RATE
@@ -801,8 +810,10 @@ func _begin_swing() -> void:
 			while due - now < strike * 0.7:
 				due += game.BEAT
 			_due = due
-			# 첫 타가 박자 직전에 눌리면 그 박자에 맞추느라 조금 빨리 휘두른다
-			strike = minf(strike, _due - now - 0.02)
+			# 첫 타가 박자 직전에 눌리면 그 박자에 맞추느라 조금 빨리 휘두른다.
+			# 화면이 탭을 가리느라 늦게 알려 준 만큼도 줄여서, 칼이 닿는 시각은 누른 순간 기준을 지킨다
+			var lag := clampf(now - _last_tap, 0.0, 0.12)
+			strike = maxf(minf(strike, _due - now - 0.02) - lag, 0.16)
 		var cut_dur := (0.1 if heavy else 0.08)
 		_strike_spd = (c.end - c.start) / cut_dur * EASE_K
 		_wind_spd = c.start / maxf(strike - cut_dur, 0.05) * EASE_K
@@ -844,6 +855,66 @@ func _clip_speed(c: Dictionary) -> float:
 
 
 ## 지금 클립의 실제 재생 위치(클립 초). 단계 판단은 시간표가 아니라 이것으로 한다(애니메이션이 한두 틱 밀려도 칼과 판정이 어긋나지 않게)
+## <모델>_root.json: 모델을 만들 때 클립에서 지운 수평 루트 이동. 형식이 조금 달라도 읽는다
+## ({"clips": {클립: [[x, z], ...]}} 또는 {클립: [[x, z], ...]}, 원소는 [x, z] 또는 {"x":, "z":})
+static func load_root_motion(model_path: String) -> Dictionary:
+	var path := model_path.get_basename() + "_root.json"
+	if not FileAccess.file_exists(path):
+		return {}
+	var data = JSON.parse_string(FileAccess.get_file_as_string(path))
+	if typeof(data) != TYPE_DICTIONARY:
+		return {}
+	var src: Dictionary = data.get("clips", data)
+	var out := {}
+	for clip in src:
+		var v = src[clip]
+		if typeof(v) == TYPE_DICTIONARY:
+			v = v.get("frames", v.get("offsets", []))
+		if typeof(v) != TYPE_ARRAY:
+			continue
+		var arr := PackedVector2Array()
+		for e in v:
+			if typeof(e) == TYPE_ARRAY and e.size() >= 2:
+				arr.append(Vector2(float(e[0]), float(e[e.size() - 1])))
+			elif typeof(e) == TYPE_DICTIONARY:
+				arr.append(Vector2(float(e.get("x", 0.0)), float(e.get("z", 0.0))))
+		if arr.size() > 1:
+			out[clip] = arr
+	return out
+
+
+## 클립이 가진 수평 루트 이동(몸 기준, 모델 크기 반영 전)의 clip_sec 시점 값
+func _root_at(clip: String, clip_sec: float) -> Vector2:
+	var arr: PackedVector2Array = root_motion.get(clip, PackedVector2Array())
+	if arr.is_empty():
+		return Vector2.ZERO
+	var f := clampf(clip_sec * 30.0, 0.0, arr.size() - 1.001)
+	var i := int(f)
+	return arr[i].lerp(arr[i + 1], f - i)
+
+
+## 클립이 칼이 닿을 때까지 앞으로 내딛는 거리(월드 m)
+func _root_forward(clip: String) -> float:
+	var c: Dictionary = clips.get(clip, {})
+	if root_motion.is_empty() or c.is_empty():
+		return 0.0
+	return maxf(_root_at(clip, c.end).y * model.scale.z, 0.0)
+
+
+## 이번 틱에 클립의 루트 이동만큼 몸을 옮길 속도(월드)
+func _root_velocity(delta: float) -> Vector3:
+	if root_motion.is_empty() or not root_motion.has(_clip) or delta <= 0.0:
+		return Vector3.ZERO
+	var cur := _root_at(_clip, _clip_pos())
+	var v := Vector3.ZERO
+	if _rm_prev != Vector2.INF:
+		var d := cur - _rm_prev
+		v = model.global_transform.basis * Vector3(d.x, 0.0, d.y) / delta
+		v.y = 0.0
+	_rm_prev = cur
+	return v
+
+
 func _clip_pos() -> float:
 	return anim.current_animation_position if anim.current_animation == _clip else 0.0
 
@@ -907,6 +978,8 @@ func _update_attack(delta: float) -> void:
 	else:
 		_vel = _vel.move_toward(Vector3.ZERO, 24.0 * delta)
 		proc.crouch = clampf(_vel.length() * 0.018, 0.0, 0.09)
+	# 클립에 원래 있던 내딛기(모션캡처의 런지)를 몸 이동으로 되살린다
+	_vel += _root_velocity(delta)
 	var cutting: bool = pos >= cl.start and _end_t < 0.0
 	if not _whooshed and cutting:
 		_whooshed = true

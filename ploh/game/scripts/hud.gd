@@ -12,6 +12,9 @@ const SWIPE_DIST := 55.0     # 이만큼 빠르게 밀면 회피(플릭)
 const SWIPE_TIME := 0.2      # 이 시간 안에 밀어야 플릭으로 본다
 const MOVE_DIST := 28.0      # 플릭이 아닌 채로 이만큼 끌면 직접 이동
 const STICK_R := 90.0        # 이동 스틱이 최대 속도가 되는 거리
+const TAP_DECIDE := 70       # 누른 뒤 이 시간(ms) 동안 손가락이 움직이지 않으면 탭(공격)으로 본다.
+                             # 플릭·드래그가 먼저 공격을 내지 않게 한다. 박자 판정은 누른 순간 기준
+const TAP_SLOP := 18.0       # 탭으로 보는 손가락 흔들림
 
 var game: Node
 var buttons: Array = []      # {id, center, radius}
@@ -19,6 +22,9 @@ var _touch := -1
 var _touch_start := Vector2.ZERO
 var _touch_time := 0
 var _touch_pos := Vector2.ZERO
+var _pending := false         # 아직 탭인지 플릭인지 정하지 않은 누름
+var _pending_clock := 0.0     # 그 누름의 박자 시계 시각
+var _pending_double := false
 var _swiped := false
 var _moving := false
 var _aiming := false
@@ -47,7 +53,18 @@ func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 
+## 정해 둔 누름을 탭으로 낸다(따닥이면 두 번째 탭)
+func _fire_tap() -> void:
+	_pending = false
+	if _pending_double:
+		game.double_tap(_pending_clock)
+	else:
+		game.tap_down(_pending_clock)
+
+
 func _process(delta: float) -> void:
+	if _pending and _touch != -1 and Time.get_ticks_msec() - _touch_time >= TAP_DECIDE and _touch_pos.distance_to(_touch_start) < TAP_SLOP:
+		_fire_tap()
 	# CanvasLayer 아래 Control은 앵커만으로 크기가 따라오지 않아 직접 맞춘다
 	position = Vector2.ZERO
 	size = get_viewport().get_visible_rect().size
@@ -127,15 +144,18 @@ func _input(event: InputEvent) -> void:
 				_circled = false
 				_ripples.append({"pos": event.position, "t": 0.0})
 				var now := Time.get_ticks_msec()
-				if now - _last_tap_ms <= 240 and event.position.distance_to(_last_tap_pos) < 90:
+				_pending = true
+				_pending_clock = game.beat_clock()
+				_pending_double = now - _last_tap_ms <= 240 and event.position.distance_to(_last_tap_pos) < 90
+				if _pending_double:
 					_last_tap_ms = -1000
-					game.double_tap()   # 따닥
 				else:
 					_last_tap_ms = now
 					_last_tap_pos = event.position
-					game.tap_down()
 		elif event.index == _touch:
 			_touch = -1
+			if _pending:
+				_fire_tap()
 			if _circled:
 				pass
 			elif _aiming:
@@ -157,6 +177,9 @@ func _input(event: InputEvent) -> void:
 			if _prev_dir != Vector2.ZERO:
 				_turn += _prev_dir.angle_to(cur)
 			_prev_dir = cur
+		if _pending and d.length() >= TAP_SLOP:
+			# 움직이기 시작했다: 탭이 아니다(플릭·이동·원 그리기)
+			_pending = false
 		if not _circled and absf(_turn) >= deg_to_rad(300.0):
 			_circled = true
 			_moving = false
