@@ -1,7 +1,7 @@
 extends Node
 ## 개발용: 프라우(아스트리드) 등신 비교 렌더. 게임 카메라(요 45°, 피치 38°, 8 m, 세로 시야 50° 가로 기준)로
 ## A_original, B_mid, C_sd와 지금 쓰는 KayKit Knight를 나란히 세워 찍는다.
-## 실행: Godot --path ploh/game --rendering-method gl_compatibility --resolution 720x1280 res://tests/compare_shot.tscn -- <출력 폴더>
+## 실행: Godot --path ploh/game --rendering-method gl_compatibility --resolution 720x1280 res://tests/compare_shot.tscn -- <출력 폴더> [아스트리드 외곽선, 기본 0.005]
 ##
 ## 창 크기가 화면에 맞춰 줄거나 HiDPI로 커질 수 있으니 720×1280 SubViewport에 그려 저장한다.
 

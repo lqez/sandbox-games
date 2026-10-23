@@ -9,7 +9,7 @@ const SLASH := preload("res://shaders/slash.gdshader")
 
 ## 모델의 모든 메시에 카툰 셰이더와 외곽선을 씌우고, 플래시·글로우를 조절할 재질 목록을 돌려준다.
 ## tex_override를 주면 원래 알베도 텍스처 대신 쓴다(KayKit 공용 팔레트 아틀라스를 던전 톤으로 바꿀 때)
-static func toonify(model: Node3D, outline := 0.012, shade := Color(0.5, 0.46, 0.74), tex_override: Texture2D = null) -> Array:
+static func toonify(model: Node3D, outline := 0.0022, shade := Color(0.5, 0.46, 0.74), tex_override: Texture2D = null) -> Array:
 	var out: Array = []
 	var cache := {}
 	var line := ShaderMaterial.new()

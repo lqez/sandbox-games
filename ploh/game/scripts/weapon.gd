@@ -14,6 +14,7 @@ var tip := Vector3.ZERO
 var prev_hilt := Vector3.ZERO
 var prev_tip := Vector3.ZERO
 var speed := 0.0               # 칼끝 속도(m/s)
+var tip_vel := Vector3.ZERO    # 칼끝 속도 벡터(월드)
 var _has_prev := false
 
 
@@ -44,6 +45,9 @@ static func attach(model: Node3D, bone_name: String, mesh_names: Array) -> RefCo
 		var to_bone: Transform3D
 		if attached:
 			to_bone = (attach_node as Node3D).global_transform.affine_inverse() * mi.global_transform
+			var ab: int = w.skel.find_bone((attach_node as BoneAttachment3D).bone_name)
+			if ab >= 0:
+				w.bone = ab
 		else:
 			var rest_world: Transform3D = w.skel.global_transform * w.skel.get_bone_global_rest(w.bone)
 			to_bone = rest_world.affine_inverse() * mi.global_transform
@@ -72,7 +76,8 @@ func update(delta: float) -> void:
 	prev_tip = tip
 	hilt = g * hilt_local
 	tip = g * tip_local
-	speed = (tip - prev_tip).length() / maxf(delta, 0.0001) if _has_prev else 0.0
+	tip_vel = (tip - prev_tip) / maxf(delta, 0.0001) if _has_prev else Vector3.ZERO
+	speed = tip_vel.length()
 	if not _has_prev:
 		prev_hilt = hilt
 		prev_tip = tip

@@ -6,3 +6,5 @@ ploh/mockups/layouts/
 ploh/mockups/renders/
 ploh/docs/
 ploh/game/.godot/
+# 모델 작업 원본(Meshy 다운로드 등)은 저장소에 올리지 않는다
+ploh/game/assets/**/raw/

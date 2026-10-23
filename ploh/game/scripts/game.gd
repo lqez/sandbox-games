@@ -16,23 +16,14 @@ const BPM := 120.0           # 전투 박자. 기본 공격 한 타가 한 박, 
 const BEAT := 60.0 / BPM
 const CAM_YAW := 45.0        # 디아블로식 고정 방향
 const CAM_PITCH := 50.0      # 레퍼런스(약 55~60도)에 가깝게 올려 벽 가림을 줄이고, 캐릭터는 가까이 잡는다
-## 영웅 정의. 모델은 CC0 KayKit 모험가. 원작 모델이 준비되면 model과 anims만 바꾼다
+## 영웅 정의. 모든 캐릭터는 프라우 B와 같은 약 4.5등신으로 통일한다(사용자 결정)
 const HEROES := [
-	{"name": "검기사", "model": "Knight", "color": Color(0.55, 0.7, 1.0), "max_hp": 460.0, "atk": 34.0, "speed": 6.0, "reach": 2.3, "guard": 0.85, "ranged": false,
-		"weapons": ["1H_Sword", "Badge_Shield"], "blade": ["1H_Sword"], "attack_speed": 1.5, "weapon_pool": ["1H_Sword_Offhand", "Badge_Shield", "Rectangle_Shield", "Round_Shield", "Spike_Shield", "1H_Sword", "2H_Sword"],
+	{"name": "프라우", "model": "res://assets/astrid/B_mid/astrid.glb", "scale": 1.6, "color": Color(0.95, 0.8, 0.45),
+		"max_hp": 520.0, "atk": 42.0, "speed": 6.0, "reach": 2.6, "guard": 0.85, "ranged": false,
+		"blade": ["weapon_sword"], "weapon_bone": "RightHand", "attack_speed": 1.0,
 		"skill_name": "돌진 찌르기", "skill": "dash",
-		"anims": {"moves": {"idle": "Idle", "run": "Running_A", "a1": "1H_Melee_Attack_Slice_Diagonal", "a2": "1H_Melee_Attack_Slice_Horizontal", "a3": "1H_Melee_Attack_Stab", "a4": "1H_Melee_Attack_Chop",
-			"spin": "2H_Melee_Attack_Spin", "dodge": "Dodge_Forward", "hit": "Hit_A", "death": "Death_A", "charge": "Blocking", "skill": "1H_Melee_Attack_Stab", "ult": "2H_Melee_Attack_Spinning"}}},
-	{"name": "도끼전사", "model": "Barbarian", "color": Color(1.0, 0.55, 0.3), "max_hp": 600.0, "atk": 40.0, "speed": 5.4, "reach": 2.6, "guard": 0.6, "ranged": false,
-		"weapons": ["2H_Axe"], "blade": ["2H_Axe"], "attack_speed": 1.4, "weapon_pool": ["1H_Axe_Offhand", "Barbarian_Round_Shield", "1H_Axe", "2H_Axe", "Mug"],
-		"skill_name": "대지 가르기", "skill": "wave",
-		"anims": {"moves": {"idle": "2H_Melee_Idle", "run": "Running_A", "a1": "2H_Melee_Attack_Slice", "a2": "2H_Melee_Attack_Chop", "a3": "2H_Melee_Attack_Stab", "a4": "2H_Melee_Attack_Spin",
-			"spin": "2H_Melee_Attack_Spinning", "dodge": "Dodge_Forward", "hit": "Hit_A", "death": "Death_A", "charge": "2H_Melee_Idle", "skill": "2H_Melee_Attack_Chop", "ult": "2H_Melee_Attack_Spinning"}}},
-	{"name": "마법사", "model": "Mage", "color": Color(0.6, 0.85, 1.0), "max_hp": 340.0, "atk": 32.0, "speed": 5.8, "reach": 2.0, "guard": 1.0, "ranged": true,
-		"weapons": ["2H_Staff"], "blade": ["2H_Staff"], "attack_speed": 1.5, "weapon_pool": ["Spellbook", "Spellbook_open", "1H_Wand", "2H_Staff"],
-		"skill_name": "얼음 창", "skill": "beam",
-		"anims": {"moves": {"idle": "Idle", "run": "Running_A", "a1": "Spellcast_Shoot", "a2": "Spellcast_Shoot", "a3": "Spellcast_Shoot", "a4": "Spellcast_Long",
-			"spin": "Spellcast_Raise", "dodge": "Dodge_Forward", "hit": "Hit_A", "death": "Death_A", "charge": "Spellcasting", "skill": "Spellcast_Shoot", "ult": "Spellcast_Summon"}}},
+		"anims": {"moves": {"idle": "idle", "run": "run", "a1": "attack_1", "a2": "attack_2", "a3": "attack_3", "a4": "cast",
+			"spin": "spin", "dodge": "dodge", "hit": "hit", "death": "death", "charge": "idle", "skill": "attack_3", "ult": "spin"}}},
 ]
 
 var mobile := false          # 저사양 설정(boot.gd가 정한다)
@@ -58,7 +49,7 @@ var swap_cd := 0.0
 var boss: Node3D
 
 var camera: Camera3D
-var cam_dist := 8.0
+var cam_dist := 6.6
 var hud: Control
 var _slow_until := 0
 var _hitstop_until := 0
@@ -113,6 +104,15 @@ func _ready() -> void:
 	reset()
 
 
+## 지형 높이(캐릭터가 걷는 높이)
+func height_at(x: float, z: float) -> float:
+	return dungeon.height(Vector2(x, z)) if dungeon != null else 0.0
+
+
+func height_fn() -> Callable:
+	return func(p: Vector2) -> float: return height_at(p.x, p.y)
+
+
 ## 월드 좌표를 HUD(루트 캔버스) 좌표로
 func to_hud(p: Vector3) -> Vector2:
 	var v := camera.unproject_position(p)
@@ -153,7 +153,8 @@ func reset() -> void:
 	party = []
 	for h in HEROES:
 		var d: Dictionary = h.duplicate(true)
-		d.model = KAYKIT % h.model
+		if not str(h.model).begins_with("res://"):
+			d.model = KAYKIT % h.model
 		d.hp = d.max_hp
 		d.ult = 0.0
 		party.append(d)
@@ -271,7 +272,8 @@ func _update_camera(delta: float) -> void:
 	if player == null or not is_instance_valid(player):
 		return
 	var real := delta / maxf(Engine.time_scale, 0.05)
-	var want := 8.2 + (2.0 if boss != null and is_instance_valid(boss) else 0.0)
+	# 캐릭터가 화면에서 크게 보이도록 가깝게(보스전은 조금 물러난다)
+	var want := 6.6 + (2.0 if boss != null and is_instance_valid(boss) else 0.0)
 	var vs := get_viewport().get_visible_rect().size
 	if vs.x > vs.y:
 		want *= 1.4   # 가로 화면은 세로 시야가 좁아 조금 더 물러난다
@@ -477,6 +479,14 @@ func hit_enemy(e: Node3D, dmg: float, hero: Node3D, just: bool, label: String, w
 	if just:
 		weight = maxf(weight, 0.6)
 	var result: String = e.take_hit(dmg, dir, 5.0 + weight * 7.0)
+	if result == "block":
+		# 방패에 막혔다: 칼이 튕겨 나온다(짧게 멎고, 쇳소리). 콤보는 이어지지 않는다
+		popup(e.global_position + Vector3(0, 2.0 * e.stats.scale + 0.4, 0), "막힘", Color(0.75, 0.8, 0.9), 30)
+		hero.freeze(0.05)
+		e.freeze(0.05)
+		kick(dir, 0.006)
+		sfx("glint", 0.1, -2.0)
+		return
 	combo += 1
 	max_combo = maxi(max_combo, combo)
 	hud.combo_pulse(weight)
@@ -492,21 +502,23 @@ func hit_enemy(e: Node3D, dmg: float, hero: Node3D, just: bool, label: String, w
 	# 카메라는 맞은 방향으로 화면 너비의 0.7%쯤 한 번 밀렸다가 40~60ms 안에 돌아온다
 	if result == "counter":
 		popup(e.global_position + Vector3(0, top + 1.0, 0), "카운터", Color(1, 0.7, 0.3), 44)
-		hero.freeze(0.08)
-		e.freeze(0.12)
-		kick(dir, 0.016)
+		hero.freeze(0.1)
+		e.freeze(0.14)
+		kick(dir, 0.018)
 		sfx("counter", 0.05)
 		vibrate(60)
 	else:
+		# 맞는 순간 둘 다 짧게 멎어 무게를 싣는다(이펙트와 카메라는 계속 움직인다)
 		if weight >= 0.9:
-			hero.freeze(0.07)
-			e.freeze(0.09)
+			hero.freeze(0.1)
+			e.freeze(0.12)
 		elif just or weight >= 0.4:
-			hero.freeze(0.035)
-			e.freeze(0.05)
+			hero.freeze(0.075)
+			e.freeze(0.09)
 		else:
-			e.freeze(0.03)
-		kick(dir, 0.007 + weight * 0.008)
+			hero.freeze(0.06)
+			e.freeze(0.075)
+		kick(dir, 0.01 + weight * 0.01)
 		if just:
 			sfx("just", 0.06)
 			vibrate(30)
@@ -570,7 +582,7 @@ func enemy_hit(e: Node3D, dmg: float) -> void:
 	if player.state == "dead":
 		return
 	var dodging: bool = player.state == "dodge"
-	var hurt: bool = player.take_damage(dmg)
+	var hurt: bool = player.take_damage(dmg, e.global_position)
 	if not hurt and dodging:
 		player.perfect_dodge()
 	if hurt:
@@ -757,10 +769,12 @@ func slash(pos: Vector3, face: Vector3, reach: float, arc_deg: float, color: Col
 ## (레퍼런스: 화면을 덮는 섬광 대신 바닥 이펙트가 100~230ms에 솟고 350~750ms 남는다)
 func impact(at: Vector3, dir: Vector3, color: Color, weight: float) -> void:
 	spark(at, color, dir, 6 + int(weight * 10))
-	var ground := Vector3(at.x, 0.04, at.z)
-	ripple(ground, 0.6 + weight * 0.8, 0.55 + weight * 0.25)
+	var ground := Vector3(at.x, height_at(at.x, at.z) + 0.04, at.z)
+	# 바닥 링은 무거운 타격에만, 작게(가벼운 타격까지 링을 그리면 화면이 시끄럽다)
 	if weight >= 0.5:
-		ripple(ground, 1.2 + weight * 1.4, 0.7, 0.08)
+		ripple(ground, 0.5 + weight * 0.6, 0.4 + weight * 0.2)
+	if weight >= 0.9:
+		ripple(ground, 1.0 + weight * 0.9, 0.6, 0.06)
 		splash(ground, weight)
 
 
@@ -781,7 +795,7 @@ func ripple(pos: Vector3, radius: float, life: float, delay := 0.0) -> void:
 	mi.global_position = pos
 	var tw := mi.create_tween()
 	tw.tween_interval(delay)
-	tw.tween_property(m, "albedo_color:a", 0.75, 0.04)
+	tw.tween_property(m, "albedo_color:a", 0.45, 0.04)
 	tw.parallel().tween_property(mi, "scale", Vector3(radius, 0.02, radius), life).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_CUBIC)
 	tw.parallel().tween_property(m, "albedo_color:a", 0.0, life).set_delay(0.04).set_ease(Tween.EASE_IN)
 	tw.tween_callback(mi.queue_free)
