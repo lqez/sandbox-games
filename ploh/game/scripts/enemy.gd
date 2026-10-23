@@ -45,7 +45,9 @@ var flash := 0.0
 var face := Vector3(0, 0, 1)
 var model: Node3D
 var anim: AnimationPlayer
-var telegraph: MeshInstance3D
+var telegraph: Node3D               # 공격 예고: 옅은 바닥, 테두리 링, 안에서 자라 테두리에 닿는 순간이 타격인 링
+var _tg_edge: StandardMaterial3D
+var _tg_grow: MeshInstance3D
 var mats: Array = []
 var weapon: RefCounted
 var proc: SkeletonModifier3D
@@ -235,19 +237,40 @@ func _start_wind(hero: Node3D) -> void:
 	# 무기가 닿는 순간(접촉 프레임)이 예고 끝과 맞도록 재생 속도를 맞춘다
 	if anim.has_animation(pick[0]):
 		_play(pick[0], anim.get_animation(pick[0]).length * pick[1] / wind_time, 0.1, true)
-	telegraph = Fx.disc(strike_area, Color(1, 0.15, 0.15, 0.15))
+	telegraph = Node3D.new()
+	telegraph.add_child(Fx.disc(strike_area, Color(1, 0.2, 0.15, 0.07)))
+	_tg_edge = Fx.mat(Color(1, 0.25, 0.2, 0.55), 0.0, true)
+	telegraph.add_child(_ring(strike_area, _tg_edge))
+	# 박자처럼 다가오는 링: 테두리에 닿는 순간 무기가 떨어진다
+	_tg_grow = _ring(strike_area, Fx.mat(Color(1, 0.35, 0.25, 0.5), 0.0, true))
+	_tg_grow.scale = Vector3(0.05, 1.0, 0.05)
+	telegraph.add_child(_tg_grow)
 	game.add_child(telegraph)
 	telegraph.global_position = Vector3(strike_at.x, game.height_at(strike_at.x, strike_at.z) + 0.06, strike_at.z)
+
+
+func _ring(radius: float, m: Material) -> MeshInstance3D:
+	var tm := TorusMesh.new()
+	tm.inner_radius = radius - 0.05
+	tm.outer_radius = radius + 0.05
+	tm.rings = 40
+	tm.ring_segments = 4
+	var mi := MeshInstance3D.new()
+	mi.mesh = tm
+	mi.material_override = m
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	mi.position.y = 0.03
+	return mi
 
 
 func _update_telegraph() -> void:
 	if telegraph == null:
 		return
 	var k := clampf(t / wind_time, 0.0, 1.0)
-	telegraph.scale = Vector3(k, 1, k)
-	var m: StandardMaterial3D = telegraph.material_override
+	_tg_grow.scale = Vector3(maxf(k, 0.05), 1.0, maxf(k, 0.05))
+	# 카운터 구간(막바지)에는 금색으로 바뀐다
 	var late := wind_time - t <= COUNTER_WINDOW
-	m.albedo_color = Color(1, 0.85, 0.3, 0.5) if late else Color(1, 0.15, 0.15, 0.15 + 0.3 * k)
+	_tg_edge.albedo_color = Color(1, 0.85, 0.3, 0.75) if late else Color(1, 0.25, 0.2, 0.35 + 0.3 * k)
 
 
 func _clear_telegraph() -> void:

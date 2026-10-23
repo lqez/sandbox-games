@@ -796,7 +796,6 @@ func impact(at: Vector3, dir: Vector3, color: Color, weight: float) -> void:
 	if weight >= 0.5:
 		ripple(ground, 0.5 + weight * 0.6, 0.4 + weight * 0.2)
 	if weight >= 0.9:
-		ripple(ground, 1.0 + weight * 0.9, 0.6, 0.06)
 		splash(ground, weight)
 
 
@@ -817,7 +816,7 @@ func ripple(pos: Vector3, radius: float, life: float, delay := 0.0) -> void:
 	mi.global_position = pos
 	var tw := mi.create_tween()
 	tw.tween_interval(delay)
-	tw.tween_property(m, "albedo_color:a", 0.45, 0.04)
+	tw.tween_property(m, "albedo_color:a", 0.3, 0.04)
 	tw.parallel().tween_property(mi, "scale", Vector3(radius, 0.02, radius), life).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_CUBIC)
 	tw.parallel().tween_property(m, "albedo_color:a", 0.0, life).set_delay(0.04).set_ease(Tween.EASE_IN)
 	tw.tween_callback(mi.queue_free)
