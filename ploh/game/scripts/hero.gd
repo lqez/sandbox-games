@@ -112,7 +112,8 @@ var _swing_clock := 0.0              # 이번 타를 휘두르기 시작한 음�
 var _chain_end := -10.0              # 마지막 기본 공격의 칼이 다 지나간 음악 시각(고리를 잇는 기준)
 var _push := Vector3.ZERO            # 스킬 돌진: 이 거리를 _push_len초 동안 감속하며 간다
 var _push_len := 0.0
-var _react_t := 0.0                  # 피격 클립을 보여 줄 남은 시간(그 뒤 대기 자세로 섞는다)
+var _react_t := 0.0
+var _approach_t := 0.0               # 달려가 붙는 데 쓴 시간(막혔는지 본다)                  # 피격 클립을 보여 줄 남은 시간(그 뒤 대기 자세로 섞는다)
 var _double := false                 # 반 박 베기를 끼워 넣는다
 var _extra := false                  # 지금 타가 끼워 넣은 반 박 베기다
 var _just_streak := 0                # 연속 JUST 수. 세 번째마다 무거운 일격이 된다
@@ -785,6 +786,7 @@ func _start_hit() -> void:
 		var gap: float = global_position.distance_to(target.global_position) - target.radius - _strike_range()
 		if gap > 0.9:
 			phase = "approach"
+			_approach_t = 0.0
 			_play(_anim("run"), 1.3, 0.15)
 			return
 		# 클립 자체가 앞으로 내딛는 만큼은 빼고 좁힌다
@@ -980,10 +982,13 @@ func _update_attack(delta: float) -> void:
 		to.y = 0
 		face = to.normalized()
 		var gap: float = to.length() - target.radius - _strike_range()
-		if gap > 0.1:
+		_approach_t += delta
+		# 내딛기로 닿는 거리에 들어오면 바로 휘두른다. 소품·벽에 막혀 1.2초 넘게 못 가면 그 자리에서 휘두른다
+		if gap > 0.85 and _approach_t < 1.2:
 			# 도착하기 전에 미리 감속해서 급정지 없이 붙는다
 			_steer(face * minf(data.speed * 1.35, sqrt(2.0 * STOP_DECEL * gap) + 1.2), delta, false)
 			return
+		_lunge = clampf(gap - _root_forward(_clip), 0.0, 0.9)
 		_begin_swing()
 	var h: Dictionary = _hits[_hit_i]
 	var cl: Dictionary = clips.get(_clip, {"len": 0.9, "start": 0.3, "end": 0.45})
