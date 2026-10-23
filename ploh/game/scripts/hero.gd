@@ -316,7 +316,8 @@ func _tap(now: float, auto: bool) -> void:
 		"idle":
 			# 달리던 중에 누르면 멈칫하지 않고 달리던 힘을 내딛기에 실어 바로 친다(급정지는 공격 없이 설 때만)
 			_idle_tap(now, auto)
-		"brake":
+		"brake", "skill":
+			# 급정지·스킬 중에 누른 입력은 받아 두었다가 끝나자마자 낸다(씹히지 않게)
 			queued = true
 		"attack":
 			if move_kind == "chain":
@@ -402,6 +403,7 @@ func release_aim() -> void:
 	if state == "aim":
 		state = "skill"
 		t = 0.0
+		queued = false
 		_push_len = 0.0
 		invuln = 0.3
 		_play_near_strike(_anim("skill"), 1.4)
@@ -471,6 +473,8 @@ func ultimate() -> void:
 	invuln = 1.2
 	state = "skill"
 	t = 0.0
+	queued = false
+	_push_len = 0.0
 	_play_near_strike(_anim("ult"), 1.3)
 	game.ultimate_burst(self)
 
@@ -568,6 +572,9 @@ func _physics_process(delta: float) -> void:
 			t += delta
 			if t >= 0.55:
 				state = "idle"
+				if queued:
+					queued = false
+					_begin_chain()
 		_:
 			_vel = _vel.move_toward(Vector3.ZERO, 30.0 * delta)
 	var v_in := _vel + _root_v
