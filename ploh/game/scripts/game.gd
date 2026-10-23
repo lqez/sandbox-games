@@ -12,27 +12,33 @@ const Hud := preload("res://scripts/hud.gd")
 const Dungeon := preload("res://scripts/dungeon.gd")
 
 const KAYKIT := "res://assets/kaykit/heroes/%s.glb"
+const BPM := 120.0           # 전투 박자. 기본 공격 한 타가 한 박, 피니시가 두 박
+const BEAT := 60.0 / BPM
 const CAM_YAW := 45.0        # 디아블로식 고정 방향
-const CAM_PITCH := 38.0      # 디아블로(약 55도)보다 낮춰 캐릭터를 크게 본다
+const CAM_PITCH := 50.0      # 레퍼런스(약 55~60도)에 가깝게 올려 벽 가림을 줄이고, 캐릭터는 가까이 잡는다
 ## 영웅 정의. 모델은 CC0 KayKit 모험가. 원작 모델이 준비되면 model과 anims만 바꾼다
 const HEROES := [
 	{"name": "검기사", "model": "Knight", "color": Color(0.55, 0.7, 1.0), "max_hp": 460.0, "atk": 34.0, "speed": 6.0, "reach": 2.3, "guard": 0.85, "ranged": false,
-		"weapons": ["1H_Sword", "Badge_Shield"], "weapon_pool": ["1H_Sword_Offhand", "Badge_Shield", "Rectangle_Shield", "Round_Shield", "Spike_Shield", "1H_Sword", "2H_Sword"],
+		"weapons": ["1H_Sword", "Badge_Shield"], "blade": ["1H_Sword"], "attack_speed": 1.5, "weapon_pool": ["1H_Sword_Offhand", "Badge_Shield", "Rectangle_Shield", "Round_Shield", "Spike_Shield", "1H_Sword", "2H_Sword"],
 		"skill_name": "돌진 찌르기", "skill": "dash",
-		"anims": {"idle": "Idle", "run": "Running_A", "combo": ["1H_Melee_Attack_Slice_Diagonal", "1H_Melee_Attack_Slice_Horizontal", "1H_Melee_Attack_Stab", "1H_Melee_Attack_Chop"],
-			"spin": "2H_Melee_Attack_Spin", "dodge": "Dodge_Forward", "hit": "Hit_A", "death": "Death_A", "charge": "Blocking", "skill": "1H_Melee_Attack_Stab", "ult": "2H_Melee_Attack_Spinning"}},
+		"anims": {"moves": {"idle": "Idle", "run": "Running_A", "a1": "1H_Melee_Attack_Slice_Diagonal", "a2": "1H_Melee_Attack_Slice_Horizontal", "a3": "1H_Melee_Attack_Stab", "a4": "1H_Melee_Attack_Chop",
+			"spin": "2H_Melee_Attack_Spin", "dodge": "Dodge_Forward", "hit": "Hit_A", "death": "Death_A", "charge": "Blocking", "skill": "1H_Melee_Attack_Stab", "ult": "2H_Melee_Attack_Spinning"}}},
 	{"name": "도끼전사", "model": "Barbarian", "color": Color(1.0, 0.55, 0.3), "max_hp": 600.0, "atk": 40.0, "speed": 5.4, "reach": 2.6, "guard": 0.6, "ranged": false,
-		"weapons": ["2H_Axe"], "weapon_pool": ["1H_Axe_Offhand", "Barbarian_Round_Shield", "1H_Axe", "2H_Axe", "Mug"],
+		"weapons": ["2H_Axe"], "blade": ["2H_Axe"], "attack_speed": 1.4, "weapon_pool": ["1H_Axe_Offhand", "Barbarian_Round_Shield", "1H_Axe", "2H_Axe", "Mug"],
 		"skill_name": "대지 가르기", "skill": "wave",
-		"anims": {"idle": "2H_Melee_Idle", "run": "Running_A", "combo": ["2H_Melee_Attack_Slice", "2H_Melee_Attack_Chop", "2H_Melee_Attack_Stab", "2H_Melee_Attack_Spin"],
-			"spin": "2H_Melee_Attack_Spinning", "dodge": "Dodge_Forward", "hit": "Hit_A", "death": "Death_A", "charge": "2H_Melee_Idle", "skill": "2H_Melee_Attack_Chop", "ult": "2H_Melee_Attack_Spinning"}},
+		"anims": {"moves": {"idle": "2H_Melee_Idle", "run": "Running_A", "a1": "2H_Melee_Attack_Slice", "a2": "2H_Melee_Attack_Chop", "a3": "2H_Melee_Attack_Stab", "a4": "2H_Melee_Attack_Spin",
+			"spin": "2H_Melee_Attack_Spinning", "dodge": "Dodge_Forward", "hit": "Hit_A", "death": "Death_A", "charge": "2H_Melee_Idle", "skill": "2H_Melee_Attack_Chop", "ult": "2H_Melee_Attack_Spinning"}}},
 	{"name": "마법사", "model": "Mage", "color": Color(0.6, 0.85, 1.0), "max_hp": 340.0, "atk": 32.0, "speed": 5.8, "reach": 2.0, "guard": 1.0, "ranged": true,
-		"weapons": ["2H_Staff"], "weapon_pool": ["Spellbook", "Spellbook_open", "1H_Wand", "2H_Staff"],
+		"weapons": ["2H_Staff"], "blade": ["2H_Staff"], "attack_speed": 1.5, "weapon_pool": ["Spellbook", "Spellbook_open", "1H_Wand", "2H_Staff"],
 		"skill_name": "얼음 창", "skill": "beam",
-		"anims": {"idle": "Idle", "run": "Running_A", "combo": ["Spellcast_Shoot", "Spellcast_Shoot", "Spellcast_Shoot", "Spellcast_Long"],
-			"spin": "Spellcast_Raise", "dodge": "Dodge_Forward", "hit": "Hit_A", "death": "Death_A", "charge": "Spellcasting", "skill": "Spellcast_Shoot", "ult": "Spellcast_Summon"}},
+		"anims": {"moves": {"idle": "Idle", "run": "Running_A", "a1": "Spellcast_Shoot", "a2": "Spellcast_Shoot", "a3": "Spellcast_Shoot", "a4": "Spellcast_Long",
+			"spin": "Spellcast_Raise", "dodge": "Dodge_Forward", "hit": "Hit_A", "death": "Death_A", "charge": "Spellcasting", "skill": "Spellcast_Shoot", "ult": "Spellcast_Summon"}}},
 ]
 
+var mobile := false          # 저사양 설정(boot.gd가 정한다)
+var boot: Node
+var env: Environment
+var moon: DirectionalLight3D
 var party: Array = []        # 영웅 데이터. 전장에는 active 한 명만 나와 있다
 var active := 0
 var player: CharacterBody3D
@@ -53,13 +59,18 @@ var boss: Node3D
 
 var camera: Camera3D
 var cam_dist := 8.0
-var shake_amt := 0.0
 var hud: Control
 var _slow_until := 0
 var _hitstop_until := 0
 var _slow_scale := 1.0
 var shake_dir := Vector3.ZERO    # 마지막 타격 방향. 화면이 그쪽으로 밀린다
-var fov_kick := 0.0              # 피니시·카운터 순간 시야를 좁혀 치고 들어가는 느낌
+var cam_kick := Vector3.ZERO     # 카메라가 한 번 밀린 양(빠르게 0으로 돌아온다)
+var music: AudioStreamPlayer
+var _clock0 := 0
+var _last_beat := -1
+var cine_t := 0.0              # 보스 처치 연출이 남은 실제 시간
+var cine_target := Vector3.ZERO
+var cine_len := 0.0
 var _sfx: Dictionary = {}
 var _players: Array = []
 
@@ -73,17 +84,36 @@ func _ready() -> void:
 		var ap := AudioStreamPlayer.new()
 		add_child(ap)
 		_players.append(ap)
+	# 박자 루프. 웹은 첫 터치 뒤에야 소리를 낼 수 있어 첫 입력에서 시작한다
+	music = AudioStreamPlayer.new()
+	var loop: AudioStreamWAV = load("res://assets/sfx/beat_loop.wav")
+	loop.loop_mode = AudioStreamWAV.LOOP_FORWARD
+	loop.loop_end = int(loop.mix_rate * BEAT * 32)
+	music.stream = loop
+	music.volume_db = -9.0
+	add_child(music)
+	_clock0 = Time.get_ticks_msec()
 	camera = Camera3D.new()
 	camera.fov = 42.0
 	add_child(camera)
+	# UI는 3D와 달리 화면 원래 해상도로 그리도록 루트 창에 붙인다
 	var layer := CanvasLayer.new()
-	add_child(layer)
+	if boot != null:
+		boot.add_child(layer)
+	else:
+		add_child(layer)
 	hud = Hud.new()
 	hud.game = self
 	layer.add_child(hud)
-	get_viewport().size_changed.connect(_fit_orientation)
+	get_tree().root.size_changed.connect(_fit_orientation)
 	_fit_orientation()
 	reset()
+
+
+## 월드 좌표를 HUD(루트 캔버스) 좌표로
+func to_hud(p: Vector3) -> Vector2:
+	var v := camera.unproject_position(p)
+	return v * boot.view_to_hud() if boot != null else v
 
 
 func _fit_orientation() -> void:
@@ -115,6 +145,7 @@ func reset() -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.randomize()
 	dungeon = Dungeon.new()
+	dungeon.mobile = mobile
 	dungeon.build(world, rng)
 	party = []
 	for h in HEROES:
@@ -124,7 +155,7 @@ func reset() -> void:
 		d.ult = 0.0
 		party.append(d)
 	active = 0
-	_spawn_player(dungeon.rooms[0].center + Vector3(0, 0, 3.0))
+	_spawn_player(dungeon.rooms[0].center + Vector3(1.5, 0, 1.5))
 	room = -1
 	route_i = 0
 	state = "play"
@@ -157,10 +188,11 @@ func _enter_room(i: int) -> void:
 			e.setup(self, kind)
 			world.add_child(e)
 			var a := TAU * (n * 0.37 + randf() * 0.15)
-			var dist := 0.0 if kind == "boss" else randf_range(2.5, 4.5)
-			var pos: Vector3 = r.center + Vector3(cos(a) * dist, 0, sin(a) * dist)
+			var dist := 0.0 if kind == "boss" else randf_range(0.35, 0.7)
+			var off := Vector2(cos(a) * r.rx, sin(a) * r.rz).rotated(r.rot) * dist
+			var pos: Vector3 = r.center + Vector3(off.x, 0, off.y)
 			if kind == "boss":
-				pos = r.center + Vector3(0, 0, -2.5)
+				pos = r.center + Vector3(-1.5, 0, -1.5)
 			e.global_position = pos
 			enemies.append(e)
 			if kind == "boss":
@@ -174,7 +206,10 @@ func _update_rooms() -> void:
 	if room >= 0 and not dungeon.rooms[room].cleared and enemies.is_empty():
 		dungeon.rooms[room].cleared = true
 		if room == dungeon.rooms.size() - 1:
-			state = "clear"
+			if cine_t <= 0.0:
+				state = "clear"
+			else:
+				dungeon.rooms[room].cleared = false
 			return
 		hud.banner("방 정리 · 다음 방으로")
 	var here: int = dungeon.room_at(player.global_position)
@@ -211,6 +246,15 @@ func _process(delta: float) -> void:
 		_update_orbs(delta)
 		enemies = enemies.filter(func(e): return is_instance_valid(e) and e.state != "dead")
 		_update_rooms()
+	_beat_tick()
+	if cine_t > 0.0:
+		cine_t -= delta / maxf(Engine.time_scale, 0.05)
+	if dungeon != null:
+		dungeon.flicker(Time.get_ticks_msec() / 1000.0)
+		if player != null and is_instance_valid(player):
+			for m in [dungeon.wall_mat, dungeon.top_mat]:
+				m.set_shader_parameter("player_pos", player.global_position)
+				m.set_shader_parameter("cam_pos", camera.global_position)
 	_update_camera(delta)
 
 
@@ -222,7 +266,7 @@ func _update_camera(delta: float) -> void:
 	for e in enemies:
 		if e.global_position.distance_to(player.global_position) < 9.0:
 			near += 1
-	var want := 8.0 + minf(near, 6) * 0.45 + (2.5 if boss != null and is_instance_valid(boss) else 0.0)
+	var want := 8.6 + minf(near, 6) * 0.4 + (2.5 if boss != null and is_instance_valid(boss) else 0.0)
 	var vs := get_viewport().get_visible_rect().size
 	if vs.x > vs.y:
 		want *= 1.45   # 가로 화면은 세로 시야가 좁아 조금 더 물러난다
@@ -230,13 +274,16 @@ func _update_camera(delta: float) -> void:
 	var dir := Vector3(0, 0, 1).rotated(Vector3.RIGHT, -deg_to_rad(CAM_PITCH)).rotated(Vector3.UP, deg_to_rad(CAM_YAW))
 	# 화면 위쪽(진행 방향)을 더 보여 주도록 초점을 앞으로 당겨 영웅을 화면 아래쪽에 둔다
 	var focus := player.global_position + Vector3(0, 1.0, 0) + screen_to_world(Vector2(0, -1)) * 1.6
-	# 무작위 흔들림 대신 맞은 방향으로 밀렸다 돌아오는 진동
-	var wobble := sin(Time.get_ticks_msec() / 18.0)
-	var shake := (shake_dir * wobble * 0.6 + Vector3(randf_range(-1, 1), randf_range(-0.5, 0.5), randf_range(-1, 1)) * 0.25) * shake_amt * 0.3
-	shake_amt = maxf(shake_amt - delta * 3.0, 0.0)
-	fov_kick = maxf(fov_kick - delta * 18.0, 0.0)
-	var portrait := get_viewport().get_visible_rect().size.y >= get_viewport().get_visible_rect().size.x
-	camera.fov = (50.0 if portrait else 40.0) - fov_kick
+	if cine_t > 0.0:
+		# 처치 연출: 쓰러지는 적 쪽으로 다가가며 천천히 돈다
+		var k := 1.0 - cine_t / cine_len
+		focus = focus.lerp(cine_target + Vector3(0, 1.0, 0), smoothstep(0.0, 0.25, k))
+		cam_dist = lerpf(cam_dist, 5.2 if cine_len > 1.0 else 6.8, 0.08)
+		dir = dir.rotated(Vector3.UP, deg_to_rad(28.0) * k * (1.0 if cine_len > 1.0 else 0.4))
+	# 흔들림: 맞은 방향으로 한 번 밀렸다가 빠르게 돌아온다(진동하지 않는다). 슬로모션과 무관하게 실제 시간으로 줄인다
+	var real := delta / maxf(Engine.time_scale, 0.05)
+	var shake := cam_kick
+	cam_kick = cam_kick * exp(-real / 0.022)
 	camera.global_position = camera.global_position.lerp(focus + dir * cam_dist, minf(delta * 8.0, 1.0)) + shake
 	camera.look_at(focus, Vector3.UP)
 
@@ -250,7 +297,38 @@ func screen_to_world(v: Vector2) -> Vector3:
 
 # 조작 (hud에서 부른다) ----------------------------------------------------
 
+## 박자 시계(초). 음악이 돌면 음악 재생 위치를, 아니면 내부 시계를 쓴다
+func beat_clock() -> float:
+	if music.playing:
+		return music.get_playback_position() + AudioServer.get_time_since_last_mix() - AudioServer.get_output_latency()
+	return (Time.get_ticks_msec() - _clock0) / 1000.0
+
+
+## 가장 가까운 박자까지의 차이(초, 음수면 박자보다 이르다)
+func beat_offset() -> float:
+	var c := beat_clock()
+	return c - roundf(c / BEAT) * BEAT
+
+
+## 다음 박자까지 남은 시간(초). min_beats 박 이상 남도록 그다음 박자를 고른다
+func time_to_beat(min_beats: float) -> float:
+	var c := beat_clock()
+	var next := ceilf((c + min_beats * BEAT) / BEAT) * BEAT
+	return next - c
+
+
+func _beat_tick() -> void:
+	var b := int(floorf(beat_clock() / BEAT))
+	if b != _last_beat:
+		_last_beat = b
+		if state == "play" and player != null and is_instance_valid(player):
+			player.on_beat()
+
+
 func tap_down() -> void:
+	if not music.playing:
+		music.play()
+		_clock0 = Time.get_ticks_msec()
 	if state == "play":
 		player.tap_down()
 
@@ -283,7 +361,28 @@ func tap_cancel() -> void:
 
 func swipe(v: Vector2) -> void:
 	if state == "play":
-		player.swipe(screen_to_world(v))
+		player.flick(screen_to_world(v))
+
+
+func double_tap() -> void:
+	if state == "play":
+		player.double_tap()
+
+
+func circle() -> void:
+	if state == "play":
+		set_move(Vector2.ZERO)
+		player.circle()
+
+
+## 적이 이 영웅을 노리고 공격을 예고하는 중인지(이때 플릭은 언제나 회피다)
+func threatened(hero: Node3D) -> bool:
+	for e in enemies:
+		if is_instance_valid(e) and e.state == "wind":
+			var p: Vector3 = hero.global_position
+			if Vector2(p.x - e.strike_at.x, p.z - e.strike_at.z).length() <= e.strike_area + 0.8:
+				return true
+	return false
 
 
 func can_swap() -> bool:
@@ -371,43 +470,51 @@ func hit_enemy(e: Node3D, dmg: float, hero: Node3D, just: bool, label: String, w
 	max_combo = maxi(max_combo, combo)
 	hud.combo_pulse(weight)
 	party[active].ult = minf(party[active].ult + (5.0 if just else 3.0), 100.0)
-	var color := Color(1, 0.85, 0.3) if (just or crit) else Color.WHITE
+	var color := Color(1, 0.85, 0.3) if (just or crit) else Color(1, 1, 1)
 	var top: float = 2.0 * e.stats.scale
-	popup(e.global_position + Vector3(0, top, 0), str(int(dmg)), color, 64 if (just or crit) else 48)
+	popup(e.global_position + Vector3(0.5, top, 0), str(int(dmg)), Color(1, 0.88, 0.35) if (just or crit) else Color(1, 0.95, 0.8), 44 if (just or crit) else 36)
 	if label != "":
-		popup(e.global_position + Vector3(0, top + 0.7, 0), label, Color(1, 0.9, 0.6), 44)
+		popup(e.global_position + Vector3(0, top + 0.6, 0), label, Color(1, 0.9, 0.6), 34)
 	shake_dir = dir
 	var at: Vector3 = e.global_position + Vector3(0, 1.0 * e.stats.scale, 0) - dir * e.radius * 0.6
+	# 레퍼런스 기준: 화면 전체를 멈추지 않는다. 공격자와 맞은 적만 아주 잠깐 멎고,
+	# 카메라는 맞은 방향으로 화면 너비의 0.7%쯤 한 번 밀렸다가 40~60ms 안에 돌아온다
 	if result == "counter":
-		popup(e.global_position + Vector3(0, top + 1.2, 0), "카운터!", Color(1, 0.6, 0.2), 72)
-		hitstop(0.15)
-		shake(0.7)
-		fov_kick = 6.0
-		hud.flash(Color(1, 0.8, 0.4), 0.35)
+		popup(e.global_position + Vector3(0, top + 1.0, 0), "카운터", Color(1, 0.7, 0.3), 44)
+		hero.freeze(0.08)
+		e.freeze(0.12)
+		kick(dir, 0.016)
 		sfx("counter", 0.05)
-		vibrate(70)
+		vibrate(60)
 	else:
-		# 무게가 실릴수록 오래 멎고 크게 흔들린다
-		hitstop(0.045 + weight * 0.07)
-		shake(0.15 + weight * 0.45)
-		fov_kick = maxf(fov_kick, weight * 4.0)
+		if weight >= 0.9:
+			hero.freeze(0.07)
+			e.freeze(0.09)
+		elif just or weight >= 0.4:
+			hero.freeze(0.035)
+			e.freeze(0.05)
+		else:
+			e.freeze(0.03)
+		kick(dir, 0.007 + weight * 0.008)
 		if just:
 			sfx("just", 0.06)
-			vibrate(35)
+			vibrate(30)
 		else:
 			sfx("heavy" if weight >= 0.9 else "hit", 0.12)
-			vibrate(15 + int(weight * 30))
-		if weight >= 0.9:
-			hud.flash(Color(1, 1, 1), 0.18)
+			vibrate(12 + int(weight * 25))
 	impact(at, dir, color, weight)
 	if result == "dead":
 		sfx("kill", 0.1, -2.0)
+		if e.kind == "boss":
+			_finish_cinematic(e, true)
+			return
+		if e.kind == "warrior":
+			_finish_cinematic(e, false)
+			return
 		var alive := enemies.filter(func(x): return is_instance_valid(x) and x.state != "dead")
 		if alive.is_empty():
-			# 방의 마지막 적: 슬로모션으로 마무리를 보여 준다
-			slowmo(0.22, 0.7)
-			fov_kick = 8.0
-			hud.flash(Color(1, 0.95, 0.85), 0.25)
+			# 방의 마지막 적: 아주 짧게 늦춰 마무리를 보여 준다
+			slowmo(0.45, 0.3)
 
 
 func enemy_strike(e: Node3D, at: Vector3, area: float, dmg: float) -> void:
@@ -423,6 +530,41 @@ func enemy_strike(e: Node3D, at: Vector3, area: float, dmg: float) -> void:
 	if not hurt and dodging:
 		player.perfect_dodge()
 	combo = 0 if hurt else combo
+
+
+## 보스·정예 처치 연출: 슬로모션, 다가가며 도는 카메라, 섬광, 큰 글자, 겹친 효과음, 물보라
+func _finish_cinematic(e: Node3D, boss_kill: bool) -> void:
+	cine_target = e.global_position
+	cine_len = 1.8 if boss_kill else 0.7
+	cine_t = cine_len
+	slowmo(0.15 if boss_kill else 0.3, 1.4 if boss_kill else 0.5)
+	kick((e.global_position - player.global_position).normalized(), 0.02 if boss_kill else 0.012)
+	sfx("counter", 0.0, 0.0)
+	sfx("heavy", 0.0, 0.0)
+	vibrate(120 if boss_kill else 60)
+	var at := Vector3(e.global_position.x, 0.04, e.global_position.z)
+	splash(at, 1.0)
+	for k in (3 if boss_kill else 1):
+		ripple(at, 2.0 + k * 2.2, 0.9 + k * 0.2, k * 0.12)
+	if boss_kill:
+		hud.flash(Color(1, 0.96, 0.88), 0.5)
+		hud.title("균열의 군주 격파", "BOSS DEFEATED")
+	else:
+		hud.flash(Color(1, 1, 1), 0.15)
+		hud.title("정예 격파", "")
+
+
+## 적의 칼날이 영웅을 지나갔을 때. 회피 중이면 저스트 회피가 된다
+func enemy_hit(e: Node3D, dmg: float) -> void:
+	if player.state == "dead":
+		return
+	var dodging: bool = player.state == "dodge"
+	var hurt: bool = player.take_damage(dmg)
+	if not hurt and dodging:
+		player.perfect_dodge()
+	if hurt:
+		combo = 0
+		shake_dir = (player.global_position - e.global_position).normalized()
 
 
 func ultimate_burst(hero: Node3D) -> void:
@@ -553,8 +695,17 @@ func slowmo(scale: float, sec: float) -> void:
 	_slow_until = maxi(_slow_until, Time.get_ticks_msec() + int(sec * 1000))
 
 
+## 예전 호출용: 흔들림 세기를 화면 너비 비율로 바꿔 한 번 민다
 func shake(amount: float) -> void:
-	shake_amt = maxf(shake_amt, amount)
+	kick(shake_dir if shake_dir != Vector3.ZERO else Vector3(1, 0, 0), clampf(amount * 0.02, 0.004, 0.02))
+
+
+## 카메라를 dir 방향으로 화면 너비의 frac만큼 한 번 민다
+func kick(dir: Vector3, frac: float) -> void:
+	var width := 2.0 * cam_dist * tan(deg_to_rad(camera.fov) / 2.0)
+	var k := dir.normalized() * width * frac
+	if k.length() > cam_kick.length():
+		cam_kick = k
 
 
 func popup(pos: Vector3, text: String, color: Color, size: int) -> void:
@@ -591,16 +742,59 @@ func slash(pos: Vector3, face: Vector3, reach: float, arc_deg: float, color: Col
 		tw.tween_callback(mi.queue_free)
 
 
-## 맞은 자리의 섬광, 파편, 묵직한 타격의 충격파
+## 맞은 자리: 작은 불꽃과, 바닥에 오래 남는 물결 링. 무거운 타격은 물보라가 솟는다
+## (레퍼런스: 화면을 덮는 섬광 대신 바닥 이펙트가 100~230ms에 솟고 350~750ms 남는다)
 func impact(at: Vector3, dir: Vector3, color: Color, weight: float) -> void:
-	var flash_mi := MeshInstance3D.new()
-	var q := QuadMesh.new()
-	q.size = Vector2.ONE * (1.0 + weight * 1.2)
-	flash_mi.mesh = q
-	var m := Fx.mat(Color(color.lightened(0.5), 0.95), 3.0, true)
+	spark(at, color, dir, 6 + int(weight * 10))
+	var ground := Vector3(at.x, 0.04, at.z)
+	ripple(ground, 0.6 + weight * 0.8, 0.55 + weight * 0.25)
+	if weight >= 0.5:
+		ripple(ground, 1.2 + weight * 1.4, 0.7, 0.08)
+		splash(ground, weight)
+
+
+## 바닥에 퍼지는 얇은 물결 링
+func ripple(pos: Vector3, radius: float, life: float, delay := 0.0) -> void:
+	var mi := MeshInstance3D.new()
+	var tm := TorusMesh.new()
+	tm.inner_radius = 0.92
+	tm.outer_radius = 1.0
+	tm.rings = 32
+	tm.ring_segments = 4
+	mi.mesh = tm
+	var m := Fx.mat(Color(0.85, 0.95, 1.0, 0.0), 1.2, true)
 	m.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
-	m.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
-	m.no_depth_test = true
+	mi.material_override = m
+	mi.scale = Vector3(0.2, 0.02, 0.2) * radius
+	add_child(mi)
+	mi.global_position = pos
+	var tw := mi.create_tween()
+	tw.tween_interval(delay)
+	tw.tween_property(m, "albedo_color:a", 0.75, 0.04)
+	tw.parallel().tween_property(mi, "scale", Vector3(radius, 0.02, radius), life).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_CUBIC)
+	tw.parallel().tween_property(m, "albedo_color:a", 0.0, life).set_delay(0.04).set_ease(Tween.EASE_IN)
+	tw.tween_callback(mi.queue_free)
+
+
+## 무거운 타격의 물보라 기둥과 물방울
+func splash(pos: Vector3, weight: float) -> void:
+	var p := CPUParticles3D.new()
+	p.one_shot = true
+	p.emitting = true
+	p.amount = 18 + int(weight * 14)
+	p.lifetime = 0.55
+	p.explosiveness = 0.9
+	p.direction = Vector3.UP
+	p.spread = 28.0
+	p.initial_velocity_min = 3.0
+	p.initial_velocity_max = 5.5 + weight * 2.0
+	p.gravity = Vector3(0, -14, 0)
+	p.scale_amount_min = 0.5
+	p.scale_amount_max = 1.3
+	var q := QuadMesh.new()
+	q.size = Vector2(0.12, 0.12)
+	var m := Fx.mat(Color(0.88, 0.96, 1.0, 0.85), 1.0, true)
+	m.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
 	var tex := GradientTexture2D.new()
 	tex.fill = GradientTexture2D.FILL_RADIAL
 	tex.fill_from = Vector2(0.5, 0.5)
@@ -610,17 +804,11 @@ func impact(at: Vector3, dir: Vector3, color: Color, weight: float) -> void:
 	g.set_color(1, Color(1, 1, 1, 0))
 	tex.gradient = g
 	m.albedo_texture = tex
-	flash_mi.material_override = m
-	add_child(flash_mi)
-	flash_mi.global_position = at
-	var tw := flash_mi.create_tween()
-	tw.set_ignore_time_scale(true)
-	tw.tween_property(flash_mi, "scale", Vector3.ONE * 1.6, 0.09)
-	tw.parallel().tween_property(m, "albedo_color:a", 0.0, 0.12)
-	tw.tween_callback(flash_mi.queue_free)
-	spark(at, color, dir, 10 + int(weight * 16))
-	if weight >= 0.5:
-		ring(Vector3(at.x, 0, at.z), 1.2 + weight * 1.6, color)
+	q.material = m
+	p.mesh = q
+	add_child(p)
+	p.global_position = pos + Vector3(0, 0.05, 0)
+	get_tree().create_timer(1.2, true, false, true).timeout.connect(p.queue_free)
 
 
 ## JUST 박자 신호: 칼날이 반짝이고 맑은 소리가 난다(화면 UI 없이 동작으로 알린다)
@@ -703,24 +891,28 @@ func _build_env() -> void:
 	var env := WorldEnvironment.new()
 	var e := Environment.new()
 	e.background_mode = Environment.BG_COLOR
-	e.background_color = Color(0.02, 0.02, 0.04)
+	e.background_color = Color(0.03, 0.03, 0.05)
 	e.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	e.ambient_light_color = Color(0.36, 0.38, 0.6)
-	e.ambient_light_energy = 0.45
+	e.ambient_light_color = Color(0.42, 0.44, 0.6)
+	e.ambient_light_energy = 0.62
 	e.tonemap_mode = Environment.TONE_MAPPER_FILMIC
 	e.tonemap_exposure = 1.1
-	e.glow_enabled = true
-	e.glow_intensity = 0.9
-	e.glow_bloom = 0.08
+	e.glow_enabled = not mobile
+	e.glow_intensity = 0.55
+	e.glow_hdr_threshold = 1.3
+	e.glow_bloom = 0.0
 	e.fog_enabled = true
 	e.fog_light_color = Color(0.06, 0.05, 0.1)
 	e.fog_density = 0.02
 	env.environment = e
 	add_child(env)
-	var moon := DirectionalLight3D.new()
+	self.env = e
+	moon = DirectionalLight3D.new()
 	moon.rotation_degrees = Vector3(-60, 20, 0)
 	moon.light_color = Color(0.75, 0.8, 1.0)
-	moon.light_energy = 0.75
-	moon.shadow_enabled = true
+	moon.light_energy = 0.7
+	# 모바일은 실시간 그림자를 끄고 발밑 원형 그림자만 쓴다
+	moon.shadow_enabled = not mobile
+	moon.directional_shadow_mode = DirectionalLight3D.SHADOW_ORTHOGONAL
 	moon.directional_shadow_max_distance = 35.0
 	add_child(moon)

@@ -3,6 +3,8 @@ extends CharacterBody3D
 ## 예고가 끝나기 직전에 맞으면 카운터로 경직된다.
 
 const Fx := preload("res://scripts/fx.gd")
+const Weapon := preload("res://scripts/weapon.gd")
+const SWING_AFTER := 0.16   # 예고가 끝난 뒤 칼이 내려오는 동안 판정을 이어 가는 시간
 const SK := "res://assets/kaykit/skeletons/%s.glb"
 const WEAPON := "res://assets/kaykit/skeletons/weapons/%s.gltf"
 
@@ -27,12 +29,19 @@ var strike_area := 1.4
 var strike_at := Vector3.ZERO
 var attacks := 0
 var knock := Vector3.ZERO
+var knock_decel := 30.0
+var freeze_t := 0.0         # 맞은 순간 잠깐 멎는 시간(실제 초)
+var hit_count := 0          # 체력바는 처음 맞을 때부터 보인다
+var hp_trail := 0.0         # 체력바의 하얀 잔상(줄어든 만큼 잠시 남는다)
+var _trail_wait := 0.0
 var flash := 0.0
 var face := Vector3(0, 0, 1)
 var model: Node3D
 var anim: AnimationPlayer
 var telegraph: MeshInstance3D
 var mats: Array = []
+var weapon: RefCounted
+var _struck := false        # 이번 공격으로 이미 맞혔는지
 var _current := ""
 
 
@@ -86,9 +95,26 @@ func _play(name: String, speed := 1.0, blend := 0.1, restart := false) -> void:
 	anim.speed_scale = speed
 
 
+func _ready() -> void:
+	weapon = Weapon.attach(model, "handslot.r", [])
+
+
+func freeze(sec: float) -> void:
+	freeze_t = maxf(freeze_t, sec)
+
+
 func _physics_process(delta: float) -> void:
 	if state == "dead":
 		return
+	_trail_wait -= delta
+	if _trail_wait <= 0.0:
+		hp_trail = move_toward(hp_trail, hp, max_hp * 1.2 * delta)
+	if freeze_t > 0.0:
+		freeze_t -= delta / maxf(Engine.time_scale, 0.05)
+		anim.speed_scale = 0.0
+		return
+	if weapon != null:
+		weapon.update(delta)
 	flash = maxf(flash - delta, 0.0)
 	t += delta
 	var hero: Node3D = game.player
@@ -96,7 +122,7 @@ func _physics_process(delta: float) -> void:
 	to.y = 0
 	var dist := to.length()
 	velocity = knock
-	knock = knock.move_toward(Vector3.ZERO, delta * 30.0)
+	knock = knock.move_toward(Vector3.ZERO, delta * knock_decel)
 	match state:
 		"spawn":
 			if t >= 1.1:
@@ -113,8 +139,19 @@ func _physics_process(delta: float) -> void:
 				_play("Idle_Combat")
 		"wind":
 			_update_telegraph()
-			if t >= wind_time:
-				_strike()
+			# 넓은 내려찍기는 범위로, 나머지는 칼날이 실제로 영웅을 지날 때만 맞는다
+			if strike_area > 4.0 or weapon == null:
+				if t >= wind_time:
+					_strike(true)
+			else:
+				if t >= wind_time - 0.06 and not _struck and weapon.swept_hits(hero.global_position, 0.45, 1.8, 0.1):
+					_struck = true
+					game.enemy_hit(self, stats.atk)
+				if t >= wind_time and telegraph != null:
+					_clear_telegraph()
+					game.shake(0.12)
+				if t >= wind_time + SWING_AFTER:
+					_strike(false)
 		"recover":
 			if t >= 0.55:
 				state = "chase"
@@ -148,13 +185,15 @@ func _separation() -> Vector3:
 func _start_wind(hero: Node3D) -> void:
 	state = "wind"
 	t = 0.0
+	_struck = false
 	attacks += 1
-	wind_time = stats.wind
+	# 내려치는 순간이 박자 위에 오도록 예고 길이를 맞춘다(리듬게임처럼 박자에 맞춰 피하고 받아친다)
+	wind_time = game.time_to_beat(stats.wind / game.BEAT)
 	strike_area = stats.area
 	var anim_name := "1H_Melee_Attack_Chop"
 	# 보스는 세 번째마다 넓은 내려찍기
 	if kind == "boss" and attacks % 3 == 0:
-		wind_time = 1.6
+		wind_time = game.time_to_beat(3.0)
 		strike_area = 5.5
 		strike_at = global_position
 		anim_name = "2H_Melee_Attack_Spin"
@@ -188,12 +227,13 @@ func _clear_telegraph() -> void:
 		telegraph = null
 
 
-func _strike() -> void:
+func _strike(area: bool) -> void:
 	_clear_telegraph()
 	state = "recover"
 	t = 0.0
 	anim.speed_scale = 1.0
-	game.enemy_strike(self, strike_at, strike_area, stats.atk * (1.8 if strike_area > 4.0 else 1.0))
+	if area:
+		game.enemy_strike(self, strike_at, strike_area, stats.atk * (1.8 if strike_area > 4.0 else 1.0))
 
 
 func take_hit(dmg: float, dir: Vector3, power: float) -> String:
@@ -208,14 +248,16 @@ func take_hit(dmg: float, dir: Vector3, power: float) -> String:
 		state = "stagger"
 		t = 0.0
 		_play("Hit_B", 1.0, 0.05, true)
+	if hit_count == 0:
+		hp_trail = hp
+	hit_count += 1
 	hp = maxf(hp - dmg, 0.0)
-	flash = 0.1
-	knock = dir * power * stats.poise
-	# 맞은 순간 찌그러졌다 돌아온다
-	var base: Vector3 = Vector3.ONE * stats.scale
-	model.scale = base * Vector3(1.18, 0.82, 1.18)
-	var sq := create_tween()
-	sq.tween_property(model, "scale", base, 0.18).set_trans(Tween.TRANS_ELASTIC).set_ease(Tween.EASE_OUT)
+	_trail_wait = 0.35
+	flash = 0.08
+	# 레퍼런스: 약 250ms에 걸쳐 감속하며 몸 하나 거리만큼 밀린다
+	var dist: float = power * 0.12 * stats.poise
+	knock = dir * (dist * 2.0 / 0.25)
+	knock_decel = knock.length() / 0.25
 	if state in ["chase", "recover", "spawn"] and stats.poise >= 1.0:
 		state = "stagger"
 		t = 0.7

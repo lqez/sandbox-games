@@ -2,7 +2,7 @@ extends Node
 ## 개발용: 게임을 띄워 정해진 시각에 탭하고 화면을 PNG로 저장한다.
 ## 실행: Godot --path ploh/game --resolution 430x932 res://tests/shot.tscn -- <출력 폴더>
 
-const Game := preload("res://main.tscn")
+const Game := preload("res://main.tscn")  # boot.gd → SubViewport → game
 var game: Node
 var out := ""
 var t := 0.0
@@ -21,8 +21,8 @@ func _process(delta: float) -> void:
 	t += delta / maxf(Engine.time_scale, 0.05)
 	while taps.size() > 0 and t >= taps[0]:
 		taps.pop_front()
-		game.tap_down()
-		game.tap_up()
+		game.game.tap_down()
+		game.game.tap_up()
 	if shots.size() > 0 and t >= shots[0]:
 		shots.pop_front()
 		get_viewport().get_texture().get_image().save_png("%s/shot_%02d.png" % [out, n])

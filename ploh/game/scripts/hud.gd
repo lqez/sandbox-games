@@ -22,6 +22,11 @@ var _touch_pos := Vector2.ZERO
 var _swiped := false
 var _moving := false
 var _aiming := false
+var _last_tap_ms := -1000
+var _last_tap_pos := Vector2.ZERO
+var _turn := 0.0              # 드래그가 감아 돈 각도(원 그리기 판정)
+var _prev_dir := Vector2.ZERO
+var _circled := false
 var _key_moving := false
 var _ripples: Array = []     # {pos, t}
 var _trail: Array = []       # {a, b, t}
@@ -53,6 +58,7 @@ func _process(delta: float) -> void:
 	_combo_heat = maxf(_combo_heat - rd * 3.0, 0.0)
 	_milestone = maxf(_milestone - rd, 0.0)
 	_flash_t = maxf(_flash_t - rd, 0.0)
+	_title_t = maxf(_title_t - rd, 0.0)
 	if game != null and game.combo >= 3:
 		_combo_shown = game.combo
 		_combo_drop = 0.0
@@ -82,6 +88,18 @@ func combo_pulse(weight := 0.0) -> void:
 		_milestone_text = {10: "GOOD", 25: "GREAT", 50: "EXCELLENT", 100: "LEGEND"}[game.combo]
 
 
+var _title := ""
+var _subtitle := ""
+var _title_t := 0.0
+
+
+## 처치 연출의 큰 글자
+func title(text: String, sub: String) -> void:
+	_title = text
+	_subtitle = sub
+	_title_t = 2.2
+
+
 func flash(color: Color, dur: float) -> void:
 	_flash_color = color
 	_flash_t = dur
@@ -104,11 +122,23 @@ func _input(event: InputEvent) -> void:
 				_swiped = false
 				_moving = false
 				_aiming = false
+				_turn = 0.0
+				_prev_dir = Vector2.ZERO
+				_circled = false
 				_ripples.append({"pos": event.position, "t": 0.0})
-				game.tap_down()
+				var now := Time.get_ticks_msec()
+				if now - _last_tap_ms <= 240 and event.position.distance_to(_last_tap_pos) < 90:
+					_last_tap_ms = -1000
+					game.double_tap()   # 따닥
+				else:
+					_last_tap_ms = now
+					_last_tap_pos = event.position
+					game.tap_down()
 		elif event.index == _touch:
 			_touch = -1
-			if _aiming:
+			if _circled:
+				pass
+			elif _aiming:
 				_aiming = false
 				game.release_aim()
 			elif _moving:
@@ -121,6 +151,19 @@ func _input(event: InputEvent) -> void:
 		_touch_pos = event.position
 		var d: Vector2 = event.position - _touch_start
 		var quick: bool = Time.get_ticks_msec() - _touch_time <= SWIPE_TIME * 1000
+		# 원 그리기: 끌고 있는 방향이 감아 돈 각도를 쌓는다
+		if d.length() > 40.0:
+			var cur := d.normalized()
+			if _prev_dir != Vector2.ZERO:
+				_turn += _prev_dir.angle_to(cur)
+			_prev_dir = cur
+		if not _circled and absf(_turn) >= deg_to_rad(300.0):
+			_circled = true
+			_moving = false
+			_trail.append({"a": _touch_start, "b": event.position, "t": 0.0})
+			game.circle()
+			get_viewport().set_input_as_handled()
+			return
 		var charging: bool = game.player.state in ["charge", "aim"]
 		if _aiming or (charging and not _moving and d.length() >= MOVE_DIST):
 			_aiming = true
@@ -206,6 +249,7 @@ func _draw() -> void:
 	var portrait := s.y >= s.x
 	if _flash_t > 0.0:
 		draw_rect(Rect2(Vector2.ZERO, s), Color(_flash_color, 0.45 * _flash_t / _flash_dur))
+	_draw_enemy_bars()
 	_draw_party(Vector2(20, 20))
 	_draw_top(s)
 	_draw_combo(s, portrait)
@@ -221,7 +265,7 @@ func _draw() -> void:
 		draw_arc(_touch_start, STICK_R, 0, TAU, 40, Color(1, 1, 1, 0.3), 3)
 		draw_circle(knob, 30, Color(1, 1, 1, 0.35))
 	if _touch != -1 and _aiming:
-		var c: Vector2 = game.camera.unproject_position(game.player.global_position + Vector3(0, 0.2, 0))
+		var c: Vector2 = game.to_hud(game.player.global_position + Vector3(0, 0.2, 0))
 		var dir := (_touch_pos - _touch_start).normalized()
 		var tip := c + dir * 260
 		draw_line(c, tip, Color(0.6, 0.9, 1, 0.8), 14)
@@ -229,10 +273,36 @@ func _draw() -> void:
 		_text_center(c + dir * 150 + Vector2(0, -40), game.party[game.active].skill_name, 30, Color(0.8, 0.95, 1))
 	elif _touch != -1 and game.player.state == "charge":
 		draw_arc(_touch_pos, 60, 0, TAU, 40, Color(1, 0.85, 0.4, 0.8), 6)
+	if _title_t > 0.0:
+		var k := 1.0 - _title_t / 2.2
+		var a := minf(k * 6.0, 1.0) * minf(_title_t / 0.4, 1.0)
+		var sc := 1.25 - 0.25 * minf(k * 5.0, 1.0)
+		var c := Vector2(s.x / 2, s.y * 0.42)
+		draw_rect(Rect2(0, c.y - 70, s.x, 130), Color(0, 0, 0, 0.45 * a))
+		draw_set_transform(c, 0.0, Vector2.ONE * sc)
+		_text_center(Vector2.ZERO, _title, 54, Color(1, 0.9, 0.6, a))
+		if _subtitle != "":
+			_text_center(Vector2(0, 46), _subtitle, 22, Color(1, 1, 1, a * 0.8))
+		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 	if _banner_t > 0.0:
 		_text_center(Vector2(s.x / 2, s.y * 0.3), _banner, 46, Color(1, 0.92, 0.75, minf(_banner_t, 1.0)))
+	if game.boot != null and game.boot.show_fps:
+		_text_left(Vector2(s.x - 210, 120), "%d fps · 3D %d%%" % [int(game.boot.fps), int(game.boot.scale * 100)], 20, Color(0.7, 1, 0.7))
 	if game.state != "play":
 		_draw_result(s)
+
+
+func _draw_enemy_bars() -> void:
+	## 적 체력바: 처음 맞을 때 나타나고, 줄어든 만큼 하얀 잔상이 잠시 남았다가 빠진다(레퍼런스)
+	for e in game.enemies:
+		if not is_instance_valid(e) or e.hit_count == 0 or e.kind == "boss":
+			continue
+		var c: Vector2 = game.to_hud(e.global_position + Vector3(0, 2.2 * e.stats.scale, 0))
+		var w := 64.0
+		var r := Rect2(c - Vector2(w / 2, 0), Vector2(w, 7))
+		draw_rect(r.grow(2), Color(0, 0, 0, 0.6))
+		draw_rect(Rect2(r.position, Vector2(w * e.hp_trail / e.max_hp, 7)), Color(1, 1, 1, 0.85))
+		draw_rect(Rect2(r.position, Vector2(w * e.hp / e.max_hp, 7)), Color(0.86, 0.18, 0.2))
 
 
 func _draw_party(origin: Vector2) -> void:
@@ -276,10 +346,10 @@ func _draw_combo(s: Vector2, portrait: bool) -> void:
 	var col := Color(1, 1, 1).lerp(Color(1, 0.85, 0.3), clampf(heat * 2.0, 0, 1)).lerp(Color(1, 0.35, 0.2), clampf(heat * 2.0 - 1.0, 0, 1))
 	var a := 1.0 - _combo_drop
 	var anchor := Vector2(s.x - 36, s.y * (0.34 if portrait else 0.3)) + Vector2(0, _combo_drop * 80)
-	var punch := 1.0 + 0.55 * _combo_pulse * _combo_pulse
-	var jitter := Vector2(randf_range(-1, 1), randf_range(-1, 1)) * (_combo_heat * 7.0 + heat * 3.0)
+	var punch := 1.0 + 0.32 * _combo_pulse * _combo_pulse
+	var jitter := Vector2(randf_range(-1, 1), randf_range(-1, 1)) * (_combo_heat * 3.0 + heat * 1.5)
 	var tilt := -0.08 + sin(Time.get_ticks_msec() / 90.0) * 0.02 * (1.0 + heat * 3.0) + _combo_pulse * 0.12
-	var fs := int(78 + heat * 26)
+	var fs := int(58 + heat * 18)
 	var text := str(n)
 	var w := FONT.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
 	draw_set_transform(anchor + jitter, tilt, Vector2.ONE * punch)
@@ -314,7 +384,7 @@ func _draw_controls(s: Vector2, portrait: bool) -> void:
 	_round_button("swap", sw, 38, "교대", Color(0.16, 0.25, 0.42) if can else Color(0.18, 0.18, 0.22), can)
 	if game.swap_cd > 0.0:
 		draw_arc(sw, 44, -PI / 2, -PI / 2 + TAU * (1.0 - game.swap_cd / 3.0), 32, Color(0.6, 0.8, 1), 4)
-	_text_left(Vector2(20, s.y - 26), "터치 공격 · 길게 차지 · 길게 끌어 스킬 · 튕겨 회피 · 끌어 이동", 24, Color(1, 1, 1, 0.55))
+	_text_left(Vector2(20, s.y - 26), "터치 공격 · 따닥 연타 · 길게 차지 · 길게 끌어 스킬 · 튕겨 회피·돌진 · 원 그려 회오리", 24, Color(1, 1, 1, 0.55))
 
 
 func _draw_result(s: Vector2) -> void:
