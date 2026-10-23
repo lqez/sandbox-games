@@ -8,6 +8,7 @@ a series of minigames — 정적 파일만으로 동작해서 GitHub Pages로 �
 | --- | --- | --- |
 | 🛠 [PURATANK](./puratank/) | three.js로 만든 SD 플라모델 스타일 턴제 탱크 전투 | `/puratank/` |
 | 📚 [BOOKFIGHT](./bookfight/) | 책끼리 발췌문으로 입씨름하는 3D 격투 중계 (단판 1라운드) | `/bookfight/` |
+| ⚔️ [PLOH 전투 시제품](./ploh/play/) | Godot 4 웹 내보내기로 만든 세로형 방치 전투와 한손 개입 | `/ploh/play/` |
 
 ## GitHub Pages 설정
 

@@ -1,0 +1,8 @@
+.env
+.DS_Store
+# ploh: 원작 이미지가 들어간 내부 자료는 공개 저장소에 올리지 않는다
+ploh/assets/
+ploh/mockups/layouts/
+ploh/mockups/renders/
+ploh/docs/
+ploh/game/.godot/
