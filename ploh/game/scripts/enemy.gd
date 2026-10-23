@@ -193,10 +193,11 @@ func _physics_process(delta: float) -> void:
 				_start_wind(hero)
 			elif hero.state != "dead":
 				velocity += face * stats.speed + _separation()
+				# 클립이 원래 나아가는 속도에 맞춰 재생해서 발이 미끄러지지 않게 한다
 				if stats.speed > 3.0:
-					_play("run", stats.speed / 4.0)
+					_play("run", clampf(stats.speed / Hero.natural_speed(root_motion, anim, "run", stats.scale, 4.0), 0.6, 1.6))
 				else:
-					_play("walk", stats.speed / 1.6)
+					_play("walk", clampf(stats.speed / Hero.natural_speed(root_motion, anim, "walk", stats.scale, 1.6), 0.6, 1.6))
 			else:
 				_play("idle")
 		"wind":

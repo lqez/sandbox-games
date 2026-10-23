@@ -68,7 +68,13 @@ func _process(delta: float) -> void:
 			g.add_child(cam)
 			cam.current = true
 		var target := p.global_position + Vector3(0, 1.0, 0)
-		if cam_mode == "side":
+		if cam_mode == "foe":
+			# 맞는 쪽: 영웅이 노리는 적(없으면 가장 가까운 적)을 옆에서
+			var e: Node3D = p.target if (p.target != null and is_instance_valid(p.target)) else g.nearest_enemy(p.global_position, 8.0)
+			if e != null:
+				target = e.global_position + Vector3(0, 1.0, 0)
+			cam.global_position = target + SIDE * 3.2 + Vector3(0, 0.5, 0)
+		elif cam_mode == "side":
 			cam.global_position = target + SIDE * 3.6 + Vector3(0, 0.4, 0)
 		else:
 			cam.global_position = target + Vector3(0.7071, 0, 0.7071) * 2.25 + Vector3(0, 2.7, 0)

@@ -45,6 +45,8 @@ const WIND_RATE := 0.85
 const STRIKE_RATE := 1.8
 const HOLD := 0.1
 const EASE_K := 1.077                # 재생 위치에 따른 가감속(1.45 → 0.55)이 늘이는 시간만큼 미리 빠르게
+const WIND_MAX := 2.2                # 예비 동작을 이보다 빠르게 감지 않는다. 더 길면 앞부분을 건너뛰고 뒷부분부터 재생
+const STRIKE_MAX := 2.5              # 베기 구간도 이보다 빠르게 감지 않는다(모션캡처의 긴 베기를 욱여넣으면 튄다)
 const AUTO_RESUME := 0.8             # 직접 이동을 멈추고 이만큼 지나면 자동 이동
 ## 관성 이동
 const ACCEL := 20.0                  # 출발 가속(m/s²)
@@ -118,6 +120,8 @@ var _phrase_hits := 0                # 이번 소절에 이어 친 기본 공격
 var _hold_len := HOLD
 var _wind_spd := 1.0                 # 예비 동작 재생 속도(클립 초/초)
 var _strike_spd := 1.0               # 베기 재생 속도
+var _wind_start := 0.0               # 예비 동작을 건너뛰고 시작하는 클립 위치
+var _run_nat := 5.0                  # 달리기 클립이 원래 나아가는 속도(m/s, 모델 크기 반영). 발이 미끄러지지 않게 재생 속도를 맞춘다
 var _sweeping := false
 var _end_t := -1.0                   # 칼이 실제로 다 지나간 시각(t). 단계는 클립의 실제 재생 위치로 나눈다
 var root_motion := {}                # 클립이 원래 갖고 있던 수평 이동(클립에서는 지우고 몸을 그만큼 움직인다)
@@ -183,6 +187,7 @@ func _ready() -> void:
 	if not _root_cache.has(key):
 		_root_cache[key] = load_root_motion(key)
 	root_motion = _root_cache[key]
+	_run_nat = natural_speed(root_motion, anim, _anim("run"), model.scale.z, 5.0)
 	_play(_anim("idle"))
 
 
@@ -785,8 +790,9 @@ func _begin_swing() -> void:
 	_rm_prev = Vector2.INF
 	_rate = data.get("attack_speed", 1.0) * h.get("rate", 1.0)
 	_hold_len = HOLD
-	_wind_spd = _rate * WIND_RATE
+	_wind_start = 0.0
 	_strike_spd = minf(_rate * STRIKE_RATE, (c.end - c.start) / 0.07)
+	_set_wind(c, c.start / (_rate * WIND_RATE))
 	if move_kind == "chain":
 		var now: float = game.beat_clock()
 		_swing_clock = now
@@ -802,21 +808,30 @@ func _begin_swing() -> void:
 			strike = maxf(strike - lag, base * 0.7)
 			# 패턴 판정용 박자: 칼이 닿은 뒤 처음 오는 박자
 			_due = ceilf((now + strike) / game.BEAT) * game.BEAT
-		var cut_dur := (0.1 if heavy else 0.08)
+		var cut_dur := maxf(0.1 if heavy else 0.08, (c.end - c.start) / STRIKE_MAX)
 		_strike_spd = (c.end - c.start) / cut_dur * EASE_K
-		_wind_spd = c.start / maxf(strike - cut_dur, 0.05) * EASE_K
+		_set_wind(c, maxf(strike - cut_dur, 0.06))
 		_rate = _wind_spd
 		# 아무것도 누르지 않으면 뻗은 자세로 잠깐(레퍼런스 100~250ms) 머물렀다가 거둔다
 		_hold_len = 0.3 if heavy else 0.22
 	# 달리기·대기에서 들어올 때는 조금 길게 섞는다(발이 튀지 않게), 연타 사이는 짧게
 	var from_loco: bool = _current in [_anim("run"), _anim("idle"), _anim("dodge"), _anim("hit")]
-	_play(_clip, _wind_spd, 0.15 if from_loco else 0.08, true)
+	_play(_clip, _wind_spd, 0.15 if from_loco else 0.12, true)
+	if _wind_start > 0.0:
+		anim.seek(_wind_start, true)
+
+
+## 예비 동작을 wind_time초에 맞춘다. WIND_MAX배보다 빨라져야 하면 앞부분을 건너뛴다
+func _set_wind(c: Dictionary, wind_time: float) -> void:
+	wind_time = maxf(wind_time, 0.06)
+	_wind_start = maxf(c.start - wind_time * WIND_MAX / EASE_K, 0.0)
+	_wind_spd = maxf(c.start - _wind_start, 0.001) / wind_time * EASE_K
 
 
 ## 이 타의 시간표(초). 칼이 실제로 다 지나간 뒤에는 그 시각을 기준으로 머물고 거둔다
 func _swing() -> Dictionary:
 	var c: Dictionary = clips.get(_clip, {"len": 0.9, "start": 0.3, "end": 0.45})
-	var start: float = c.start / maxf(_wind_spd, 0.01)
+	var start: float = (c.start - _wind_start) / maxf(_wind_spd, 0.01)
 	var end: float = start + (c.end - c.start) / maxf(_strike_spd, 0.01)
 	if _end_t >= 0.0:
 		end = _end_t
@@ -835,7 +850,7 @@ func _clip_speed(c: Dictionary) -> float:
 	var cl: Dictionary = clips.get(_clip, {"len": 0.9, "start": 0.3, "end": 0.45})
 	var pos: float = _clip_pos()
 	if pos < cl.start:
-		return _wind_spd * lerpf(1.45, 0.55, pos / maxf(cl.start, 0.001))
+		return _wind_spd * lerpf(1.45, 0.55, clampf((pos - _wind_start) / maxf(cl.start - _wind_start, 0.001), 0.0, 1.0))
 	if _end_t < 0.0:
 		return _strike_spd * lerpf(0.55, 1.45, clampf((pos - cl.start) / maxf(cl.end - cl.start, 0.001), 0.0, 1.0))
 	if t < c.hold_end:
@@ -870,6 +885,15 @@ static func load_root_motion(model_path: String) -> Dictionary:
 		if arr.size() > 1:
 			out[clip] = arr
 	return out
+
+
+## 이동 클립(달리기·걷기)이 원래 나아가는 속도(m/s). 루트 이동 기록이 없으면 fallback
+static func natural_speed(rm: Dictionary, ap: AnimationPlayer, clip: String, scale: float, fallback: float) -> float:
+	var arr: PackedVector2Array = rm.get(clip, PackedVector2Array())
+	if arr.size() < 2 or not ap.has_animation(clip):
+		return fallback
+	var v := (arr[arr.size() - 1] - arr[0]).length() * scale / maxf(ap.get_animation(clip).length, 0.1)
+	return v if v > 0.5 else fallback
 
 
 ## 클립이 가진 수평 루트 이동(몸 기준, 모델 크기 반영 전)의 clip_sec 시점 값
@@ -1098,7 +1122,7 @@ func _animate(delta: float) -> void:
 	match state:
 		"idle":
 			if moving:
-				_play(_anim("run"), clampf(spd / 5.0, 0.7, 1.4), 0.2)
+				_play(_anim("run"), clampf(spd / _run_nat, 0.6, 1.6), 0.2)
 			elif _current == _anim("hit") and _react_t > 0.0:
 				pass
 			elif not anim.is_playing() or _current in [_anim("run"), _anim("charge"), _anim("hit"), _anim("dodge")]:
