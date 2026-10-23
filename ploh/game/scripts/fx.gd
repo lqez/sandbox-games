@@ -2,6 +2,46 @@ extends RefCounted
 ## 메시 조립과 연출 도우미. 원작 리소스 대신 기본 도형으로 로우폴리 캐릭터를 만든다.
 
 const FONT := preload("res://fonts/NotoSansKR-subset.ttf")
+const TOON := preload("res://shaders/toon.gdshader")
+const OUTLINE := preload("res://shaders/outline.gdshader")
+const SLASH := preload("res://shaders/slash.gdshader")
+
+
+## 모델의 모든 메시에 카툰 셰이더와 외곽선을 씌우고, 플래시·글로우를 조절할 재질 목록을 돌려준다.
+static func toonify(model: Node3D, outline := 0.012, shade := Color(0.5, 0.46, 0.74)) -> Array:
+	var out: Array = []
+	var cache := {}
+	var line := ShaderMaterial.new()
+	line.shader = OUTLINE
+	line.set_shader_parameter("width", outline)
+	for mi: MeshInstance3D in model.find_children("*", "MeshInstance3D", true, false):
+		if mi.mesh == null:
+			continue
+		for i in mi.mesh.get_surface_count():
+			var src: Material = mi.get_active_material(i)
+			if cache.has(src):
+				mi.set_surface_override_material(i, cache[src])
+				continue
+			var m := ShaderMaterial.new()
+			m.shader = TOON
+			m.set_shader_parameter("shade_tint", shade)
+			if src is BaseMaterial3D:
+				var b: BaseMaterial3D = src
+				m.set_shader_parameter("albedo", b.albedo_color)
+				m.set_shader_parameter("use_tex", b.albedo_texture != null)
+				if b.albedo_texture != null:
+					m.set_shader_parameter("albedo_tex", b.albedo_texture)
+			if outline > 0.0:
+				m.next_pass = line
+			cache[src] = m
+			out.append(m)
+			mi.set_surface_override_material(i, m)
+	return out
+
+
+static func set_param(mats: Array, name: String, value: Variant) -> void:
+	for m: ShaderMaterial in mats:
+		m.set_shader_parameter(name, value)
 
 
 static func mat(color: Color, emission := 0.0, unshaded := false) -> StandardMaterial3D:
@@ -138,17 +178,22 @@ static func disc(radius: float, color: Color) -> MeshInstance3D:
 	return mi
 
 
-## 수평 부채꼴 메시. 베기 궤적에 쓴다.
-static func arc_mesh(radius: float, inner: float, angle: float) -> ArrayMesh:
+## 수평 부채꼴 메시. 베기 궤적에 쓴다. UV.x는 휘두르는 방향(0→1), UV.y는 안쪽→바깥쪽.
+## +Z를 앞으로 보고, dir이 1이면 오른쪽에서 왼쪽으로 휘두른다.
+static func arc_mesh(radius: float, inner: float, angle: float, dir := 1.0) -> ArrayMesh:
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	var n := 18
+	var n := 24
 	for i in n:
-		var a0 := -angle / 2.0 + angle * i / n
-		var a1 := -angle / 2.0 + angle * (i + 1) / n
-		var p := [Vector3(sin(a0) * inner, 0, -cos(a0) * inner), Vector3(sin(a0) * radius, 0, -cos(a0) * radius),
-			Vector3(sin(a1) * radius, 0, -cos(a1) * radius), Vector3(sin(a1) * inner, 0, -cos(a1) * inner)]
+		var u0 := float(i) / n
+		var u1 := float(i + 1) / n
+		var a0 := (-angle / 2.0 + angle * u0) * dir
+		var a1 := (-angle / 2.0 + angle * u1) * dir
+		var p := [Vector3(sin(a0) * inner, 0, cos(a0) * inner), Vector3(sin(a0) * radius, 0, cos(a0) * radius),
+			Vector3(sin(a1) * radius, 0, cos(a1) * radius), Vector3(sin(a1) * inner, 0, cos(a1) * inner)]
+		var uv := [Vector2(u0, 0), Vector2(u0, 1), Vector2(u1, 1), Vector2(u1, 0)]
 		for idx in [0, 1, 2, 0, 2, 3]:
+			st.set_uv(uv[idx])
 			st.add_vertex(p[idx])
 	return st.commit()
 

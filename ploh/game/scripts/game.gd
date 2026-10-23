@@ -58,11 +58,21 @@ var hud: Control
 var _slow_until := 0
 var _hitstop_until := 0
 var _slow_scale := 1.0
+var shake_dir := Vector3.ZERO    # 마지막 타격 방향. 화면이 그쪽으로 밀린다
+var fov_kick := 0.0              # 피니시·카운터 순간 시야를 좁혀 치고 들어가는 느낌
+var _sfx: Dictionary = {}
+var _players: Array = []
 
 
 func _ready() -> void:
 	randomize()
 	_build_env()
+	for name in ["whoosh", "whoosh_heavy", "hit", "heavy", "glint", "just", "counter", "dodge", "kill", "step"]:
+		_sfx[name] = load("res://assets/sfx/%s.wav" % name)
+	for i in 12:
+		var ap := AudioStreamPlayer.new()
+		add_child(ap)
+		_players.append(ap)
 	camera = Camera3D.new()
 	camera.fov = 42.0
 	add_child(camera)
@@ -220,8 +230,13 @@ func _update_camera(delta: float) -> void:
 	var dir := Vector3(0, 0, 1).rotated(Vector3.RIGHT, -deg_to_rad(CAM_PITCH)).rotated(Vector3.UP, deg_to_rad(CAM_YAW))
 	# 화면 위쪽(진행 방향)을 더 보여 주도록 초점을 앞으로 당겨 영웅을 화면 아래쪽에 둔다
 	var focus := player.global_position + Vector3(0, 1.0, 0) + screen_to_world(Vector2(0, -1)) * 1.6
-	var shake := Vector3(randf_range(-1, 1), randf_range(-1, 1), randf_range(-1, 1)) * shake_amt * 0.25
-	shake_amt = maxf(shake_amt - delta * 2.5, 0.0)
+	# 무작위 흔들림 대신 맞은 방향으로 밀렸다 돌아오는 진동
+	var wobble := sin(Time.get_ticks_msec() / 18.0)
+	var shake := (shake_dir * wobble * 0.6 + Vector3(randf_range(-1, 1), randf_range(-0.5, 0.5), randf_range(-1, 1)) * 0.25) * shake_amt * 0.3
+	shake_amt = maxf(shake_amt - delta * 3.0, 0.0)
+	fov_kick = maxf(fov_kick - delta * 18.0, 0.0)
+	var portrait := get_viewport().get_visible_rect().size.y >= get_viewport().get_visible_rect().size.x
+	camera.fov = (50.0 if portrait else 40.0) - fov_kick
 	camera.global_position = camera.global_position.lerp(focus + dir * cam_dist, minf(delta * 8.0, 1.0)) + shake
 	camera.look_at(focus, Vector3.UP)
 
@@ -341,30 +356,58 @@ func enemies_in(from: Vector3, face: Vector3, reach: float, arc_deg: float) -> A
 	return out
 
 
-func hit_enemy(e: Node3D, dmg: float, hero: Node3D, just: bool, label: String) -> void:
+## weight: 0 가벼운 타, 0.5 중간, 1 피니시·차지·스킬
+func hit_enemy(e: Node3D, dmg: float, hero: Node3D, just: bool, label: String, weight := 0.0) -> void:
 	var dir: Vector3 = e.global_position - hero.global_position
 	dir.y = 0
 	dir = dir.normalized() if dir.length() > 0.01 else hero.face
 	var crit := randf() < 0.12
 	if crit:
 		dmg *= 1.5
-	var result: String = e.take_hit(dmg, dir, 9.0 if just else 5.0)
+	if just:
+		weight = maxf(weight, 0.6)
+	var result: String = e.take_hit(dmg, dir, 5.0 + weight * 7.0)
 	combo += 1
 	max_combo = maxi(max_combo, combo)
-	hud.combo_pulse()
+	hud.combo_pulse(weight)
 	party[active].ult = minf(party[active].ult + (5.0 if just else 3.0), 100.0)
 	var color := Color(1, 0.85, 0.3) if (just or crit) else Color.WHITE
-	popup(e.global_position + Vector3(0, 2.0 * e.stats.scale, 0), str(int(dmg)), color, 64 if (just or crit) else 48)
+	var top: float = 2.0 * e.stats.scale
+	popup(e.global_position + Vector3(0, top, 0), str(int(dmg)), color, 64 if (just or crit) else 48)
 	if label != "":
-		popup(e.global_position + Vector3(0, 2.0 * e.stats.scale + 0.7, 0), label, Color(1, 0.9, 0.6), 44)
+		popup(e.global_position + Vector3(0, top + 0.7, 0), label, Color(1, 0.9, 0.6), 44)
+	shake_dir = dir
+	var at: Vector3 = e.global_position + Vector3(0, 1.0 * e.stats.scale, 0) - dir * e.radius * 0.6
 	if result == "counter":
-		popup(e.global_position + Vector3(0, 2.0 * e.stats.scale + 1.2, 0), "카운터!", Color(1, 0.6, 0.2), 72)
-		hitstop(0.12)
-		shake(0.5)
+		popup(e.global_position + Vector3(0, top + 1.2, 0), "카운터!", Color(1, 0.6, 0.2), 72)
+		hitstop(0.15)
+		shake(0.7)
+		fov_kick = 6.0
+		hud.flash(Color(1, 0.8, 0.4), 0.35)
+		sfx("counter", 0.05)
+		vibrate(70)
 	else:
-		hitstop(0.07 if just else 0.04)
-		shake(0.25 if just else 0.12)
-	spark(e.global_position + Vector3(0, 1.0 * e.stats.scale, 0), color)
+		# 무게가 실릴수록 오래 멎고 크게 흔들린다
+		hitstop(0.045 + weight * 0.07)
+		shake(0.15 + weight * 0.45)
+		fov_kick = maxf(fov_kick, weight * 4.0)
+		if just:
+			sfx("just", 0.06)
+			vibrate(35)
+		else:
+			sfx("heavy" if weight >= 0.9 else "hit", 0.12)
+			vibrate(15 + int(weight * 30))
+		if weight >= 0.9:
+			hud.flash(Color(1, 1, 1), 0.18)
+	impact(at, dir, color, weight)
+	if result == "dead":
+		sfx("kill", 0.1, -2.0)
+		var alive := enemies.filter(func(x): return is_instance_valid(x) and x.state != "dead")
+		if alive.is_empty():
+			# 방의 마지막 적: 슬로모션으로 마무리를 보여 준다
+			slowmo(0.22, 0.7)
+			fov_kick = 8.0
+			hud.flash(Color(1, 0.95, 0.85), 0.25)
 
 
 func enemy_strike(e: Node3D, at: Vector3, area: float, dmg: float) -> void:
@@ -525,20 +568,99 @@ func popup(pos: Vector3, text: String, color: Color, size: int) -> void:
 	tw.tween_callback(l.queue_free)
 
 
-func slash(pos: Vector3, face: Vector3, reach: float, arc_deg: float, color: Color) -> void:
-	var mi := MeshInstance3D.new()
-	mi.mesh = Fx.arc_mesh(reach, reach * 0.35, deg_to_rad(minf(arc_deg, 359.0)))
-	var m := Fx.mat(Color(color, 0.75), 1.5, true)
+## 칼이 쓸고 지나가는 검기. dir은 휘두르는 방향(1: 오른쪽→왼쪽), weight가 클수록 굵고 오래 남는다
+func slash(pos: Vector3, face: Vector3, reach: float, arc_deg: float, color: Color, dir := 1.0, weight := 0.0) -> void:
+	for layer in 2:
+		var mi := MeshInstance3D.new()
+		var r: float = reach * (1.05 if layer == 0 else 0.92)
+		mi.mesh = Fx.arc_mesh(r, r * (0.45 if layer == 0 else 0.7), deg_to_rad(minf(arc_deg, 359.0)), dir)
+		var m := ShaderMaterial.new()
+		m.shader = Fx.SLASH
+		m.set_shader_parameter("color", color if layer == 0 else Color(1, 1, 1))
+		m.set_shader_parameter("tail", 0.7 if arc_deg >= 300.0 else 0.55)
+		mi.material_override = m
+		add_child(mi)
+		mi.global_position = pos + Vector3(0, 0.95 + layer * 0.05, 0)
+		mi.rotation.y = atan2(face.x, face.z)
+		# 휘두르는 방향으로 살짝 기울여 평면처럼 보이지 않게 한다
+		mi.rotation.z = 0.12 * dir
+		var dur := 0.2 + weight * 0.1
+		var tw := mi.create_tween()
+		tw.tween_method(func(v): m.set_shader_parameter("progress", v), 0.0, 1.0, dur)
+		tw.tween_method(func(v): m.set_shader_parameter("fade", v), 1.0, 0.0, 0.12 + weight * 0.1)
+		tw.tween_callback(mi.queue_free)
+
+
+## 맞은 자리의 섬광, 파편, 묵직한 타격의 충격파
+func impact(at: Vector3, dir: Vector3, color: Color, weight: float) -> void:
+	var flash_mi := MeshInstance3D.new()
+	var q := QuadMesh.new()
+	q.size = Vector2.ONE * (1.0 + weight * 1.2)
+	flash_mi.mesh = q
+	var m := Fx.mat(Color(color.lightened(0.5), 0.95), 3.0, true)
 	m.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
-	m.cull_mode = BaseMaterial3D.CULL_DISABLED
-	mi.material_override = m
-	add_child(mi)
-	mi.global_position = pos + Vector3(0, 1.0, 0)
-	mi.rotation.y = atan2(-face.x, -face.z)
-	var tw := mi.create_tween()
-	tw.tween_property(m, "albedo_color:a", 0.0, 0.22)
-	tw.parallel().tween_property(mi, "scale", Vector3(1.12, 1, 1.12), 0.22)
-	tw.tween_callback(mi.queue_free)
+	m.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+	m.no_depth_test = true
+	var tex := GradientTexture2D.new()
+	tex.fill = GradientTexture2D.FILL_RADIAL
+	tex.fill_from = Vector2(0.5, 0.5)
+	tex.fill_to = Vector2(1.0, 0.5)
+	var g := Gradient.new()
+	g.set_color(0, Color(1, 1, 1, 1))
+	g.set_color(1, Color(1, 1, 1, 0))
+	tex.gradient = g
+	m.albedo_texture = tex
+	flash_mi.material_override = m
+	add_child(flash_mi)
+	flash_mi.global_position = at
+	var tw := flash_mi.create_tween()
+	tw.set_ignore_time_scale(true)
+	tw.tween_property(flash_mi, "scale", Vector3.ONE * 1.6, 0.09)
+	tw.parallel().tween_property(m, "albedo_color:a", 0.0, 0.12)
+	tw.tween_callback(flash_mi.queue_free)
+	spark(at, color, dir, 10 + int(weight * 16))
+	if weight >= 0.5:
+		ring(Vector3(at.x, 0, at.z), 1.2 + weight * 1.6, color)
+
+
+## JUST 박자 신호: 칼날이 반짝이고 맑은 소리가 난다(화면 UI 없이 동작으로 알린다)
+func just_cue(hero: Node3D) -> void:
+	sfx("glint", 0.04, -6.0)
+	var tip: Vector3 = hero.global_position + Vector3(0, 1.3, 0) + hero.face * 0.8
+	var p := CPUParticles3D.new()
+	p.one_shot = true
+	p.emitting = true
+	p.amount = 6
+	p.lifetime = 0.25
+	p.explosiveness = 1.0
+	p.spread = 180.0
+	p.initial_velocity_min = 0.5
+	p.initial_velocity_max = 1.5
+	p.gravity = Vector3.ZERO
+	var mesh := QuadMesh.new()
+	mesh.size = Vector2(0.18, 0.18)
+	var mm := Fx.mat(Color(1, 0.95, 0.7), 4.0, true)
+	mm.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
+	mm.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	mesh.material = mm
+	p.mesh = mesh
+	add_child(p)
+	p.global_position = tip
+	get_tree().create_timer(0.6, true, false, true).timeout.connect(p.queue_free)
+
+
+func sfx(name: String, pitch_var := 0.1, volume_db := 0.0) -> void:
+	for ap: AudioStreamPlayer in _players:
+		if not ap.playing:
+			ap.stream = _sfx[name]
+			ap.pitch_scale = randf_range(1.0 - pitch_var, 1.0 + pitch_var)
+			ap.volume_db = volume_db
+			ap.play()
+			return
+
+
+func vibrate(ms: int) -> void:
+	Input.vibrate_handheld(ms)
 
 
 func ring(pos: Vector3, radius: float, color: Color) -> void:
@@ -553,15 +675,15 @@ func ring(pos: Vector3, radius: float, color: Color) -> void:
 	tw.tween_callback(mi.queue_free)
 
 
-func spark(pos: Vector3, color: Color) -> void:
+func spark(pos: Vector3, color: Color, dir := Vector3.UP, amount := 14) -> void:
 	var p := CPUParticles3D.new()
 	p.one_shot = true
 	p.emitting = true
-	p.amount = 14
+	p.amount = amount
 	p.lifetime = 0.35
 	p.explosiveness = 1.0
-	p.direction = Vector3.UP
-	p.spread = 180.0
+	p.direction = (dir + Vector3(0, 0.6, 0)).normalized()
+	p.spread = 55.0
 	p.initial_velocity_min = 4.0
 	p.initial_velocity_max = 9.0
 	p.gravity = Vector3(0, -12, 0)
@@ -583,12 +705,12 @@ func _build_env() -> void:
 	e.background_mode = Environment.BG_COLOR
 	e.background_color = Color(0.02, 0.02, 0.04)
 	e.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	e.ambient_light_color = Color(0.42, 0.42, 0.62)
-	e.ambient_light_energy = 0.7
+	e.ambient_light_color = Color(0.36, 0.38, 0.6)
+	e.ambient_light_energy = 0.45
 	e.tonemap_mode = Environment.TONE_MAPPER_FILMIC
 	e.tonemap_exposure = 1.1
 	e.glow_enabled = true
-	e.glow_intensity = 0.6
+	e.glow_intensity = 0.9
 	e.glow_bloom = 0.08
 	e.fog_enabled = true
 	e.fog_light_color = Color(0.06, 0.05, 0.1)
@@ -598,7 +720,7 @@ func _build_env() -> void:
 	var moon := DirectionalLight3D.new()
 	moon.rotation_degrees = Vector3(-60, 20, 0)
 	moon.light_color = Color(0.75, 0.8, 1.0)
-	moon.light_energy = 0.55
+	moon.light_energy = 0.75
 	moon.shadow_enabled = true
 	moon.directional_shadow_max_distance = 35.0
 	add_child(moon)

@@ -12,7 +12,6 @@ const SWIPE_DIST := 55.0     # 이만큼 빠르게 밀면 회피(플릭)
 const SWIPE_TIME := 0.2      # 이 시간 안에 밀어야 플릭으로 본다
 const MOVE_DIST := 28.0      # 플릭이 아닌 채로 이만큼 끌면 직접 이동
 const STICK_R := 90.0        # 이동 스틱이 최대 속도가 되는 거리
-const BEAT_R := 74.0         # 박자 링의 기준 반지름
 
 var game: Node
 var buttons: Array = []      # {id, center, radius}
@@ -29,6 +28,14 @@ var _trail: Array = []       # {a, b, t}
 var _banner := ""
 var _banner_t := 0.0
 var _combo_pulse := 0.0
+var _combo_shown := 0         # 화면에 보이는 콤보 수(끊긴 뒤에도 떨어지는 동안 유지)
+var _combo_drop := 0.0        # 콤보가 끊긴 뒤 떨어지는 연출 진행(0~1)
+var _combo_heat := 0.0        # 무거운 타격일수록 커지는 흔들림
+var _milestone := 0.0         # 10·25·50 콤보 축하 연출
+var _milestone_text := ""
+var _flash_color := Color.WHITE
+var _flash_t := 0.0
+var _flash_dur := 0.1
 
 
 func _ready() -> void:
@@ -42,7 +49,17 @@ func _process(delta: float) -> void:
 	_key_move()
 	var rd := delta / maxf(Engine.time_scale, 0.05)   # 슬로모션과 무관하게 흐르는 시간
 	_banner_t = maxf(_banner_t - rd, 0.0)
-	_combo_pulse = maxf(_combo_pulse - rd * 4.0, 0.0)
+	_combo_pulse = maxf(_combo_pulse - rd * 5.0, 0.0)
+	_combo_heat = maxf(_combo_heat - rd * 3.0, 0.0)
+	_milestone = maxf(_milestone - rd, 0.0)
+	_flash_t = maxf(_flash_t - rd, 0.0)
+	if game != null and game.combo >= 3:
+		_combo_shown = game.combo
+		_combo_drop = 0.0
+	elif _combo_shown > 0:
+		_combo_drop += rd * 2.2
+		if _combo_drop >= 1.0:
+			_combo_shown = 0
 	for r in _ripples:
 		r.t += rd
 	_ripples = _ripples.filter(func(r): return r.t < 0.4)
@@ -57,8 +74,18 @@ func banner(text: String) -> void:
 	_banner_t = 2.0
 
 
-func combo_pulse() -> void:
+func combo_pulse(weight := 0.0) -> void:
 	_combo_pulse = 1.0
+	_combo_heat = maxf(_combo_heat, 0.4 + weight)
+	if game.combo in [10, 25, 50, 100]:
+		_milestone = 1.0
+		_milestone_text = {10: "GOOD", 25: "GREAT", 50: "EXCELLENT", 100: "LEGEND"}[game.combo]
+
+
+func flash(color: Color, dur: float) -> void:
+	_flash_color = color
+	_flash_t = dur
+	_flash_dur = dur
 
 
 # 입력 -------------------------------------------------------------------
@@ -177,7 +204,8 @@ func _draw() -> void:
 	buttons.clear()
 	var s := size
 	var portrait := s.y >= s.x
-	_draw_beat()
+	if _flash_t > 0.0:
+		draw_rect(Rect2(Vector2.ZERO, s), Color(_flash_color, 0.45 * _flash_t / _flash_dur))
 	_draw_party(Vector2(20, 20))
 	_draw_top(s)
 	_draw_combo(s, portrait)
@@ -205,26 +233,6 @@ func _draw() -> void:
 		_text_center(Vector2(s.x / 2, s.y * 0.3), _banner, 46, Color(1, 0.92, 0.75, minf(_banner_t, 1.0)))
 	if game.state != "play":
 		_draw_result(s)
-
-
-func _draw_beat() -> void:
-	## 영웅 주위의 박자 링. 바깥 링이 줄어들어 기준 링과 겹칠 때 누르면 JUST
-	var p: Node3D = game.player
-	if p.state == "dead":
-		return
-	var c: Vector2 = game.camera.unproject_position(p.global_position + Vector3(0, 1.0, 0))
-	var rem: float = p.beat_remaining()
-	var window: float = p.JUST_END - p.JUST_START
-	if rem == -1.0 or rem < -window:
-		draw_arc(c, BEAT_R, 0, TAU, 48, Color(1, 1, 1, 0.12), 2)
-		return
-	if rem > 0.0:
-		draw_arc(c, BEAT_R, 0, TAU, 48, Color(1, 1, 1, 0.35), 3)
-		draw_arc(c, BEAT_R + rem * 420.0, 0, TAU, 48, Color(1, 0.85, 0.4, 0.7), 4)
-	else:
-		var pulse := 0.6 + 0.4 * sin(Time.get_ticks_msec() / 30.0)
-		draw_arc(c, BEAT_R, 0, TAU, 48, Color(1, 0.85, 0.3, pulse), 9)
-		_text_center(c + Vector2(0, -BEAT_R - 22), "지금!", 26, Color(1, 0.88, 0.4, pulse))
 
 
 func _draw_party(origin: Vector2) -> void:
@@ -260,15 +268,39 @@ func _draw_top(s: Vector2) -> void:
 
 
 func _draw_combo(s: Vector2, portrait: bool) -> void:
-	if game.combo < 2:
+	## 3콤보부터 숫자가 튀어 오른다. 칠 때마다 커졌다 줄고, 콤보가 쌓일수록 뜨거운 색으로 바뀌며 떨린다.
+	if _combo_shown < 3:
 		return
-	var pos := Vector2(s.x - 40, s.y * (0.36 if portrait else 0.34))
-	var fs := int(64 + 20 * _combo_pulse)
-	var text := "%d" % game.combo
+	var n := _combo_shown
+	var heat := clampf((n - 3) / 40.0, 0.0, 1.0)
+	var col := Color(1, 1, 1).lerp(Color(1, 0.85, 0.3), clampf(heat * 2.0, 0, 1)).lerp(Color(1, 0.35, 0.2), clampf(heat * 2.0 - 1.0, 0, 1))
+	var a := 1.0 - _combo_drop
+	var anchor := Vector2(s.x - 36, s.y * (0.34 if portrait else 0.3)) + Vector2(0, _combo_drop * 80)
+	var punch := 1.0 + 0.55 * _combo_pulse * _combo_pulse
+	var jitter := Vector2(randf_range(-1, 1), randf_range(-1, 1)) * (_combo_heat * 7.0 + heat * 3.0)
+	var tilt := -0.08 + sin(Time.get_ticks_msec() / 90.0) * 0.02 * (1.0 + heat * 3.0) + _combo_pulse * 0.12
+	var fs := int(78 + heat * 26)
+	var text := str(n)
 	var w := FONT.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
-	_text_left(pos - Vector2(w, 0), text, fs, Color(1, 0.88, 0.5))
-	var hw := FONT.get_string_size("HIT", HORIZONTAL_ALIGNMENT_LEFT, -1, 26).x
-	_text_left(pos + Vector2(-hw, 36), "HIT", 26, Color(1, 1, 1, 0.9))
+	draw_set_transform(anchor + jitter, tilt, Vector2.ONE * punch)
+	# 뒤에 번지는 잔상
+	if _combo_pulse > 0.0:
+		draw_string(FONT, Vector2(-w - 6, 6), text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color(col, 0.35 * _combo_pulse * a))
+	draw_string_outline(FONT, Vector2(-w, 0), text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, 14, Color(0.12, 0.04, 0.02, a))
+	draw_string(FONT, Vector2(-w, 0), text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color(col, a))
+	var hit_w := FONT.get_string_size("COMBO", HORIZONTAL_ALIGNMENT_LEFT, -1, 26).x
+	draw_string_outline(FONT, Vector2(-hit_w, 34), "COMBO", HORIZONTAL_ALIGNMENT_LEFT, -1, 26, 6, Color(0, 0, 0, a * 0.8))
+	draw_string(FONT, Vector2(-hit_w, 34), "COMBO", HORIZONTAL_ALIGNMENT_LEFT, -1, 26, Color(1, 1, 1, a * 0.9))
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	if _milestone > 0.0:
+		var k := 1.0 - _milestone
+		var c := anchor + Vector2(-80, -30)
+		draw_arc(c, 40 + 160 * k, 0, TAU, 48, Color(col, 0.8 * _milestone), 10 * _milestone + 2)
+		draw_set_transform(c + Vector2(0, -70), 0.0, Vector2.ONE * (1.0 + 0.4 * _milestone))
+		var mw := FONT.get_string_size(_milestone_text, HORIZONTAL_ALIGNMENT_LEFT, -1, 40).x
+		draw_string_outline(FONT, Vector2(-mw / 2, 0), _milestone_text, HORIZONTAL_ALIGNMENT_LEFT, -1, 40, 8, Color(0, 0, 0, _milestone))
+		draw_string(FONT, Vector2(-mw / 2, 0), _milestone_text, HORIZONTAL_ALIGNMENT_LEFT, -1, 40, Color(col.lightened(0.3), _milestone))
+		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 
 func _draw_controls(s: Vector2, portrait: bool) -> void:

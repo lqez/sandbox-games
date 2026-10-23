@@ -3,7 +3,8 @@ extends CharacterBody3D
 ##
 ## 이동은 자동이다. 방을 차례로 지나며 적에게 붙는다. 드래그하는 동안만 직접 이동하고,
 ## 손을 떼고 잠시 지나면 다시 자동 이동으로 돌아간다. 플레이어는 제스처로 싸운다.
-## - 터치: 콤보 공격. 박자 링이 금색일 때 누르면 JUST 강화타
+## - 터치: 콤보 공격. 휘두른 뒤 자세가 잠깐 멎고 칼날이 반짝이는 순간에 이어 누르면 JUST 강화타.
+##   박자는 화면 표시 없이 동작(멈칫, 반짝임, 소리)으로만 알린다
 ## - 롱터치: 차지, 떼면 회전베기
 ## - 롱터치 후 드래그: 그 방향으로 스킬 조준, 떼면 발동
 ## - 플릭: 회피 대시. 대시 직후 터치하면 돌진베기
@@ -46,9 +47,11 @@ var dash_attack := false
 var move_input := Vector3.ZERO  # 드래그 중인 직접 이동 방향. 길이 0~1
 var manual_t := 99.0            # 마지막 직접 이동 뒤 지난 시간
 var target: Node3D
+var mats: Array = []            # 카툰 셰이더 재질. 플래시·글로우를 조절한다
 var _current := ""
-var _overlay: StandardMaterial3D
-var _flashing := false
+var _speed := 1.0
+var _hold_t := 0.0               # 휘두른 직후 자세가 멎는 시간(박자 신호)
+var _glow := 0.0
 
 
 func setup(g: Node, d: Dictionary) -> void:
@@ -75,13 +78,14 @@ func setup(g: Node, d: Dictionary) -> void:
 		if anim.has_animation(loop_name):
 			anim.get_animation(loop_name).loop_mode = Animation.LOOP_LINEAR
 	add_child(Fx.disc(0.6, Color(0, 0, 0, 0.4)))
-	_overlay = Fx.mat(Color(1, 1, 1, 0.7), 0.0, true)
+	mats = Fx.toonify(model, 0.014)
 	_play(d.anims.idle)
 
 
 func _play(name: String, speed := 1.0, blend := 0.08, restart := false) -> void:
 	if name == "" or not anim.has_animation(name):
 		return
+	_speed = speed
 	if name == _current and not restart:
 		anim.speed_scale = speed
 		return
@@ -111,8 +115,6 @@ func tap_down() -> void:
 			if phase == "rec":
 				queued = true
 				queued_just = t >= JUST_START and t <= JUST_END
-				if not queued_just and t < JUST_START:
-					game.popup(global_position + Vector3(0, 2.8, 0), "빨라요", Color(0.75, 0.75, 0.8), 40)
 			else:
 				queued = true
 				queued_just = false
@@ -158,6 +160,7 @@ func swipe(dir: Vector3) -> void:
 	dash_attack = false
 	holding = false
 	_play_fit(data.anims.dodge, DASH_TIME * 1.3)
+	game.sfx("dodge", 0.15)
 
 
 ## 저스트 박자 링에 쓰는 값: 다음 JUST 구간까지 남은 시간(초). 박자를 볼 수 없으면 -1.
@@ -304,9 +307,9 @@ func _start_step(n: int) -> void:
 			face = to.normalized()
 	var s: Dictionary = STEPS[n]
 	_play_fit(data.anims.combo[n], (s.wind + s.act) / 0.45)
+	game.sfx("whoosh_heavy" if n == STEPS.size() - 1 else "whoosh", 0.12)
 	if just:
 		game.on_just()
-		game.popup(global_position + Vector3(0, 2.8, 0), "JUST!", Color(1, 0.85, 0.3), 72)
 
 
 func _update_attack(delta: float) -> void:
@@ -331,7 +334,11 @@ func _update_attack(delta: float) -> void:
 		if t >= s.act:
 			phase = "rec"
 			t = 0.0
+			_hold_t = 0.07   # 휘두른 끝에서 자세가 잠깐 멎는다
 	elif phase == "rec":
+		if t - delta < JUST_START and t >= JUST_START and not queued:
+			_glow = 0.22
+			game.just_cue(self)
 		if queued and t >= JUST_START * 0.5:
 			_start_step((step + 1) % STEPS.size())
 		elif t >= s.rec:
@@ -352,9 +359,10 @@ func _hit(mult: float, label: String) -> void:
 		if targets.is_empty():
 			game.spawn_orb(self, null, dmg, just)
 	else:
+		var heavy := step == STEPS.size() - 1
 		for e in game.enemies_in(global_position, face, reach, s.arc):
-			game.hit_enemy(e, dmg, self, just, label)
-		game.slash(global_position, face, reach, s.arc, data.color.lightened(0.45 if just else 0.1))
+			game.hit_enemy(e, dmg, self, just, label, 1.0 if heavy else 0.0)
+		game.slash(global_position, face, reach, s.arc, data.color.lightened(0.45 if just else 0.1), -1.0 if step == 1 else 1.0, 1.0 if (heavy or just) else 0.0)
 
 
 func _dash_strike() -> void:
@@ -366,8 +374,8 @@ func _dash_strike() -> void:
 	_play_fit(data.anims.combo[2], 0.35)
 	var reach: float = data.reach * 1.8
 	for e in game.enemies_in(global_position, face, reach, 70.0):
-		game.hit_enemy(e, data.atk * 1.8, self, true, "돌진")
-	game.slash(global_position, face, reach, 70.0, Color(0.7, 0.95, 1))
+		game.hit_enemy(e, data.atk * 1.8, self, true, "돌진", 0.5)
+	game.slash(global_position, face, reach, 70.0, Color(0.7, 0.95, 1), 1.0, 0.5)
 
 
 func _spin_attack() -> void:
@@ -377,10 +385,10 @@ func _spin_attack() -> void:
 	t = 0.0
 	_play_fit(data.anims.spin, 0.55)
 	var reach: float = data.reach * 1.6
+	game.sfx("whoosh_heavy", 0.05)
 	for e in game.enemies_in(global_position, face, reach, 360.0):
-		game.hit_enemy(e, data.atk * 3.0, self, true, "차지")
-	game.slash(global_position, face, reach, 360.0, Color(1, 0.85, 0.4))
-	game.shake(0.35)
+		game.hit_enemy(e, data.atk * 3.0, self, true, "차지", 1.0)
+	game.slash(global_position, face, reach, 360.0, Color(1, 0.85, 0.4), 1.0, 1.0)
 
 
 func _skill() -> void:
@@ -411,7 +419,9 @@ func take_damage(amount: float) -> bool:
 	data.ult = minf(data.ult + 4.0, 100.0)
 	flash = 0.12
 	game.popup(global_position + Vector3(0, 2.4, 0), str(int(amount)), Color(1, 0.4, 0.35), 52)
-	game.shake(0.2)
+	game.shake(0.3)
+	game.sfx("hit", 0.1, -4.0)
+	game.vibrate(40)
 	if data.hp <= 0.0:
 		state = "dead"
 		_play(data.anims.death, 1.0, 0.1, true)
@@ -443,8 +453,11 @@ func _animate(delta: float) -> void:
 				_play(data.anims.idle)
 	if state == "idle" and not moving and _current != data.anims.idle and not anim.is_playing():
 		_play(data.anims.idle)
-	var want_flash := flash > 0.0 or (state in ["charge", "aim"] and int(Time.get_ticks_msec() / 90) % 2 == 0)
-	if want_flash != _flashing:
-		_flashing = want_flash
-		for mi in model.find_children("*", "MeshInstance3D", true, false):
-			mi.material_overlay = _overlay if want_flash else null
+	if _hold_t > 0.0:
+		_hold_t -= delta
+		anim.speed_scale = _speed * 0.12 if _hold_t > 0.0 else _speed
+	_glow = maxf(_glow - delta, 0.0)
+	var charging := state in ["charge", "aim"]
+	var g := maxf(_glow / 0.22, (0.5 + 0.5 * sin(Time.get_ticks_msec() / 70.0)) * 0.6 if charging else 0.0)
+	Fx.set_param(mats, "glow", g)
+	Fx.set_param(mats, "flash", clampf(flash / 0.12, 0.0, 1.0))

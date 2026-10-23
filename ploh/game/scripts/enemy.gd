@@ -32,9 +32,8 @@ var face := Vector3(0, 0, 1)
 var model: Node3D
 var anim: AnimationPlayer
 var telegraph: MeshInstance3D
+var mats: Array = []
 var _current := ""
-var _overlay: StandardMaterial3D
-var _flashing := false
 
 
 func setup(g: Node, k: String) -> void:
@@ -60,6 +59,7 @@ func setup(g: Node, k: String) -> void:
 	slot.bone_name = "handslot.r"
 	skel.add_child(slot)
 	slot.add_child(load(WEAPON % stats.weapon).instantiate())
+	mats = Fx.toonify(model, 0.012 if kind != "boss" else 0.008, Color(0.5, 0.48, 0.7))
 	if kind == "boss":
 		# 보스는 붉은 기운을 덧씌운다
 		var aura := Fx.mat(Color(1.0, 0.25, 0.3, 0.18), 1.5, true)
@@ -71,7 +71,6 @@ func setup(g: Node, k: String) -> void:
 		if anim.has_animation(loop_name):
 			anim.get_animation(loop_name).loop_mode = Animation.LOOP_LINEAR
 	add_child(Fx.disc(radius * 1.3, Color(0, 0, 0, 0.4)))
-	_overlay = Fx.mat(Color(1, 1, 1, 0.8), 0.0, true)
 	_play("Skeletons_Awaken_Floor", 1.6)
 	t = -randf() * 0.4
 
@@ -126,11 +125,10 @@ func _physics_process(delta: float) -> void:
 	position.y = 0.0
 	if face.length() > 0.01 and state != "spawn":
 		model.rotation.y = lerp_angle(model.rotation.y, atan2(face.x, face.z), minf(delta * 10.0, 1.0))
-	var want := flash > 0.0
-	if want != _flashing and kind != "boss":
-		_flashing = want
-		for mi in model.find_children("*", "MeshInstance3D", true, false):
-			mi.material_overlay = _overlay if want else null
+	Fx.set_param(mats, "flash", clampf(flash / 0.1, 0.0, 1.0))
+	# 공격 예고 막바지(카운터 구간)에는 몸이 달아올라 동작으로도 알린다
+	var late := state == "wind" and wind_time - t <= COUNTER_WINDOW
+	Fx.set_param(mats, "glow", 0.8 if late else 0.0)
 
 
 func _separation() -> Vector3:
@@ -213,6 +211,11 @@ func take_hit(dmg: float, dir: Vector3, power: float) -> String:
 	hp = maxf(hp - dmg, 0.0)
 	flash = 0.1
 	knock = dir * power * stats.poise
+	# 맞은 순간 찌그러졌다 돌아온다
+	var base: Vector3 = Vector3.ONE * stats.scale
+	model.scale = base * Vector3(1.18, 0.82, 1.18)
+	var sq := create_tween()
+	sq.tween_property(model, "scale", base, 0.18).set_trans(Tween.TRANS_ELASTIC).set_ease(Tween.EASE_OUT)
 	if state in ["chase", "recover", "spawn"] and stats.poise >= 1.0:
 		state = "stagger"
 		t = 0.7

@@ -130,7 +130,8 @@ func _decorate(parent: Node3D, body: StaticBody3D, room: Dictionary, index: int,
 		_piece(parent, "banner_red", center + Vector3(-CELL * 1.5 + 0.45, 0.4, 0), PI / 2)
 	# 구석의 통과 못 하는 소품
 	var props := ["barrel_large", "crates_stacked", "pillar"]
-	for corner in [Vector3(-1, 0, -1), Vector3(1, 0, -1), Vector3(-1, 0, 1), Vector3(1, 0, 1)]:
+	# 카메라 쪽(+x+z) 구석에는 두지 않는다. 시야를 가린다
+	for corner in [Vector3(-1, 0, -1), Vector3(1, 0, -1), Vector3(-1, 0, 1)]:
 		if rng.randf() < 0.55:
 			var name: String = props[rng.randi_range(0, props.size() - 1)]
 			var p: Vector3 = center + corner * (CELL * 1.1)
@@ -156,8 +157,8 @@ func _torch(parent: Node3D, pos: Vector3, yaw: float) -> void:
 	_piece(parent, "torch_mounted", pos, yaw)
 	var light := OmniLight3D.new()
 	light.light_color = Color(1.0, 0.6, 0.3)
-	light.light_energy = 2.4
-	light.omni_range = 9.0
+	light.light_energy = 3.4
+	light.omni_range = 11.0
 	light.omni_attenuation = 1.4
 	light.position = pos + Vector3(0, 0.5, 0.6)
 	parent.add_child(light)
