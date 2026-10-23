@@ -548,16 +548,16 @@ func hit_enemy(e: Node3D, dmg: float, hero: Node3D, just: bool, label: String, w
 		sfx("counter", 0.05)
 		vibrate(60)
 	else:
-		# 맞는 순간 둘 다 짧게 멎어 무게를 싣는다(이펙트와 카메라는 계속 움직인다)
+		# 레퍼런스: 일반 타격은 공격자가 거의 멎지 않는다(1~2프레임). 맞는 쪽이 조금 더 멎고 절차적으로 꺾이며 무게를 받는다
 		if weight >= 0.9:
-			hero.freeze(0.1)
-			e.freeze(0.12)
+			hero.freeze(0.05)
+			e.freeze(0.1)
 		elif just or weight >= 0.4:
-			hero.freeze(0.075)
-			e.freeze(0.09)
-		else:
-			hero.freeze(0.06)
+			hero.freeze(0.035)
 			e.freeze(0.075)
+		else:
+			hero.freeze(0.02)
+			e.freeze(0.06)
 		kick(dir, 0.01 + weight * 0.01)
 		if just:
 			sfx("just", 0.06)
