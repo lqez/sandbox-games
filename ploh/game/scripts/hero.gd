@@ -57,6 +57,7 @@ const PAUSE_MOVES := {1: "dash_thrust", 2: "whirl", 3: "flurry"}
 
 static var _clip_cache := {}         # 모델 경로 → 클립 분석 결과
 static var _root_cache := {}         # 모델 경로 → 클립별 루트 이동 기록({클립: PackedVector2Array}, 30fps, 몸 기준 +Z 앞)
+static var _stride_cache := {}       # 모델 경로 → 달리기 클립의 보폭 속도
 
 var game: Node
 var data: Dictionary
@@ -189,7 +190,12 @@ func _ready() -> void:
 	if not _root_cache.has(key):
 		_root_cache[key] = load_root_motion(key)
 	root_motion = _root_cache[key]
-	_run_nat = natural_speed(root_motion, anim, _anim("run"), model.scale.z, 5.0)
+	if not _stride_cache.has(key):
+		var v := natural_speed(root_motion, anim, _anim("run"), model.scale.z, 0.0)
+		if v <= 0.0:
+			v = stride_speed(anim, model.find_children("*", "Skeleton3D", true, false)[0], _anim("run"), model.scale.z, 5.0)
+		_stride_cache[key] = v
+	_run_nat = _stride_cache[key]
 	_play(_anim("idle"))
 
 
@@ -639,7 +645,8 @@ func _auto_move() -> Vector3:
 		var go: Vector3 = wp - global_position
 		go.y = 0
 		if go.length() > 0.4:
-			return go.normalized() * minf(data.speed * 0.85, sqrt(2.0 * STOP_DECEL * go.length()) + 0.5)
+			# 적이 없는 구간은 조금 빠르게 지나간다(방 사이 걷는 시간이 전투 흐름을 끊지 않게)
+			return go.normalized() * minf(data.speed * 1.1, sqrt(2.0 * STOP_DECEL * go.length()) + 0.5)
 		return Vector3.ZERO
 	var to: Vector3 = e.global_position - global_position
 	to.y = 0
@@ -923,6 +930,36 @@ static func natural_speed(rm: Dictionary, ap: AnimationPlayer, clip: String, sca
 	if arr.size() < 2 or not ap.has_animation(clip):
 		return fallback
 	var v := (arr[arr.size() - 1] - arr[0]).length() * scale / maxf(ap.get_animation(clip).length, 0.1)
+	return v if v > 0.5 else fallback
+
+
+## 제자리 이동 클립의 보폭 속도(m/s): 디딘 발(가장 낮을 때)이 몸 기준으로 뒤로 밀리는 속도.
+## 이 속도로 재생하면 발이 바닥에서 미끄러지지 않는다
+static func stride_speed(ap: AnimationPlayer, skel: Skeleton3D, clip: String, scale: float, fallback: float) -> float:
+	var foot := skel.find_bone("LeftFoot")
+	if foot < 0 or not ap.has_animation(clip):
+		return fallback
+	var length := ap.get_animation(clip).length
+	var n := 60
+	var dt := length / n
+	var pts: Array = []
+	ap.play(clip)
+	for i in n + 1:
+		ap.seek(i * dt, true)
+		skel.force_update_all_bone_transforms()
+		pts.append(skel.get_bone_global_pose(foot).origin)
+	ap.stop()
+	var lowest := INF
+	for p in pts:
+		lowest = minf(lowest, p.y)
+	var speeds: Array = []
+	for i in range(1, pts.size()):
+		if pts[i].y < lowest + 0.03 and pts[i - 1].y < lowest + 0.03:
+			speeds.append(Vector2(pts[i].x - pts[i - 1].x, pts[i].z - pts[i - 1].z).length() / dt)
+	if speeds.size() < 3:
+		return fallback
+	speeds.sort()
+	var v: float = speeds[speeds.size() / 2] * scale
 	return v if v > 0.5 else fallback
 
 

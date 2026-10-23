@@ -41,6 +41,9 @@ var root_motion := {}     # 클립에서 지운 수평 루트 이동(공격 런�
 var _rm_clip := ""
 var _rm_prev := Vector2.INF
 static var _root_cache := {}
+static var _stride_cache := {}   # 모델 경로 → [달리기, 걷기] 보폭 속도
+var _run_nat := 4.0
+var _walk_nat := 1.6
 var t := 0.0
 var wind_time := 0.0
 var strike_area := 1.4
@@ -119,6 +122,13 @@ func _play(name: String, speed := 1.0, blend := 0.1, restart := false) -> void:
 
 func _ready() -> void:
 	weapon = Weapon.attach(model, "RightHand", stats.blade)
+	# 이동 클립을 발이 미끄러지지 않는 속도로 재생하려고 보폭 속도를 잰다(모델마다 한 번)
+	var key: String = SOLDIER % [stats.model, stats.model]
+	if not _stride_cache.has(key):
+		var sk: Skeleton3D = model.find_children("*", "Skeleton3D", true, false)[0]
+		_stride_cache[key] = [Hero.stride_speed(anim, sk, "run", 1.0, 2.5), Hero.stride_speed(anim, sk, "walk", 1.0, 1.0)]
+	_run_nat = _stride_cache[key][0] * stats.scale
+	_walk_nat = _stride_cache[key][1] * stats.scale
 	var skel: Skeleton3D = model.find_children("*", "Skeleton3D", true, false)[0]
 	anim.callback_mode_process = AnimationMixer.ANIMATION_CALLBACK_MODE_PROCESS_PHYSICS
 	skel.modifier_callback_mode_process = Skeleton3D.MODIFIER_CALLBACK_MODE_PROCESS_PHYSICS
@@ -205,14 +215,14 @@ func _physics_process(delta: float) -> void:
 				var side := Vector3(-face.z, 0, face.x) * _orbit
 				var keep := face * clampf(dist - (stats.reach + 1.1), -1.0, 1.0) * 2.0
 				velocity += side * 1.1 + keep + _separation()
-				_play("walk", 0.9, 0.2)
+				_play("walk", clampf(1.2 / _walk_nat, 0.5, 1.5), 0.2)
 			elif hero.state != "dead":
 				velocity += face * stats.speed + _separation()
 				# 클립이 원래 나아가는 속도에 맞춰 재생해서 발이 미끄러지지 않게 한다
 				if stats.speed > 3.0:
-					_play("run", clampf(stats.speed / Hero.natural_speed(root_motion, anim, "run", stats.scale, 4.0), 0.6, 1.6))
+					_play("run", clampf(stats.speed / _run_nat, 0.6, 1.8))
 				else:
-					_play("walk", clampf(stats.speed / Hero.natural_speed(root_motion, anim, "walk", stats.scale, 1.6), 0.6, 1.6))
+					_play("walk", clampf(stats.speed / _walk_nat, 0.6, 1.8))
 			else:
 				_play("idle")
 		"wind":
