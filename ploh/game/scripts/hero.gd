@@ -260,11 +260,12 @@ func _play(name: String, speed := 1.0, blend := 0.08, restart := false) -> void:
 	anim.speed_scale = speed
 
 
-func _play_fit(name: String, duration: float) -> void:
-	## 애니메이션을 duration 초 안에 끝나도록 틀어 준다
-	if not anim.has_animation(name):
-		return
-	_play(name, maxf(anim.get_animation(name).length / maxf(duration, 0.05), 0.5), 0.05, true)
+## 긴 모션캡처 클립을 욱여넣지 않고, 칼이 빨라지기 조금 전부터 speed배로 보여 준다(스킬·궁극기)
+func _play_near_strike(name: String, speed: float) -> void:
+	var c: Dictionary = clips.get(name, {})
+	_play(name, speed, 0.1, true)
+	if not c.is_empty():
+		anim.seek(maxf(c.get("start", 0.0) - 0.18 * speed, 0.0), true)
 
 
 # 동작 정의 -------------------------------------------------------------
@@ -401,7 +402,7 @@ func release_aim() -> void:
 		t = 0.0
 		_push_len = 0.0
 		invuln = 0.3
-		_play_fit(_anim("skill"), 0.5)
+		_play_near_strike(_anim("skill"), 1.4)
 		game.hero_skill(self, face)
 
 
@@ -468,7 +469,7 @@ func ultimate() -> void:
 	invuln = 1.2
 	state = "skill"
 	t = 0.0
-	_play_fit(_anim("ult"), 0.9)
+	_play_near_strike(_anim("ult"), 1.3)
 	game.ultimate_burst(self)
 
 

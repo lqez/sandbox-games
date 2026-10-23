@@ -110,6 +110,26 @@ func _process(delta: float) -> void:
 		"dodge":
 			if near and fmod(t, 1.6) < delta * 1.5:
 				g.swipe(Vector2(1, 0) if int(t / 1.6) % 2 == 0 else Vector2(-1, 0))
+		"boss":
+			# 앞 방들을 정리한 것으로 하고 보스 방으로 옮겨 싸운다
+			if _once("boss"):
+				for e in g.enemies:
+					if is_instance_valid(e):
+						e.queue_free()
+				g.enemies.clear()
+				var last: int = g.dungeon.rooms.size() - 1
+				for i in last:
+					g.dungeon.rooms[i].active = true
+					g.dungeon.rooms[i].cleared = true
+				g.room = last - 1
+				g.route_i = g.dungeon.route.size() - 1
+				g._populate(last)
+				p.global_position = g.dungeon.rooms[last].center + Vector3(3.5, 0, 3.5)
+			var b := int(floorf((g.beat_clock() + 0.03) / g.BEAT))
+			if near and b != _last_beat:
+				_last_beat = b
+				g.tap_down()
+				g.tap_up()
 		"slope":
 			if _once("tp"):
 				var f: Dictionary = g.dungeon._features[0]
