@@ -66,7 +66,7 @@ func _process(delta: float) -> void:
 		var gap := -1.0
 		if tg != null:
 			gap = p.global_position.distance_to(tg.global_position) - tg.radius - p._strike_range()
-		log_lines.append("%.3f   [%s/%s/%s] t=%.2f due-now=%+.2f buf=%s fum=%s vel=%.2f gap=%.2f anim=%s" % [t, p.state, p.move_kind, p.phase, p.t, p._due - g.beat_clock(), p._buffered, p._fumbled, p._vel.length(), gap, p._current])
+		log_lines.append("%.3f   [%s/%s/%s] t=%.2f due-now=%+.2f buf=%s vel=%.2f gap=%.2f anim=%s" % [t, p.state, p.move_kind, p.phase, p.t, p._due - g.beat_clock(), p._buffered, p._vel.length(), gap, p._current])
 	if p.state == "attack" and p.phase == "swing" and p.weapon != null:
 		var c: Dictionary = p._swing()
 		if false:

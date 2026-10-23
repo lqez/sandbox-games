@@ -7,7 +7,7 @@ extends CharacterBody3D
 ##
 ## 빨리 누르는 게임이 아니라 박자와 패턴의 게임이다. 기본 공격 한 타는 한 박을 차지하고,
 ## 칼을 뻗은 자세가 다음 박자까지 머문다. 그 박자에 누르면 이어 친다(±0.07초면 JUST).
-## 박자를 기다리지 않고 거듭 누르면(연타) 칼을 휘두른 뒤 몸이 앞으로 쏠려 자세를 바로잡느라 콤보가 끊긴다.
+## 일찍 누른 입력은 받아 두었다가 박자에 낸다. 박자에 정확히 맞춘 입력만 JUST이고, 연타하면 JUST를 잃는다(JUST가 세 번 이어지면 무거운 일격).
 ## - 박자마다 터치: 3콤보 고리와 4콤보 고리(마지막은 두 박짜리 피니시)를 번갈아 잇는다
 ## - 반 박에 한 번 더(따닥): 박자 사이에 빠른 베기를 끼워 넣는다
 ## - 한 박 쉬고 터치: 쉬기 전에 친 수에 따라 돌진 찌르기(1타), 회오리 베기(2타), 섬광 연격(3타)
@@ -32,13 +32,12 @@ const Procedural := preload("res://scripts/procedural.gd")
 ## 박자 판정(음악 시계 기준, 초)
 const JUST_WINDOW := 0.07            # 박자 ±0.07초: JUST
 const GOOD_WINDOW := 0.15            # 박자 ±0.15초: 이어 친다
-const EARLY_LIMIT := 0.22            # 박자보다 이만큼 넘게 일찍 누르면 서두른 것(연타)이다
 const AND_WINDOW := 0.09             # 반 박(따닥) 판정 폭
 const STRIKE_TIME := 0.24            # 누른 뒤 칼이 닿기까지(예비 + 베기). 레퍼런스: 예비 150~250ms, 베기 50~130ms
-const FUMBLE_TIME := 0.42            # 연타로 쏠린 자세를 바로잡는 시간
 const CHARGE_TIME := 0.42            # 이만큼 누르고 있으면 차지
-const DODGE_TIME := 0.62            # 구르기 전체 길이(레퍼런스 0.74초)
-const DODGE_MOVE := 0.38            # 이 동안 실제로 굴러 이동한다
+const DODGE_TIME := 0.7             # 구르기 전체 길이(레퍼런스 0.74초)
+const DODGE_MOVE := 0.42            # 이 동안 실제로 굴러 이동한다
+const TURN_MAX := 11.0              # 몸을 돌리는 최대 각속도(rad/s). 순간적으로 휙 돌아 보이지 않게
 ## 공격 클립의 시간 재배치(기본 속도 배율). 예비 동작과 베기 안에서는 다시 가감속을 준다
 const WIND_RATE := 0.85
 const STRIKE_RATE := 1.8
@@ -62,7 +61,7 @@ var weapon: RefCounted
 var trail: MeshInstance3D
 var proc: SkeletonModifier3D           # 절차적 애니메이션(피격 반응, 관성, 상체 비틀기, 발 IK, 무기 반동)
 var clips := {}                      # 클립 이름 → {len, start, end} (실제 재생 시간, 초)
-var state := "idle"                  # idle, brake, attack, stumble, charge, aim, dodge, skill, dead
+var state := "idle"                  # idle, brake, attack, charge, aim, dodge, skill, dead
 var move_kind := ""                  # attack 상태의 동작: chain(기본 공격) 또는 MOVES의 키
 var chain_i := 0                     # 기본 공격 고리에서 지금 치는 타
 var phase := ""                      # approach, swing
@@ -105,9 +104,12 @@ var _buf_grade := ""
 var _last_tap := -10.0
 var _prev_tap := -10.0
 var _swing_clock := 0.0              # 이번 타를 휘두르기 시작한 음악 시각
+var _push := Vector3.ZERO            # 스킬 돌진: 이 거리를 _push_len초 동안 감속하며 간다
+var _push_len := 0.0
+var _react_t := 0.0                  # 피격 클립을 보여 줄 남은 시간(그 뒤 대기 자세로 섞는다)
 var _double := false                 # 반 박 베기를 끼워 넣는다
 var _extra := false                  # 지금 타가 끼워 넣은 반 박 베기다
-var _fumbled := false                # 서둘러 눌러서 이번 타 뒤 자세가 무너진다
+var _just_streak := 0                # 연속 JUST 수. 세 번째마다 무거운 일격이 된다
 var _phrase_hits := 0                # 이번 소절에 이어 친 기본 공격 수(쉬는 패턴 판정)
 var _hold_len := HOLD
 var _wind_spd := 1.0                 # 예비 동작 재생 속도(클립 초/초)
@@ -142,6 +144,7 @@ func setup(g: Node, d: Dictionary) -> void:
 		if mi.name in d.get("hide", []) or (d.has("weapon_pool") and mi.name in d.weapon_pool and not mi.name in keep):
 			mi.visible = false
 	anim = model.find_children("*", "AnimationPlayer", true, false)[0]
+	Procedural.strip_root_motion(anim)
 	# 애니메이션을 물리 틱에 맞춰 진행한다. 칼날 판정과 시간표(t)가 같은 시계로 움직여야 프레임이 밀려도 칼을 놓치지 않는다
 	anim.callback_mode_process = AnimationMixer.ANIMATION_CALLBACK_MODE_PROCESS_PHYSICS
 	for loop_name in [d.anims.moves.idle, d.anims.moves.run, d.anims.moves.charge]:
@@ -284,12 +287,8 @@ func _tap(now: float, auto: bool) -> void:
 	_last_tap = now
 	match state:
 		"idle":
-			if _vel.length() > BRAKE_SPEED and game.nearest_enemy(global_position, _strike_range() + 2.5) != null:
-				# 빨리 달리던 중이면 먼저 버티며 서고, 선 뒤에 친다
-				_brake()
-				queued = true
-			else:
-				_idle_tap(now, auto)
+			# 달리던 중에 누르면 멈칫하지 않고 달리던 힘을 내딛기에 실어 바로 친다(급정지는 공격 없이 설 때만)
+			_idle_tap(now, auto)
 		"brake":
 			queued = true
 		"attack":
@@ -305,19 +304,19 @@ func _tap(now: float, auto: bool) -> void:
 func _idle_tap(now: float, auto: bool) -> void:
 	if _due > 0.0 and _phrase_hits > 0:
 		var d := now - _due
-		if d >= -EARLY_LIMIT and d <= GOOD_WINDOW:
+		if d >= -0.25 and d <= GOOD_WINDOW:
 			_next_chain(_grade(d, auto))
 			return
-		if absf(d - game.BEAT) <= GOOD_WINDOW and chain_i != CHAIN.size() - 1:
+		# 한 박 쉰 패턴은 쉬는 박자에 정확히(±0.09초) 눌렀을 때만. 느긋하게 누르다 우연히 기술이 튀어나오지 않게
+		if absf(d - game.BEAT) <= AND_WINDOW and chain_i != CHAIN.size() - 1 and not auto:
 			_pause_move(_grade(d - game.BEAT, auto))
 			return
 	_begin_chain(auto)
 
 
-## 기본 공격 중의 입력
+## 기본 공격 중의 입력. 일찍 누른 입력은 받아 두었다가 박자에 맞춰 낸다(조작이 씹히지 않게).
+## 정확한 타이밍만 JUST가 되고, 연타하면 JUST를 잃는다. 연타의 벌칙은 그것뿐이다
 func _chain_tap(now: float, auto: bool) -> void:
-	if _fumbled:
-		return
 	var d := now - _due
 	# 반 박(따닥): 박자 사이에 누르면 지금 타 뒤에 빠른 베기를 끼워 넣는다
 	if not _extra and not _double and not _buffered and absf(d + game.BEAT * 0.5) <= AND_WINDOW:
@@ -332,11 +331,9 @@ func _chain_tap(now: float, auto: bool) -> void:
 	# 두 박짜리 피니시의 가운데 박자는 쉬는 자리다(눌러도 벌칙 없이 넘긴다)
 	if _move_weight >= 1.0 and absf(d + game.BEAT) <= GOOD_WINDOW:
 		return
-	# 이미 다음 타를 받았는데 또 누르거나, 박자를 한참 앞질러 누르면 서두른 것이다(슬로모션 중에는 봐준다)
-	if _buffered or (d < -EARLY_LIMIT and Engine.time_scale > 0.9):
-		_fumbled = true
-		_buffered = false
-		_double = false
+	# 이미 다음 타를 받았는데 또 누르면(연타) JUST를 잃는다
+	if _buffered:
+		_buf_grade = "good"
 		return
 	if d <= GOOD_WINDOW:
 		_buffered = true
@@ -364,7 +361,7 @@ func double_tap() -> void:
 
 ## 원을 그리는 드래그: 회오리 베기
 func circle() -> void:
-	if state in ["dead", "dodge", "brake", "stumble"]:
+	if state in ["dead", "dodge", "brake"]:
 		return
 	holding = false
 	_start_move("whirl")
@@ -387,6 +384,7 @@ func release_aim() -> void:
 	if state == "aim":
 		state = "skill"
 		t = 0.0
+		_push_len = 0.0
 		invuln = 0.3
 		_play_fit(_anim("skill"), 0.5)
 		game.hero_skill(self, face)
@@ -400,7 +398,7 @@ func flick(dir: Vector3) -> void:
 	dir = dir.normalized()
 	var e: Node3D = game.nearest_enemy(global_position, 7.0)
 	var fighting: bool = state == "attack" or (e != null and global_position.distance_to(e.global_position) < 4.0)
-	if game.threatened(self) or e == null or not fighting or state in ["brake", "stumble"]:
+	if game.threatened(self) or e == null or not fighting or state == "brake":
 		_dodge(dir)
 		return
 	var to: Vector3 = e.global_position - global_position
@@ -431,8 +429,15 @@ func _dodge(dir: Vector3) -> void:
 	trail.emitting = false
 	proc.crouch = 0.0
 	proc.extra_lean = Vector3.ZERO
-	_play_fit(_anim("dodge"), DODGE_TIME)
+	# 구르기 클립의 구르는 부분(앞 약 70%)만 보여 주고 대기로 섞는다(통째로 욱여넣으면 일어나는 동작이 튄다)
+	_play(_anim("dodge"), 1.8, 0.12, true)
 	game.sfx("dodge", 0.15)
+
+
+## 스킬 돌진: offset만큼 sec초 동안 감속하며 이동한다
+func push(offset: Vector3, sec: float) -> void:
+	_push = offset
+	_push_len = sec
 
 
 func enter_field() -> void:
@@ -517,17 +522,10 @@ func _physics_process(delta: float) -> void:
 				proc.crouch = 0.0
 			if t >= _brake_len:
 				state = "idle"
+				proc.lock_feet = false
 				if queued:
 					queued = false
 					_begin_chain()
-		"stumble":
-			t += delta
-			_vel = _vel.move_toward(Vector3.ZERO, 20.0 * delta)
-			if t >= FUMBLE_TIME * 0.45:
-				proc.extra_lean = Vector3.ZERO
-				proc.crouch = 0.0
-			if t >= FUMBLE_TIME:
-				_to_idle()
 		"dodge":
 			# 구르기: 앞쪽에서 감속하며 이동하고, 끝에서 남은 속도로 미끄러지며 무릎을 굽혀 선다
 			t += delta
@@ -545,7 +543,10 @@ func _physics_process(delta: float) -> void:
 		"attack":
 			_update_attack(delta)
 		"skill":
-			_vel = _vel.move_toward(Vector3.ZERO, 30.0 * delta)
+			if t < _push_len:
+				_vel = _push * (2.0 / _push_len) * (1.0 - t / _push_len)
+			else:
+				_vel = _vel.move_toward(Vector3.ZERO, 30.0 * delta)
 			t += delta
 			if t >= 0.55:
 				state = "idle"
@@ -595,6 +596,7 @@ func _brake() -> void:
 	_brake_len = 0.12 + 0.028 * spd
 	_brake_decel = spd / (_brake_len * 0.55)
 	proc.crouch = clampf(0.03 + 0.012 * spd, 0.0, 0.12)
+	proc.lock_feet = true
 	trail.emitting = false
 	game.sfx("step", 0.15, -6.0)
 
@@ -665,12 +667,13 @@ func _next_chain(grade: String) -> void:
 
 
 func _start_chain_hit(grade: String, extra := false) -> void:
+	if not extra:
+		_just_streak = _just_streak + 1 if grade == "perfect" else 0
 	just = grade == "perfect" or empowered > 0.0
 	if empowered > 0.0:
 		empowered = 0.0
 	queued = false
 	_double = false
-	_fumbled = false
 	_extra = extra
 	move_kind = "chain"
 	if extra:
@@ -682,6 +685,11 @@ func _start_chain_hit(grade: String, extra := false) -> void:
 		_phrase_hits += 1
 	_hit_i = 0
 	_start_hit()
+	# JUST가 세 번 이어지면 그 타는 무거운 일격(긴 히트스톱, 큰 밀림, 두 배 피해)
+	if not extra and _just_streak > 0 and _just_streak % 3 == 0:
+		_move_weight = maxf(_move_weight, 1.0)
+		_move_dmg *= 2.0
+		_glow = 0.3
 	if just:
 		game.on_just()
 
@@ -719,7 +727,6 @@ func _reset_phrase() -> void:
 	_phrase_hits = 0
 	_buffered = false
 	_double = false
-	_fumbled = false
 	_extra = false
 
 
@@ -752,9 +759,9 @@ func _start_hit() -> void:
 	# 기본 공격: 멀면 달려가 붙고, 가까우면 예비 동작 동안 내디뎌 거리를 좁힌다(박자를 지키도록)
 	if move_kind == "chain" and target != null and not data.ranged:
 		var gap: float = global_position.distance_to(target.global_position) - target.radius - _strike_range()
-		if gap > 1.6:
+		if gap > 0.9:
 			phase = "approach"
-			_play(_anim("run"), 1.3)
+			_play(_anim("run"), 1.3, 0.15)
 			return
 		_lunge = maxf(gap, 0.0)
 	_begin_swing()
@@ -799,7 +806,9 @@ func _begin_swing() -> void:
 		_wind_spd = c.start / maxf(strike - cut_dur, 0.05) * EASE_K
 		_rate = _wind_spd
 		_hold_len = maxf((_due - now) * Engine.time_scale - strike, 0.04)
-	_play(_clip, _wind_spd, 0.04, true)
+	# 달리기·대기에서 들어올 때는 조금 길게 섞는다(발이 튀지 않게), 연타 사이는 짧게
+	var from_loco: bool = _current in [_anim("run"), _anim("idle"), _anim("dodge"), _anim("hit")]
+	_play(_clip, _wind_spd, 0.15 if from_loco else 0.08, true)
 
 
 ## 이 타의 시간표(초). 칼이 실제로 다 지나간 뒤에는 그 시각을 기준으로 머물고 거둔다
@@ -843,7 +852,7 @@ func _striking() -> bool:
 
 ## 박자마다 부른다. 이어 칠 수 있는 박자에만 칼날이 반짝이고 맑은 소리가 나서, 화면 표시 없이 박자를 알린다
 func on_beat() -> void:
-	if _due <= 0.0 or _fumbled or _buffered or queued:
+	if _due <= 0.0 or _buffered or queued:
 		return
 	if not (state == "idle" or (state == "attack" and move_kind == "chain")):
 		return
@@ -917,10 +926,6 @@ func _update_attack(delta: float) -> void:
 			# 칼이 지나간 운동량이 몸을 끌어당긴다
 			_followed = true
 			proc.momentum(_peak_vel, _peak_tip, global_position, data.get("weapon_mass", 1.0) * (1.0 + _move_weight * 0.6))
-	# 서둘러 누른 타: 칼이 지나가자마자 자세가 무너진다
-	if _fumbled and _end_t >= 0.0:
-		_stumble()
-		return
 	# 미끄러짐이 멎어야 다음 동작으로 넘어간다
 	var steady := _vel.length() < 1.2
 	var after := t - _end_t if _end_t >= 0.0 else -1.0
@@ -935,21 +940,6 @@ func _update_attack(delta: float) -> void:
 		_begin_chain()
 	elif t >= c.len and steady:
 		_to_idle()
-
-
-## 연타 벌칙: 칼의 운동량에 끌려 앞으로 쏠렸다가 버티며 자세를 바로잡는다. 이 동안 터치는 받지 않는다
-func _stumble() -> void:
-	state = "stumble"
-	t = 0.0
-	phase = ""
-	trail.emitting = false
-	_reset_phrase()
-	game.on_combo_drop()
-	proc.extra_lean = Vector3.UP.cross(face) * 0.26
-	proc.crouch = 0.06
-	_speed = _rec_speed() * 0.6
-	anim.speed_scale = _speed
-	game.sfx("step", 0.2, -4.0)
 
 
 func _sweep(pad: float) -> void:
@@ -995,7 +985,7 @@ func _auto_play() -> void:
 	var now: float = game.beat_clock()
 	if state == "idle" and game.nearest_enemy(global_position, _strike_range() + (6.0 if data.ranged else 2.0)) != null:
 		_tap(now, true)
-	elif state == "attack" and move_kind == "chain" and phase == "swing" and not _buffered and not _fumbled and now >= _due - 0.1:
+	elif state == "attack" and move_kind == "chain" and phase == "swing" and not _buffered and now >= _due - 0.1:
 		_tap(now, true)
 	if data.ult >= 100.0 and game.nearest_enemy(global_position, 5.0) != null:
 		game.use_ult()
@@ -1021,7 +1011,9 @@ func take_damage(amount: float, from := Vector3.INF) -> bool:
 		_play(_anim("death"), 1.0, 0.1, true)
 		game.on_hero_down()
 	elif state == "idle":
-		_play_fit(_anim("hit"), 0.35)
+		# 피격 클립 앞부분만 제 속도 가까이로 보여 주고 대기로 섞는다(빠르게 욱여넣으면 팔다리가 튄다)
+		_play(_anim("hit"), 1.25, 0.15, true)
+		_react_t = 0.45
 	return true
 
 
@@ -1029,19 +1021,25 @@ func take_damage(amount: float, from := Vector3.INF) -> bool:
 
 func _animate(delta: float) -> void:
 	if face.length() > 0.01:
-		# 모델은 +Z를 바라본다
-		model.rotation.y = lerp_angle(model.rotation.y, atan2(face.x, face.z), minf(delta * 16.0, 1.0))
+		# 모델은 +Z를 바라본다. 빠르게 따라가되 각속도에 상한을 둔다
+		var diff := angle_difference(model.rotation.y, atan2(face.x, face.z))
+		# 공격을 시작할 때는 상대 쪽으로 더 빨리 돈다(칼이 엉뚱한 쪽으로 나가지 않게)
+		var cap := (TURN_MAX * 2.2 if state == "attack" else TURN_MAX) * delta
+		model.rotation.y += clampf(diff * (1.0 - exp(-delta * 14.0)), -cap, cap)
 	var spd := Vector2(_vel.x, _vel.z).length()
 	var moving := spd > 0.5
+	_react_t = maxf(_react_t - delta, 0.0)
 	match state:
 		"idle":
 			if moving:
-				_play(_anim("run"), clampf(spd / 5.0, 0.7, 1.4))
-			elif not anim.is_playing() or _current in [_anim("run"), _anim("charge")]:
-				_play(_anim("idle"))
+				_play(_anim("run"), clampf(spd / 5.0, 0.7, 1.4), 0.2)
+			elif _current == _anim("hit") and _react_t > 0.0:
+				pass
+			elif not anim.is_playing() or _current in [_anim("run"), _anim("charge"), _anim("hit"), _anim("dodge")]:
+				_play(_anim("idle"), 1.0, 0.25)
 		"brake":
-			# 달리던 다리를 거두며 버틴다(몸 낮추기와 기울기는 절차적으로)
-			_play(_anim("idle"), 1.0, 0.18)
+			# 달리던 다리를 거두며 버틴다(발은 붙잡고, 몸 낮추기와 기울기는 절차적으로)
+			_play(_anim("idle"), 1.0, 0.25)
 		"charge", "aim":
 			_play(_anim("charge"))
 	if state == "idle" and not moving and _current != _anim("idle") and not anim.is_playing():

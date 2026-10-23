@@ -80,6 +80,7 @@ func setup(g: Node, k: String) -> void:
 		for mi in model.find_children("*", "MeshInstance3D", true, false):
 			mi.material_overlay = aura
 	anim = model.find_children("*", "AnimationPlayer", true, false)[0]
+	Procedural.strip_root_motion(anim)
 	for loop_name in ["idle", "walk", "run", "block"]:
 		if anim.has_animation(loop_name):
 			anim.get_animation(loop_name).loop_mode = Animation.LOOP_LINEAR
@@ -188,7 +189,9 @@ func _physics_process(delta: float) -> void:
 	position.y = lerpf(position.y, game.height_at(position.x, position.z), 1.0 - exp(-delta * 25.0))
 	proc.look(hero.global_position if state in ["chase", "wind"] else null)
 	if face.length() > 0.01 and state != "spawn":
-		model.rotation.y = lerp_angle(model.rotation.y, atan2(face.x, face.z), minf(delta * 10.0, 1.0))
+		var diff := angle_difference(model.rotation.y, atan2(face.x, face.z))
+		var cap := 8.0 * delta
+		model.rotation.y += clampf(diff * (1.0 - exp(-delta * 10.0)), -cap, cap)
 	Fx.set_param(mats, "flash", clampf(flash / 0.1, 0.0, 1.0))
 	# 공격 예고 막바지(카운터 구간)에는 몸이 달아올라 동작으로도 알린다
 	var late := state == "wind" and wind_time - t <= COUNTER_WINDOW
@@ -206,7 +209,8 @@ func _separation() -> Vector3:
 		var min_d: float = radius + e.radius + 0.3
 		if l < min_d and l > 0.001:
 			push += d / l * (min_d - l) * 4.0
-	return push
+	# 겹친 적끼리 밀어내는 속도에 상한을 둔다(순간적으로 튕겨 덜컥거리지 않게)
+	return push.limit_length(2.0)
 
 
 func _start_wind(hero: Node3D) -> void:
@@ -273,12 +277,12 @@ func take_hit(dmg: float, dir: Vector3, power: float) -> String:
 		_clear_telegraph()
 		state = "stagger"
 		t = 0.0
-		_play("hit", 0.8, 0.0, true)
+		_play("hit", 0.8, 0.05, true)
 	elif stats.has("guard") and state in ["chase", "recover", "spawn"] and power < 9.0 and face.dot(-dir) > 0.3:
 		# 방패병: 정면에서 오는 가벼운 타격은 방패로 받는다. 공격한 직후(예고 중)나 무거운 타격, 옆과 뒤는 뚫린다
 		result = "block"
 		dmg *= 0.2
-		_play("block_hit", 1.0, 0.0, true)
+		_play("block_hit", 1.0, 0.05, true)
 		proc.hit(dir, 0.3)
 		hp = maxf(hp - dmg, 1.0)
 		flash = 0.04
@@ -293,10 +297,10 @@ func take_hit(dmg: float, dir: Vector3, power: float) -> String:
 	hp = maxf(hp - dmg, 0.0)
 	_trail_wait = 0.35
 	flash = 0.08
-	# 밀림: 맞는 순간 한 번에 튕겨 나갔다가 짧게 멈춘다(미끄러지지 않게 0.12초 안에 끝난다)
+	# 밀림: 레퍼런스처럼 약 250ms에 걸쳐 감속하며 몸 하나 거리만큼(순간이동처럼 보이지 않게)
 	var dist: float = (0.3 + power * 0.035) * stats.poise
-	knock = dir * (dist * 2.0 / 0.12)
-	knock_decel = knock.length() / 0.12
+	knock = dir * (dist * 2.0 / 0.25)
+	knock_decel = knock.length() / 0.25
 	# 경직: 잡병은 무엇을 하든 맞으면 끊긴다. 정예와 보스는 무거운 타격에만 끊긴다
 	var heavy: bool = power >= 9.0
 	if stats.poise >= 1.0 or (heavy and kind != "boss"):
@@ -304,7 +308,7 @@ func take_hit(dmg: float, dir: Vector3, power: float) -> String:
 			_clear_telegraph()
 		state = "stagger"
 		t = 0.75 if stats.poise >= 1.0 else 0.55
-		_play("hit", 1.0, 0.0, true)
+		_play("hit", 1.0, 0.05, true)
 	if hp <= 0.0:
 		_die(dir)
 		return "dead"

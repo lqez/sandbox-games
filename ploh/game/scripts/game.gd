@@ -625,11 +625,10 @@ func hero_skill(hero: Node3D, dir: Vector3) -> void:
 	match hero.data.skill:
 		"dash":
 			# 앞으로 6m 돌진하며 지나는 적을 모두 찌른다
-			var dest := from + dir * 6.0
 			for e in enemies_in_line(from, dir, 6.5, 1.4):
 				hit_enemy(e, hero.data.atk * 2.6, hero, true, "")
-			var tw := hero.create_tween()
-			tw.tween_property(hero, "global_position", dest, 0.18)
+			# 순간이동(위치 보간) 대신 몸에 속도를 실어 6m를 달려 나간다
+			hero.push(dir * 6.0, 0.25)
 			beam(from, dir, 6.0, hero.data.color)
 		"wave":
 			for e in enemies_in(from, dir, 7.0, 70.0):

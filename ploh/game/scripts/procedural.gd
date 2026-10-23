@@ -6,7 +6,10 @@ extends SkeletonModifier3D
 ## - 웅크림: crouch만큼 골반을 내린다. 발은 IK로 바닥에 붙어 있어 무릎이 굽는다(급정지, 착지)
 ## - 상체 비틀기: 목표 쪽으로 척추와 머리를 먼저 돌린다
 ## - 무기의 무게: 칼이 지나간 뒤 그 운동량이 윗몸을 칼끝이 가던 쪽으로 끌고 비틀며, 골반이 한 번 처진다
-## - 발 IK: 두 관절 IK로 발을 지형 높이에 붙이고, 내리막 쪽 발이 닿도록 골반을 내린다
+## - 발 IK: 애니메이션의 발 높이는 그대로 두고, 몸 아래 바닥과 발 아래 바닥의 높이 차만큼만 옮긴다(평지에서는 손대지 않는다).
+##   디딘 발일수록 지형을 따르고, 공중에 뜬 발은 애니메이션 그대로 둔다. 내리막 쪽 발이 닿도록 골반을 내린다.
+##   발 위치는 기울기·피격 반응을 넣기 전의 원래 자세에서 잡는다(골반이 돌아도 다리가 휩쓸리지 않는다)
+## - 발 고정: 급정지처럼 몸이 미끄러질 때 디딘 발을 그 자리에 붙잡는다
 ##
 ## 뼈 이름은 rig 사전으로 받는다(Meshy 사람형, KayKit 등).
 
@@ -32,6 +35,8 @@ var rig: Dictionary
 var foot_ik := true
 var lean_strength := 1.0
 var crouch := 0.0                  # 골반을 내리는 깊이(m, 모델 크기 1 기준)
+var lock_feet := false             # 디딘 발을 지금 자리에 붙잡는다
+var twist_limit := 0.35            # 상체 비틀기 한계(라디안)
 var extra_lean := Vector3.ZERO     # 주인이 더하는 기울기(월드 회전 벡터). 헛디뎌 쏠린 자세 등
 
 var _hips := -1
@@ -56,6 +61,36 @@ var _hold := 0.0                   # 히트스톱 동안 자세를 붙잡아 둔
 var _shiver := 0.0                 # 붙잡힌 동안 떨림 세기(맞은 쪽만)
 var _shiver_axis := Vector3.ZERO
 var _tick := 0
+var _targets: Array = []           # 이번 틱의 발 목표(월드)
+var _locked: Array = []            # 붙잡은 발 자리(월드)
+var _lock_w := 0.0
+var _lock_prev := false
+
+
+## 클립에 박힌 수평 루트 이동(골반이 앞으로 굴러가는 등)을 지운다. 몸은 게임 코드가 움직인다.
+## 그대로 두면 몸과 클립이 이중으로 움직이고, 클립이 끝나는 순간 제자리로 튀어 '워프'처럼 보인다.
+## 대기·달리기의 작은 흔들림(threshold 미만)은 남긴다
+static func strip_root_motion(ap: AnimationPlayer, hips := "Hips", threshold := 0.12) -> void:
+	for lib_name in ap.get_animation_library_list():
+		var lib := ap.get_animation_library(lib_name)
+		for an in lib.get_animation_list():
+			var a := lib.get_animation(an)
+			for tr in a.get_track_count():
+				if a.track_get_type(tr) != Animation.TYPE_POSITION_3D or not str(a.track_get_path(tr)).ends_with(":" + hips):
+					continue
+				var n := a.track_get_key_count(tr)
+				if n == 0:
+					continue
+				var k0: Vector3 = a.track_get_key_value(tr, 0)
+				var far := 0.0
+				for k in n:
+					var v: Vector3 = a.track_get_key_value(tr, k)
+					far = maxf(far, Vector2(v.x - k0.x, v.z - k0.z).length())
+				if far < threshold:
+					continue
+				for k in n:
+					var v: Vector3 = a.track_get_key_value(tr, k)
+					a.track_set_key_value(tr, k, Vector3(k0.x, v.y, k0.z))
 
 
 func setup(r: Dictionary, root: Node3D, hfn: Callable) -> void:
@@ -137,7 +172,7 @@ func look(target: Variant) -> void:
 	if model != null:
 		fwd = model.global_transform.basis * Vector3(0, 0, 1)
 	fwd.y = 0
-	_twist_target = clampf(fwd.normalized().signed_angle_to(to.normalized(), Vector3.UP), -0.7, 0.7)
+	_twist_target = clampf(fwd.normalized().signed_angle_to(to.normalized(), Vector3.UP), -twist_limit, twist_limit)
 
 
 func _process_modification() -> void:
@@ -149,6 +184,10 @@ func _process_modification() -> void:
 	if dt <= 0.0:
 		return
 	_step(dt)
+	# 발 목표는 원래 애니메이션 자세에서 먼저 잡는다
+	var ik := foot_ik and height_fn.is_valid() and body != null
+	if ik:
+		_plan_feet(sk, dt)
 	var sk_global := sk.global_transform
 	# 관성 기울기와 피격 반응: 골반부터 위로 회전을 나눠 싣는다
 	# 부모 뼈의 회전이 자식에 쌓이므로, 뼈마다 나눠 실은 비율의 합이 머리에서 1 근처가 되게 한다
@@ -179,7 +218,7 @@ func _process_modification() -> void:
 		if b == _head:
 			basis = Basis(Vector3.UP, _twist * 0.4) * basis
 		sk.set_bone_global_pose(b, Transform3D(basis, g.origin))
-	if foot_ik and height_fn.is_valid():
+	if ik:
 		_feet(sk, dt)
 
 
@@ -218,23 +257,48 @@ func _step(dt: float) -> void:
 	_twist = clampf(_twist + _twist_v * dt, -0.9, 0.9)
 
 
-func _feet(sk: Skeleton3D, dt: float) -> void:
+## 발 목표: 애니메이션의 발을 몸 아래 바닥과 발 아래 바닥의 높이 차만큼 옮긴다. 디딘 발일수록 강하게
+func _plan_feet(sk: Skeleton3D, dt: float) -> void:
 	var sk_global := sk.global_transform
-	var inv := sk_global.affine_inverse()
-	var ground0: float = height_fn.call(Vector2(body.global_position.x, body.global_position.z))
-	var drops: Array = []
-	var targets: Array = []
+	var sy := sk_global.basis.get_scale().y
+	var root := body.global_position
+	var ground0: float = height_fn.call(Vector2(root.x, root.z))
+	_targets.clear()
+	_lock_w = move_toward(_lock_w, 1.0 if lock_feet else 0.0, dt / 0.12)
+	if lock_feet and not _lock_prev:
+		_locked.clear()
+	_lock_prev = lock_feet
 	for i in _legs.size():
 		var foot: int = _legs[i][2]
 		var fw: Vector3 = sk_global * sk.get_bone_global_pose(foot).origin
 		var h: float = height_fn.call(Vector2(fw.x, fw.z))
-		# 애니메이션에서 발이 몸 기준 바닥에서 떠 있는 높이를 지형 위로 옮긴다
-		var anim_lift: float = fw.y - ground0
-		var want_y: float = h + maxf(anim_lift, _foot_lift[i] * sk_global.basis.get_scale().y)
-		targets.append(Vector3(fw.x, want_y, fw.z))
-		drops.append(minf(want_y - fw.y, 0.0))
-	# 골반: 가장 많이 내려가야 하는 발만큼 내린다(부드럽게). 웅크림은 그 위에 더한다
-	var drop: float = drops.min() if not drops.is_empty() else 0.0
+		var rest: float = _foot_lift[i] * sy
+		var lift: float = fw.y - root.y
+		var w := 1.0 - smoothstep(rest + 0.04, rest + 0.3, lift)
+		var t := Vector3(fw.x, fw.y + (h - ground0) * w, fw.z)
+		if lock_feet:
+			if _locked.size() <= i:
+				_locked.append(t)
+			var lk: Vector3 = _locked[i]
+			# 붙잡은 자리의 바닥 위에, 애니메이션이 발을 띄운 만큼만
+			lk.y = height_fn.call(Vector2(lk.x, lk.z)) + (t.y - h)
+			t = t.lerp(lk, _lock_w * w)
+		elif _lock_w > 0.0 and _locked.size() > i:
+			t = t.lerp(_locked[i], _lock_w * w)
+		_targets.append([t, fw])
+	if not lock_feet and _lock_w <= 0.0:
+		_locked.clear()
+
+
+func _feet(sk: Skeleton3D, dt: float) -> void:
+	if _targets.size() != _legs.size():
+		return
+	var sk_global := sk.global_transform
+	var inv := sk_global.affine_inverse()
+	# 골반: 원래 자세보다 내려가야 하는 발만큼 내린다(부드럽게). 웅크림은 그 위에 더한다
+	var drop := 0.0
+	for tg in _targets:
+		drop = minf(drop, tg[0].y - tg[1].y)
 	_hip_drop = lerpf(_hip_drop, drop, 1.0 - exp(-dt * 14.0))
 	var total := _hip_drop - maxf(_crouch, 0.0) * sk_global.basis.get_scale().y
 	if _hips >= 0 and absf(total) > 0.001:
@@ -242,8 +306,7 @@ func _feet(sk: Skeleton3D, dt: float) -> void:
 		var shift := sk_global.basis.inverse() * Vector3(0, total, 0)
 		sk.set_bone_global_pose(_hips, Transform3D(hp.basis, hp.origin + shift))
 	for i in _legs.size():
-		var t_world: Vector3 = targets[i]
-		_two_bone(sk, _legs[i][0], _legs[i][1], _legs[i][2], inv * t_world)
+		_two_bone(sk, _legs[i][0], _legs[i][1], _legs[i][2], inv * (_targets[i][0] as Vector3))
 
 
 ## 두 관절 IK(스켈레톤 공간). 무릎은 원래 굽은 방향을 유지한다
