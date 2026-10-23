@@ -143,16 +143,17 @@ func momentum(v: Vector3, tip: Vector3, pivot: Vector3, mass: float) -> void:
 	var spd := hv.length()
 	if spd < 0.5:
 		return
-	var k := clampf(spd / 14.0, 0.25, 1.0) * mass
+	# 모션캡처 클립에 체중 이동이 이미 들어 있으므로 반동은 살짝만 덧입힌다
+	var k := clampf(spd / 14.0, 0.25, 1.0) * minf(mass, 2.0)
 	# 칼끝이 가던 쪽으로 윗몸이 끌려간다
-	_lean_v += Vector3.UP.cross(hv / spd) * 2.4 * k
+	_lean_v += Vector3.UP.cross(hv / spd) * 1.1 * k
 	# 휘두른 방향으로 몸통이 더 돌아간다(가로 베기일수록 크다)
 	var arm := tip - pivot
 	arm.y = 0
 	if arm.length() > 0.05:
-		_twist_v += signf(arm.cross(hv).y) * 4.5 * k * absf(arm.normalized().cross(hv / spd).y)
+		_twist_v += signf(arm.cross(hv).y) * 2.0 * k * absf(arm.normalized().cross(hv / spd).y)
 	# 무게를 받아 골반이 한 번 처진다
-	_crouch_v += 0.8 * k
+	_crouch_v += 0.3 * k
 
 
 ## 상체가 바라볼 목표(월드). null이면 정면으로 되돌린다
