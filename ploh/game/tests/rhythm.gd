@@ -25,6 +25,9 @@ var kills := 0
 var first_tap := -1.0
 var fumbles := 0
 var _dead := {}
+var _next_human := 0.0
+var _pending_taps: Array = []     # 아직 타격으로 이어지지 않은 탭 시각
+var latencies: Array = []
 
 
 func _ready() -> void:
@@ -78,6 +81,9 @@ func _process(delta: float) -> void:
 				log_lines.append("%.3f     strike %s pos=%.3f spdscale=%.2f t=%.2f [%.2f..%.2f] tip_d=%.2f tip_y=%.2f hilt_d=%.2f e_y=%.2f e_state=%s hp=%.0f r=%.2f spd=%.1f" % [t, p._clip, p.anim.current_animation_position, p.anim.speed_scale, p.t, c.start, c.end, Vector2(tip.x - e2.x, tip.z - e2.z).length(), tip.y - e2.y, Vector2(hilt.x - e2.x, hilt.z - e2.z).length(), e2.y, tg2.state, tg2.hp, tg2.radius, p.weapon.speed])
 	if g.combo > _last_combo:
 		hits += g.combo - _last_combo
+		if not _pending_taps.is_empty():
+			latencies.append(t - float(_pending_taps.pop_front()))
+			_pending_taps.clear()
 		log_lines.append("%.3f HIT combo=%d" % [t, g.combo])
 	_last_combo = g.combo
 	for e in g.enemies:
@@ -115,6 +121,12 @@ func _process(delta: float) -> void:
 					if _beat_n % 4 != 2:
 						_tap()
 					_beat_n += 1
+			"human":
+				# 사람처럼: 박자 근처에서 ±0.12초쯤 흔들리게 누른다
+				if t >= _next_human:
+					_next_human = t + g.BEAT + randfn(0.0, 0.08)
+					_tap()
+					_pending_taps.append(t)
 			"mash":
 				if t >= _next_mash:
 					_next_mash = t + 0.1
@@ -132,7 +144,10 @@ func _process(delta: float) -> void:
 		get_viewport().get_texture().get_image().save_png("%s/%s_%02d.png" % [out, mode, n])
 		n += 1
 	if (t >= WARM + RUN + 0.6 and shots.is_empty()) or t > 30.0:
-		log_lines.append("RESULT mode=%s hits=%d max_combo=%d kills=%d first_tap=%.2f last_kill_after=%.2f" % [mode, hits, g.max_combo, kills, first_tap, _last_kill_t() - first_tap])
+		var lat := 0.0
+		for l in latencies:
+			lat += l
+		log_lines.append("RESULT mode=%s hits=%d max_combo=%d kills=%d first_tap=%.2f last_kill_after=%.2f tap_to_hit=%.3f(n=%d)" % [mode, hits, g.max_combo, kills, first_tap, _last_kill_t() - first_tap, lat / maxf(latencies.size(), 1), latencies.size()])
 		var f := FileAccess.open("%s/%s.log" % [out, mode], FileAccess.WRITE)
 		f.store_string("\n".join(log_lines))
 		f.close()

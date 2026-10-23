@@ -5,11 +5,11 @@ extends CharacterBody3D
 ## 손을 떼고 잠시 지나면 다시 자동 이동으로 돌아간다. 몸에는 관성이 있다. 출발할 때는 몸을 앞으로 싣고,
 ## 빠를수록 크게 돌며, 빨리 달리다 급히 서거나 크게 꺾으면 미끄러지며 몸을 낮춰 버티느라 잠깐 멈칫한다.
 ##
-## 빨리 누르는 게임이 아니라 박자와 패턴의 게임이다. 기본 공격 한 타는 한 박을 차지하고,
-## 칼을 뻗은 자세가 다음 박자까지 머문다. 그 박자에 누르면 이어 친다(±0.07초면 JUST).
-## 일찍 누른 입력은 받아 두었다가 박자에 낸다. 박자에 정확히 맞춘 입력만 JUST이고, 연타하면 JUST를 잃는다(JUST가 세 번 이어지면 무거운 일격).
-## - 박자마다 터치: 3콤보 고리와 4콤보 고리(마지막은 두 박짜리 피니시)를 번갈아 잇는다
-## - 반 박에 한 번 더(따닥): 박자 사이에 빠른 베기를 끼워 넣는다
+## 빨리 누르는 게임이 아니라 타이밍과 패턴의 게임이다. 누르면 바로 반응하고(누른 뒤 0.24초에 칼이 닿는다), 박자는 보상이다.
+## 박자에 정확히(±0.07초) 누른 타는 JUST, 칼이 아직 지나가는 중에 서둘러 누른 타는 약하고, 연타하면 JUST를 잃는다.
+## JUST가 세 번 이어지면 무거운 일격. 휘두르는 중에 누른 입력은 받아 두었다가 칼이 지나가자마자 낸다.
+## - 터치: 3콤보 고리와 4콤보 고리(마지막은 피니시)를 번갈아 잇는다. 칼을 뻗은 뒤 0.74초 안에 누르면 이어진다
+## - 따닥(0.14~0.3초 간격): 지금 타 뒤에 빠른 베기를 끼워 넣는다
 ## - 한 박 쉬고 터치: 쉬기 전에 친 수에 따라 돌진 찌르기(1타), 회오리 베기(2타), 섬광 연격(3타)
 ## - 롱터치: 차지, 박자에 맞춰 떼면 강화
 ## - 롱터치 후 드래그: 그 방향으로 스킬 조준, 떼면 발동
@@ -31,8 +31,10 @@ const Procedural := preload("res://scripts/procedural.gd")
 
 ## 박자 판정(음악 시계 기준, 초)
 const JUST_WINDOW := 0.07            # 박자 ±0.07초: JUST
-const GOOD_WINDOW := 0.15            # 박자 ±0.15초: 이어 친다
-const AND_WINDOW := 0.09             # 반 박(따닥) 판정 폭
+const GOOD_WINDOW := 0.15            # 박자 ±0.15초: 차지를 박자에 맞춰 뗀 것으로 본다
+const AND_WINDOW := 0.09             # 한 박 쉰 패턴 판정 폭
+const MIN_HOLD := 0.12               # 칼을 뻗은 자세가 머무는 최소 시간(레퍼런스 100~250ms). 연타해도 이보다 빨라지지 않는다
+const CHAIN_WINDOW := 0.74           # 칼을 뻗은 자세 뒤 이 시간 안에 누르면 고리가 이어진다(레퍼런스 Pre Recover 0.74초)
 const STRIKE_TIME := 0.24            # 누른 뒤 칼이 닿기까지(예비 + 베기). 레퍼런스: 예비 150~250ms, 베기 50~130ms
 const CHARGE_TIME := 0.42            # 이만큼 누르고 있으면 차지
 const DODGE_TIME := 0.7             # 구르기 전체 길이(레퍼런스 0.74초)
@@ -105,6 +107,7 @@ var _buf_grade := ""
 var _last_tap := -10.0
 var _prev_tap := -10.0
 var _swing_clock := 0.0              # 이번 타를 휘두르기 시작한 음악 시각
+var _chain_end := -10.0              # 마지막 기본 공격의 칼이 다 지나간 음악 시각(고리를 잇는 기준)
 var _push := Vector3.ZERO            # 스킬 돌진: 이 거리를 _push_len초 동안 감속하며 간다
 var _push_len := 0.0
 var _react_t := 0.0                  # 피격 클립을 보여 줄 남은 시간(그 뒤 대기 자세로 섞는다)
@@ -307,51 +310,42 @@ func _tap(now: float, auto: bool) -> void:
 			dash_attack = true
 
 
-## 서 있을 때의 입력. 콤보가 살아 있으면 박자를 보고 늦게나마 잇거나, 한 박 쉰 패턴 기술을 낸다
+## 서 있을 때(또는 회복 동작 중)의 입력. 고리가 살아 있으면 바로 다음 타를 낸다.
+## 한 박을 쉬고 그다음 박자에 정확히(±0.09초) 누르면 패턴 기술이다
 func _idle_tap(now: float, auto: bool) -> void:
-	if _due > 0.0 and _phrase_hits > 0:
-		var d := now - _due
-		if d >= -0.25 and d <= GOOD_WINDOW:
-			_next_chain(_grade(d, auto))
+	if _phrase_hits > 0:
+		if _due > 0.0 and absf(now - _due - game.BEAT) <= AND_WINDOW and chain_i != CHAIN.size() - 1 and not auto:
+			_pause_move(_grade(now, auto))
 			return
-		# 한 박 쉰 패턴은 쉬는 박자에 정확히(±0.09초) 눌렀을 때만. 느긋하게 누르다 우연히 기술이 튀어나오지 않게
-		if absf(d - game.BEAT) <= AND_WINDOW and chain_i != CHAIN.size() - 1 and not auto:
-			_pause_move(_grade(d - game.BEAT, auto))
+		if now - _chain_end <= MIN_HOLD + CHAIN_WINDOW:
+			_next_chain(_grade(now, auto))
 			return
 	_begin_chain(auto)
 
 
-## 기본 공격 중의 입력. 일찍 누른 입력은 받아 두었다가 박자에 맞춰 낸다(조작이 씹히지 않게).
-## 정확한 타이밍만 JUST가 되고, 연타하면 JUST를 잃는다. 연타의 벌칙은 그것뿐이다
+## 기본 공격 중의 입력. 누르면 칼이 지나가자마자(최소 MIN_HOLD 뒤) 바로 다음 타가 나간다(박자를 기다리지 않는다).
+## 박자에 정확히 맞춘 입력만 JUST이고, 한 타 사이에 거듭 누르면(연타) JUST를 잃는다
 func _chain_tap(now: float, auto: bool) -> void:
-	var d := now - _due
-	# 반 박(따닥): 박자 사이에 누르면 지금 타 뒤에 빠른 베기를 끼워 넣는다
-	if not _extra and not _double and not _buffered and absf(d + game.BEAT * 0.5) <= AND_WINDOW:
+	# 따닥: 바로 앞 입력 뒤 0.14~0.3초에 한 번 더 누르면, 지금 타 뒤에 빠른 베기를 끼워 넣는다
+	if not _extra and not _double and not _buffered and _end_t < 0.0 and now - _prev_tap >= 0.14 and now - _prev_tap <= 0.3:
 		_double = true
 		return
-	# 달려가 붙느라 첫 타가 늦게 나가 한 박 넘게 걸리게 된 경우, 그 사이 박자에 누르면 당겨서 잇는다
-	if not _buffered and _move_weight < 1.0 and _due - _swing_clock > game.BEAT + 0.1 and absf(d + game.BEAT) <= GOOD_WINDOW and now - _prev_tap >= 0.3:
-		_due -= game.BEAT
-		_buffered = true
-		_buf_grade = _grade(d + game.BEAT, auto)
-		return
-	# 두 박짜리 피니시의 가운데 박자는 쉬는 자리다(눌러도 벌칙 없이 넘긴다)
-	if _move_weight >= 1.0 and absf(d + game.BEAT) <= GOOD_WINDOW:
-		return
-	# 이미 다음 타를 받았는데 또 누르면(연타) JUST를 잃는다
 	if _buffered:
 		_buf_grade = "good"
 		return
-	if d <= GOOD_WINDOW:
-		_buffered = true
-		_buf_grade = _grade(d, auto)
+	# 칼을 뻗은 뒤 한 박 쉬고 그다음 박자에 정확히 누르면 패턴 기술
+	if _end_t >= 0.0 and _due > 0.0 and absf(now - _due - game.BEAT) <= AND_WINDOW and chain_i != CHAIN.size() - 1 and not auto:
+		_pause_move(_grade(now, auto))
 		return
-	# 박자를 놓쳤다(회복 동작 중): 한 박 쉰 패턴이나 새 소절로 본다
-	_idle_tap(now, auto)
+	# 칼이 아직 지나가는 중에 서둘러 누른 입력은 '서두른 타'(피해 0.8배). 뻗은 자세를 보고 누르면 제대로 들어간다
+	_buffered = true
+	_buf_grade = "early" if _end_t < 0.0 and not auto else _grade(now, auto)
 
 
-func _grade(d: float, auto: bool) -> String:
-	return "perfect" if absf(d) <= JUST_WINDOW and not auto else "good"
+## 누른 순간이 박자에서 JUST_WINDOW 안이면 JUST
+func _grade(at: float, auto: bool) -> String:
+	var off: float = at - roundf(at / game.BEAT) * game.BEAT
+	return "perfect" if absf(off) <= JUST_WINDOW and not auto else "good"
 
 
 func tap_up() -> void:
@@ -491,8 +485,8 @@ func _physics_process(delta: float) -> void:
 	if _frozen:
 		_frozen = false
 		anim.speed_scale = _speed
-	# 콤보는 쉬는 박자의 다음 박자까지 살아 있다. 그 뒤에 끊긴다
-	if state != "attack" and _due > 0.0 and game.beat_clock() > _due + game.BEAT + GOOD_WINDOW:
+	# 고리는 칼을 뻗은 뒤 CHAIN_WINDOW, 또는 한 박 쉰 패턴을 낼 박자까지 살아 있다. 그 뒤에 끊긴다
+	if state != "attack" and _phrase_hits > 0 and game.beat_clock() > maxf(_chain_end + MIN_HOLD + CHAIN_WINDOW, _due + game.BEAT + AND_WINDOW):
 		_reset_phrase()
 		game.on_combo_drop()
 	invuln = maxf(invuln - delta, 0.0)
@@ -668,7 +662,7 @@ func _begin_chain(auto := false) -> void:
 	_phrase_hits = 0
 	_due = -1.0
 	_buffered = false
-	_start_chain_hit(_grade(game.beat_offset(), auto))
+	_start_chain_hit(_grade(_last_tap, auto))
 
 
 func _next_chain(grade: String) -> void:
@@ -695,6 +689,8 @@ func _start_chain_hit(grade: String, extra := false) -> void:
 		_phrase_hits += 1
 	_hit_i = 0
 	_start_hit()
+	if grade == "early":
+		_move_dmg *= 0.8
 	# JUST가 세 번 이어지면 그 타는 무거운 일격(긴 히트스톱, 큰 밀림, 두 배 피해)
 	if not extra and _just_streak > 0 and _just_streak % 3 == 0:
 		_move_weight = maxf(_move_weight, 1.0)
@@ -799,27 +795,19 @@ func _begin_swing() -> void:
 		var base: float = data.get("strike_time", STRIKE_TIME)
 		var strike := base * (1.35 if heavy else 1.0)
 		if _extra:
-			# 반 박 베기는 지금 박자의 끝(_due)에 같이 맞춘다
-			strike = clampf(_due - now - 0.06, 0.12, base * 0.75)
+			strike = base * 0.7
 		else:
-			var beats := 2.0 if heavy else 1.0
-			var due: float = _due + beats * game.BEAT
-			if _due <= 0.0:
-				# 첫 타: 박자 가까이(±GOOD) 누르면 그 박자에 누른 것으로 보고 한 박을 준다. 아니면 다가오는 박자에 맞춘다
-				var nearest: float = roundf(now / game.BEAT) * game.BEAT
-				due = nearest + beats * game.BEAT if absf(now - nearest) <= GOOD_WINDOW else ceilf(now / game.BEAT) * game.BEAT
-			while due - now < strike * 0.7:
-				due += game.BEAT
-			_due = due
-			# 첫 타가 박자 직전에 눌리면 그 박자에 맞추느라 조금 빨리 휘두른다.
-			# 화면이 탭을 가리느라 늦게 알려 준 만큼도 줄여서, 칼이 닿는 시각은 누른 순간 기준을 지킨다
-			var lag := clampf(now - _last_tap, 0.0, 0.12)
-			strike = maxf(minf(strike, _due - now - 0.02) - lag, 0.16)
+			# 누른 뒤 늦게 나간 만큼(탭 판별, 앞 타가 끝나길 기다림) 예비 동작을 줄여 누른 순간 기준으로 칼이 닿게 한다
+			var lag := clampf(now - _last_tap, 0.0, 0.1)
+			strike = maxf(strike - lag, base * 0.7)
+			# 패턴 판정용 박자: 칼이 닿은 뒤 처음 오는 박자
+			_due = ceilf((now + strike) / game.BEAT) * game.BEAT
 		var cut_dur := (0.1 if heavy else 0.08)
 		_strike_spd = (c.end - c.start) / cut_dur * EASE_K
 		_wind_spd = c.start / maxf(strike - cut_dur, 0.05) * EASE_K
 		_rate = _wind_spd
-		_hold_len = maxf((_due - now) * Engine.time_scale - strike, 0.04)
+		# 아무것도 누르지 않으면 뻗은 자세로 잠깐(레퍼런스 100~250ms) 머물렀다가 거둔다
+		_hold_len = 0.3 if heavy else 0.22
 	# 달리기·대기에서 들어올 때는 조금 길게 섞는다(발이 튀지 않게), 연타 사이는 짧게
 	var from_loco: bool = _current in [_anim("run"), _anim("idle"), _anim("dodge"), _anim("hit")]
 	_play(_clip, _wind_spd, 0.15 if from_loco else 0.08, true)
@@ -960,6 +948,8 @@ func _update_attack(delta: float) -> void:
 	var pos: float = _clip_pos()
 	if _end_t < 0.0 and pos >= cl.end:
 		_end_t = t
+		if move_kind == "chain":
+			_chain_end = game.beat_clock()
 	var c := _swing()
 	_speed = _clip_speed(c) * heavy_k
 	anim.speed_scale = _speed
@@ -1010,7 +1000,7 @@ func _update_attack(delta: float) -> void:
 		_start_hit()
 	elif move_kind == "chain" and _double and not _extra and after >= 0.02:
 		_start_chain_hit("good", true)
-	elif move_kind == "chain" and _buffered and after >= 0.03 and steady and (game.beat_clock() >= _due - 0.01 or t >= c.hold_end):
+	elif move_kind == "chain" and _buffered and after >= MIN_HOLD and steady:
 		_next_chain(_buf_grade)
 	elif move_kind != "chain" and queued and t >= c.hold_end - 0.02 and steady:
 		_begin_chain()
@@ -1034,7 +1024,7 @@ func _sweep(pad: float) -> void:
 			continue
 		if weapon.swept_hits(e.global_position, e.radius, 2.0 * e.stats.scale, pad):
 			_hit_set[e] = true
-			game.hit_enemy(e, data.atk * _move_dmg * (1.5 if just else 1.0), self, just, label, _move_weight)
+			game.hit_enemy(e, data.atk * _move_dmg * (1.6 if just else 1.0), self, just, label, _move_weight)
 
 
 func _shoot() -> void:
@@ -1061,7 +1051,7 @@ func _auto_play() -> void:
 	var now: float = game.beat_clock()
 	if state == "idle" and game.nearest_enemy(global_position, _strike_range() + (6.0 if data.ranged else 2.0)) != null:
 		_tap(now, true)
-	elif state == "attack" and move_kind == "chain" and phase == "swing" and not _buffered and now >= _due - 0.1:
+	elif state == "attack" and move_kind == "chain" and phase == "swing" and not _buffered and _end_t >= 0.0 and t - _end_t >= MIN_HOLD * 0.5:
 		_tap(now, true)
 	if data.ult >= 100.0 and game.nearest_enemy(global_position, 5.0) != null:
 		game.use_ult()
