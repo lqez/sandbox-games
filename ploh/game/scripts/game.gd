@@ -65,6 +65,9 @@ var _hitstop_until := 0
 var _slow_scale := 1.0
 var shake_dir := Vector3.ZERO    # 마지막 타격 방향. 화면이 그쪽으로 밀린다
 var cam_kick := Vector3.ZERO     # 카메라가 한 번 밀린 양(빠르게 0으로 돌아온다)
+var _focus := Vector3.ZERO
+var _focus_v := Vector3.ZERO
+var _cam_ready := false
 var music: AudioStreamPlayer
 var _clock0 := 0
 var _last_beat := -1
@@ -158,6 +161,7 @@ func reset() -> void:
 	_spawn_player(dungeon.rooms[0].center + Vector3(1.5, 0, 1.5))
 	room = -1
 	route_i = 0
+	_cam_ready = false
 	state = "play"
 	elapsed = 0.0
 	combo = 0
@@ -259,33 +263,40 @@ func _process(delta: float) -> void:
 
 
 func _update_camera(delta: float) -> void:
-	if player == null:
+	## 카메라는 출렁이지 않게 잡는다.
+	## - 바라보는 점(초점)을 임계 감쇠 스프링으로 부드럽게 옮기고, 카메라는 그 초점에서 고정된 방향·거리에만 둔다.
+	##   그래서 카메라는 회전하지 않고 평행이동만 한다(예전에는 위치만 늦게 따라가고 시선은 바로 따라가서 흔들렸다)
+	## - 적 수에 따라 거리를 바꾸지 않는다. 보스 방에서만 천천히 한 번 물러난다
+	## - 영웅을 화면 아래쪽 약 60% 높이에 두어 진행 방향을 보여 준다
+	if player == null or not is_instance_valid(player):
 		return
-	# 주변 적이 많거나 보스가 있으면 시야를 넓힌다
-	var near := 0
-	for e in enemies:
-		if e.global_position.distance_to(player.global_position) < 9.0:
-			near += 1
-	var want := 8.6 + minf(near, 6) * 0.4 + (2.5 if boss != null and is_instance_valid(boss) else 0.0)
+	var real := delta / maxf(Engine.time_scale, 0.05)
+	var want := 8.2 + (2.0 if boss != null and is_instance_valid(boss) else 0.0)
 	var vs := get_viewport().get_visible_rect().size
 	if vs.x > vs.y:
-		want *= 1.45   # 가로 화면은 세로 시야가 좁아 조금 더 물러난다
-	cam_dist = lerpf(cam_dist, want, minf(delta * 2.0, 1.0))
+		want *= 1.4   # 가로 화면은 세로 시야가 좁아 조금 더 물러난다
 	var dir := Vector3(0, 0, 1).rotated(Vector3.RIGHT, -deg_to_rad(CAM_PITCH)).rotated(Vector3.UP, deg_to_rad(CAM_YAW))
-	# 화면 위쪽(진행 방향)을 더 보여 주도록 초점을 앞으로 당겨 영웅을 화면 아래쪽에 둔다
-	var focus := player.global_position + Vector3(0, 1.0, 0) + screen_to_world(Vector2(0, -1)) * 1.6
+	var target := player.global_position + Vector3(0, 1.0, 0) + screen_to_world(Vector2(0, -1)) * 1.4
 	if cine_t > 0.0:
 		# 처치 연출: 쓰러지는 적 쪽으로 다가가며 천천히 돈다
 		var k := 1.0 - cine_t / cine_len
-		focus = focus.lerp(cine_target + Vector3(0, 1.0, 0), smoothstep(0.0, 0.25, k))
-		cam_dist = lerpf(cam_dist, 5.2 if cine_len > 1.0 else 6.8, 0.08)
+		target = target.lerp(cine_target + Vector3(0, 1.0, 0), smoothstep(0.0, 0.25, k))
+		want = 5.2 if cine_len > 1.0 else 6.8
 		dir = dir.rotated(Vector3.UP, deg_to_rad(28.0) * k * (1.0 if cine_len > 1.0 else 0.4))
-	# 흔들림: 맞은 방향으로 한 번 밀렸다가 빠르게 돌아온다(진동하지 않는다). 슬로모션과 무관하게 실제 시간으로 줄인다
-	var real := delta / maxf(Engine.time_scale, 0.05)
-	var shake := cam_kick
-	cam_kick = cam_kick * exp(-real / 0.022)
-	camera.global_position = camera.global_position.lerp(focus + dir * cam_dist, minf(delta * 8.0, 1.0)) + shake
-	camera.look_at(focus, Vector3.UP)
+	if not _cam_ready:
+		_cam_ready = true
+		_focus = target
+		cam_dist = want
+	# 임계 감쇠 스프링(약 0.25초에 따라붙고 넘치지 않는다)
+	var omega := 9.0
+	var x := _focus - target
+	var tmp := (_focus_v + x * omega) * real
+	_focus_v = (_focus_v - tmp * omega) * exp(-omega * real)
+	_focus = target + (x + tmp) * exp(-omega * real)
+	cam_dist = lerpf(cam_dist, want, 1.0 - exp(-real * 1.5))
+	cam_kick = cam_kick * exp(-real / 0.03)
+	camera.global_position = _focus + dir * cam_dist + cam_kick
+	camera.look_at(_focus + cam_kick, Vector3.UP)
 
 
 ## 화면 방향(2D, 위가 -y)을 월드 바닥 방향으로 바꾼다

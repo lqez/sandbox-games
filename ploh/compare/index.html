@@ -1,0 +1,670 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>프라우 등신 비교</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Noto+Sans+KR:wght@400;500;700;900&display=swap">
+<style>
+/* Layout: 한 줄짜리 증거 기둥(최대 62rem). 게임 카메라 화면이 맨 위, 그다음 3열 3D 뷰어, 3면도, 판정표 순서 */
+:root {
+  --bg: #f3f2f7;
+  --surface: #ffffff;
+  --stage: #e5e2ec;
+  --ink: #1d1b25;
+  --muted: #5f5a6e;
+  --line: #d9d5e2;
+  --accent: #a94f17;
+  --accent-soft: #f5e4d6;
+  --on-ink: #f3f2f7;
+  --good: #1f6f45;
+  --good-bg: #dff0e5;
+  --mid: #75591a;
+  --mid-bg: #f3ead2;
+  --weak: #a2322f;
+  --weak-bg: #f6dfdd;
+  --font-body: "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  --step--1: 0.8125rem;
+  --step-0: 1rem;
+  --step-1: 1.1875rem;
+  --step-2: 1.5rem;
+  --step-3: clamp(1.875rem, 1.4rem + 2vw, 2.5rem);
+  --radius: 6px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #131119;
+    --surface: #1c1924;
+    --stage: #24202e;
+    --ink: #ece9f3;
+    --muted: #a39db3;
+    --line: #322d3e;
+    --accent: #f0a062;
+    --accent-soft: #3a2a1e;
+    --on-ink: #131119;
+    --good: #79cf9c;
+    --good-bg: #1d3327;
+    --mid: #dcbc63;
+    --mid-bg: #352d17;
+    --weak: #f08a84;
+    --weak-bg: #3a1f1f;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #131119;
+  --surface: #1c1924;
+  --stage: #24202e;
+  --ink: #ece9f3;
+  --muted: #a39db3;
+  --line: #322d3e;
+  --accent: #f0a062;
+  --accent-soft: #3a2a1e;
+  --on-ink: #131119;
+  --good: #79cf9c;
+  --good-bg: #1d3327;
+  --mid: #dcbc63;
+  --mid-bg: #352d17;
+  --weak: #f08a84;
+  --weak-bg: #3a1f1f;
+  color-scheme: dark;
+}
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: var(--step-0);
+  line-height: 1.7;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+.page {
+  max-width: 62rem;
+  margin: 0 auto;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 32px 72px;
+  display: flex;
+  flex-direction: column;
+  gap: 56px;
+}
+section, header { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+h1, h2, h3 { margin: 0; text-wrap: balance; line-height: 1.3; }
+h1 { font-size: var(--step-3); font-weight: 900; letter-spacing: -0.01em; }
+h2 { font-size: var(--step-2); font-weight: 700; }
+h3 { font-size: var(--step-1); font-weight: 700; }
+p { margin: 0; max-width: 42em; }
+.eyebrow {
+  font-family: var(--font-mono);
+  font-size: var(--step--1);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.lede { color: var(--muted); font-size: var(--step-1); line-height: 1.65; }
+.small { font-size: var(--step--1); color: var(--muted); }
+.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.section-head { display: flex; flex-direction: column; gap: 6px; }
+
+/* 촬영 조건 한 줄 */
+.facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: 1px;
+  margin: 4px 0 0;
+  background: var(--line);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.facts div { background: var(--surface); padding: 10px 14px; min-width: 0; }
+.facts dt { font-size: var(--step--1); color: var(--muted); }
+.facts dd { margin: 0; font-family: var(--font-mono); font-size: 0.9375rem; font-variant-numeric: tabular-nums; }
+
+/* 버튼 묶음 */
+.controls { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; }
+.seg {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 3px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.seg button, .chip {
+  font: inherit;
+  font-size: 0.9375rem;
+  color: var(--ink);
+  background: transparent;
+  border: 0;
+  border-radius: 5px;
+  padding: 6px 12px;
+  cursor: pointer;
+  line-height: 1.4;
+}
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--on-ink); }
+.seg button:hover:not([aria-pressed="true"]) { background: var(--stage); }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { border: 1px solid var(--line); background: var(--surface); }
+.chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--on-ink); }
+.chip:hover:not([aria-pressed="true"]) { border-color: var(--muted); }
+button:focus-visible, input:focus-visible + .switch-track, summary:focus-visible, model-viewer:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.switch { position: relative; display: inline-flex; align-items: center; gap: 8px; cursor: pointer; font-size: 0.9375rem; }
+.switch input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.switch-track {
+  width: 36px; height: 20px; border-radius: 10px;
+  background: var(--line); position: relative; flex: none;
+  transition: background 0.15s;
+}
+.switch-track::after {
+  content: ""; position: absolute; top: 2px; left: 2px;
+  width: 16px; height: 16px; border-radius: 50%;
+  background: var(--surface); transition: transform 0.15s;
+}
+.switch input:checked + .switch-track { background: var(--accent); }
+.switch input:checked + .switch-track::after { transform: translateX(16px); }
+
+/* 게임 카메라 화면 */
+figure { margin: 0; min-width: 0; }
+.shot img {
+  display: block;
+  width: 100%;
+  max-width: 720px;
+  height: auto;
+  aspect-ratio: 720 / 440;
+  border-radius: var(--radius);
+  background: var(--stage);
+}
+.shot figcaption { margin-top: 8px; font-size: var(--step--1); color: var(--muted); max-width: 720px; }
+details.full summary { cursor: pointer; font-size: var(--step--1); color: var(--muted); width: fit-content; }
+details.full img {
+  display: block; margin-top: 10px;
+  width: min(100%, 300px); height: auto; aspect-ratio: 720 / 1280;
+  border-radius: var(--radius); background: var(--stage);
+}
+.solo {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  max-width: 720px;
+}
+.solo img {
+  display: block; width: 100%; height: auto; aspect-ratio: 1;
+  border-radius: var(--radius); background: var(--stage);
+}
+.solo figcaption {
+  display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0 6px;
+  margin-top: 6px; font-size: var(--step--1); color: var(--muted);
+}
+.tag {
+  display: inline-grid; place-items: center;
+  min-width: 1.6em; height: 1.6em; padding: 0 0.3em;
+  border-radius: 4px;
+  background: var(--ink); color: var(--on-ink);
+  font-family: var(--font-mono); font-weight: 500; font-size: 0.8125rem; line-height: 1;
+}
+.tag.ref { background: var(--stage); color: var(--ink); border: 1px solid var(--line); }
+.reads { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; max-width: 46em; }
+.reads li { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 12px; align-items: start; }
+.reads li .tag { margin-top: 3px; }
+
+/* 3D 뷰어 */
+.viewers { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.vcard { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+model-viewer {
+  display: block;
+  width: 100%;
+  aspect-ratio: 3 / 5;
+  max-width: 100%;
+  height: auto;
+  background: var(--stage);
+  border-radius: var(--radius);
+  --poster-color: var(--stage);
+}
+@media (min-width: 760px) { model-viewer { aspect-ratio: 3 / 4; } }
+@media (max-width: 560px) { .solo { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.spec { display: flex; gap: 12px; align-items: flex-end; min-width: 0; }
+.spec-body { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 6px; }
+.spec-title { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-weight: 700; }
+.spec dl { margin: 0; display: grid; gap: 2px 10px; grid-template-columns: auto minmax(0, 1fr); font-size: var(--step--1); }
+.spec dt { color: var(--muted); }
+.spec dd { margin: 0; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+@media (max-width: 560px) {
+  .spec { flex-direction: column; align-items: flex-start; }
+  .spec dl { grid-template-columns: minmax(0, 1fr); }
+  .spec dd { margin-bottom: 4px; }
+}
+/* 등신 자: 키(m)에 비례한 높이, 머리 한 칸을 강조 */
+.ruler {
+  --unit: 4.4rem;
+  flex: none;
+  width: 12px;
+  height: calc(var(--h) / 1.7 * var(--unit));
+  position: relative;
+  border: 1px solid var(--muted);
+  border-radius: 2px;
+  background: repeating-linear-gradient(to bottom, transparent 0, transparent calc(100% / var(--heads) - 1px), var(--muted) calc(100% / var(--heads) - 1px), var(--muted) calc(100% / var(--heads)));
+}
+.ruler::before {
+  content: ""; position: absolute; inset: 0 0 auto 0;
+  height: calc(100% / var(--heads));
+  background: var(--accent);
+}
+
+/* 3면도 */
+.turns { display: grid; gap: 20px; }
+.turns img {
+  display: block; width: 100%; height: auto; aspect-ratio: 3 / 2;
+  border-radius: var(--radius); background: var(--stage);
+}
+.turns figcaption { margin-top: 6px; display: flex; gap: 8px; align-items: center; font-size: var(--step--1); color: var(--muted); }
+
+/* 판정표 */
+.verdict { width: 100%; border-collapse: collapse; font-size: 0.9375rem; }
+.verdict th, .verdict td { text-align: left; vertical-align: top; padding: 12px 10px; border-bottom: 1px solid var(--line); }
+.verdict thead th { font-size: var(--step--1); color: var(--muted); font-weight: 500; border-bottom: 1px solid var(--muted); }
+.verdict tbody th { font-weight: 700; width: 22%; }
+.verdict td { width: 26%; }
+.verdict td p { margin-top: 4px; color: var(--muted); font-size: var(--step--1); line-height: 1.6; }
+.r {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 0.8125rem; font-weight: 700;
+  padding: 1px 8px; border-radius: 999px;
+}
+.r::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.r.good { color: var(--good); background: var(--good-bg); }
+.r.mid { color: var(--mid); background: var(--mid-bg); }
+.r.mid::before { background: linear-gradient(90deg, currentColor 50%, transparent 50%); border: 1px solid currentColor; width: 5px; height: 5px; }
+.r.weak { color: var(--weak); background: var(--weak-bg); }
+.r.weak::before { background: transparent; border: 1.5px solid currentColor; width: 4px; height: 4px; }
+@media (max-width: 640px) {
+  .verdict thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .verdict, .verdict tbody, .verdict tr, .verdict th, .verdict td { display: block; width: auto; }
+  .verdict tr { padding: 14px 0; border-bottom: 1px solid var(--line); display: grid; gap: 10px; }
+  .verdict th, .verdict td { border: 0; padding: 0; }
+  .verdict td { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 2px 10px; }
+  .verdict td::before {
+    content: attr(data-k);
+    grid-row: span 2;
+    display: inline-grid; place-items: center;
+    width: 1.6em; height: 1.6em; border-radius: 4px;
+    background: var(--ink); color: var(--on-ink);
+    font-family: var(--font-mono); font-size: 0.8125rem;
+  }
+  .verdict td .r { justify-self: start; }
+  .verdict td p { margin-top: 0; }
+}
+
+.call {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 20px;
+  display: flex; flex-direction: column; gap: 12px;
+}
+.call p { max-width: 44em; }
+.notes { margin: 0; padding-left: 1.2em; display: grid; gap: 6px; font-size: var(--step--1); color: var(--muted); max-width: 52em; }
+code { font-family: var(--font-mono); font-size: 0.9em; }
+
+@media (prefers-reduced-motion: reduce) {
+  .switch-track, .switch-track::after { transition: none; }
+}
+</style>
+</head>
+<body>
+<div class="page">
+  <header>
+    <span class="eyebrow">PLOH · 영웅 모델 결정 자료</span>
+    <h1>프라우 등신 비교</h1>
+    <p class="lede">아스트리드(프라우)를 원작 비율 A, 중간 비율 B, SD 비율 C 세 가지로 만들었습니다. 게임에 어느 비율을 쓸지 고르기 위해, 실제 Godot 게임 카메라로 찍은 화면과 돌려 볼 수 있는 3D 모델, 3면도, 항목별 장단점을 한곳에 모았습니다.</p>
+    <dl class="facts">
+      <div><dt>게임 카메라</dt><dd>요 45° · 피치 38° · 8 m</dd></div>
+      <div><dt>시야와 화면</dt><dd>가로 50° · 720×1280</dd></div>
+      <div><dt>지금 영웅</dt><dd>KayKit Knight 2.47 m</dd></div>
+      <div><dt>렌더</dt><dd>GL Compatibility · 툰 셰이더</dd></div>
+    </dl>
+  </header>
+
+  <section id="ingame" aria-labelledby="h-ingame">
+    <div class="section-head">
+      <h2 id="h-ingame">게임 카메라로 본 모습</h2>
+      <p class="small">Godot 게임과 같은 카메라, 환경, 툰 셰이더로 찍었습니다. 바닥은 무늬 없는 회색이고 조명은 따뜻한 주광과 차가운 보조광입니다. 폰에서 이 그림이 화면 폭에 꽉 차면 실제 게임에서 보이는 크기와 거의 같습니다.</p>
+    </div>
+    <div class="controls">
+      <div class="seg" role="group" aria-label="크기 기준">
+        <button type="button" id="scale-fit" aria-pressed="true">Knight 키에 맞춤</button>
+        <button type="button" id="scale-raw" aria-pressed="false">만든 크기 그대로</button>
+      </div>
+      <div class="seg" role="group" aria-label="자세">
+        <button type="button" id="pose-attack" aria-pressed="true">공격 1 타격 순간</button>
+        <button type="button" id="pose-idle" aria-pressed="false">대기</button>
+      </div>
+    </div>
+    <figure class="shot">
+      <img id="lineup" src="img/lineup_attack_fit.jpg" width="720" height="440" alt="게임 카메라로 본 A, B, C와 KayKit Knight. 세 안을 Knight 키에 맞춘 공격 순간">
+      <figcaption id="lineup-cap">세 안을 Knight 키(2.47 m)에 맞춰 A ×1.45, B ×1.97, C ×2.60배로 키웠습니다. 720×1280 화면의 가운데 띠(y 430–870)만 잘랐고, 간격은 1.9 m입니다.</figcaption>
+    </figure>
+    <details class="full">
+      <summary>720×1280 화면 전체로 보기</summary>
+      <img id="lineup-full" src="img/lineup_attack_fit_full.jpg" width="720" height="1280" loading="lazy" alt="같은 장면의 세로 화면 전체">
+    </details>
+
+    <h3>한 명씩, 게임과 같은 구도로</h3>
+    <p class="small">게임처럼 초점을 영웅에서 화면 위쪽으로 1.6 m 당겨 영웅이 화면 아래쪽에 오게 했습니다. 각 칸은 그 화면에서 400×400 px를 원래 픽셀 그대로 잘라 낸 것입니다.</p>
+    <div class="solo">
+      <figure>
+        <img id="solo-A" src="img/solo_A_attack_fit.jpg" width="400" height="400" alt="A안 한 명, 게임 구도">
+        <figcaption><span><span class="tag">A</span> 원작</span><span class="mono" data-px="A">209 px</span></figcaption>
+      </figure>
+      <figure>
+        <img id="solo-B" src="img/solo_B_attack_fit.jpg" width="400" height="400" alt="B안 한 명, 게임 구도">
+        <figcaption><span><span class="tag">B</span> 중간</span><span class="mono" data-px="B">209 px</span></figcaption>
+      </figure>
+      <figure>
+        <img id="solo-C" src="img/solo_C_attack_fit.jpg" width="400" height="400" alt="C안 한 명, 게임 구도">
+        <figcaption><span><span class="tag">C</span> SD</span><span class="mono" data-px="C">209 px</span></figcaption>
+      </figure>
+      <figure>
+        <img id="solo-K" src="img/solo_K_attack.jpg" width="400" height="400" alt="지금 쓰는 KayKit Knight, 게임 구도">
+        <figcaption><span><span class="tag ref">K</span> 지금</span><span class="mono">209 px</span></figcaption>
+      </figure>
+    </div>
+    <p class="small">숫자는 720 px 폭 화면에서 발부터 정수리까지(키 기준)의 세로 픽셀입니다. 아래 글의 머리 크기는 이 값을 등신으로 나눈 어림값입니다.</p>
+
+    <h3>게임 거리에서 읽히는 정도</h3>
+    <ul class="reads">
+      <li><span class="tag">A</span><span>만든 크기(1.70 m)로는 세로 약 133 px, 머리는 약 19 px입니다. Knight 키로 키워도 머리가 약 30 px라 얼굴은 점 몇 개로만 보입니다. 실루엣은 긴 다리와 검은 레깅스가 차지하고, 수평 베기의 타격 순간에는 검이 앞을 향해 짧고 가늘게 보입니다. 사람 체형이라는 인상은 세 안 중 가장 분명합니다.</span></li>
+      <li><span class="tag">B</span><span>만든 크기(1.25 m)로는 세로 약 94 px입니다. Knight 키로 키우면 머리가 약 45 px가 되어 묶은 머리, 흰 셔츠, 노란 조끼, 검이 모두 따로 보입니다. 공격 순간 팔과 검이 몸 밖으로 나와 동작이 가장 잘 읽힙니다.</span></li>
+      <li><span class="tag">C</span><span>만든 크기(0.95 m)로는 세로 약 69 px로 발밑 그림자 원보다 작고, 검은 머리 덩어리에 검과 옷이 묻힙니다. Knight 키로 키우면 머리가 약 80 px로 얼굴이 가장 크게 보이고, KayKit과 덩치와 비율이 맞습니다. 다만 38° 위에서 내려다보면 머리가 상체를 많이 가려 옷 색과 팔 동작이 덜 보입니다.</span></li>
+      <li><span class="tag ref">공통</span><span>세 안 모두 지금 영웅과 같은 화면 크기를 내려면 1.45~2.60배 키워야 합니다. 검은 머리 텍스처는 이 거리에서 흰 점이 반짝이는 노이즈가 생깁니다. 게임의 외곽선 값(<code>Fx.toonify</code> 0.014)을 그대로 쓰면 B와 C는 외곽선 껍데기가 몸 앞을 검게 덮고, A는 뼈대 배율이 0.01이라 선이 사라집니다. 이 렌더에서는 세 안 모두 월드 기준 0.005로 맞췄습니다.</span></li>
+    </ul>
+  </section>
+
+  <section id="viewer" aria-labelledby="h-viewer">
+    <div class="section-head">
+      <h2 id="h-viewer">3D 모델 돌려 보기</h2>
+      <p class="small">동작을 고르면 세 모델이 같은 동작을 처음부터 함께 재생합니다. 끌어서 돌리고, 두 손가락이나 휠로 확대합니다. 모델 파일이 4–5 MB라 처음 불러올 때 몇 초 걸립니다.</p>
+    </div>
+    <div class="chips" role="group" aria-label="동작">
+      <button type="button" class="chip" data-anim="idle" aria-pressed="true">대기</button>
+      <button type="button" class="chip" data-anim="run" aria-pressed="false">달리기</button>
+      <button type="button" class="chip" data-anim="attack_1" aria-pressed="false">공격 1</button>
+      <button type="button" class="chip" data-anim="attack_2" aria-pressed="false">공격 2</button>
+      <button type="button" class="chip" data-anim="attack_3" aria-pressed="false">공격 3</button>
+      <button type="button" class="chip" data-anim="spin" aria-pressed="false">회전 베기</button>
+      <button type="button" class="chip" data-anim="cast" aria-pressed="false">스킬</button>
+      <button type="button" class="chip" data-anim="dodge" aria-pressed="false">구르기</button>
+      <button type="button" class="chip" data-anim="hit" aria-pressed="false">피격</button>
+      <button type="button" class="chip" data-anim="death" aria-pressed="false">쓰러짐</button>
+    </div>
+    <div class="controls">
+      <label class="switch" for="equal"><input type="checkbox" id="equal"><span class="switch-track" aria-hidden="true"></span>같은 배율로 보기(실제 키 비교)</label>
+      <label class="switch" for="sync"><input type="checkbox" id="sync" checked><span class="switch-track" aria-hidden="true"></span>카메라 함께 돌리기</label>
+      <label class="switch" for="slow"><input type="checkbox" id="slow"><span class="switch-track" aria-hidden="true"></span>0.3배속</label>
+    </div>
+    <div class="viewers">
+      <div class="vcard">
+        <model-viewer id="mv-A" src="models/A_original.glb" poster="img/beauty_A.jpg" alt="A안 프라우 3D 모델" camera-controls disable-pan autoplay animation-name="idle" camera-orbit="25deg 78deg auto" shadow-intensity="0.7" interaction-prompt="none" touch-action="pan-y"></model-viewer>
+        <div class="spec">
+          <span class="ruler" style="--h: 1.70; --heads: 7" aria-hidden="true"></span>
+          <div class="spec-body">
+            <span class="spec-title"><span class="tag">A</span>원작 비율</span>
+            <dl>
+              <dt>등신</dt><dd>약 7</dd>
+              <dt>키</dt><dd>1.70 m</dd>
+              <dt>삼각형</dt><dd>31,045 + 검 300</dd>
+              <dt>검</dt><dd>약 0.80 m</dd>
+              <dt>원본</dt><dd>24 fps · 4.2 MB</dd>
+            </dl>
+          </div>
+        </div>
+      </div>
+      <div class="vcard">
+        <model-viewer id="mv-B" src="models/B_mid.glb" poster="img/beauty_B.jpg" alt="B안 프라우 3D 모델" camera-controls disable-pan autoplay animation-name="idle" camera-orbit="25deg 78deg auto" shadow-intensity="0.7" interaction-prompt="none" touch-action="pan-y"></model-viewer>
+        <div class="spec">
+          <span class="ruler" style="--h: 1.25; --heads: 4.6" aria-hidden="true"></span>
+          <div class="spec-body">
+            <span class="spec-title"><span class="tag">B</span>중간 비율</span>
+            <dl>
+              <dt>등신</dt><dd>약 4.6</dd>
+              <dt>키</dt><dd>1.25 m</dd>
+              <dt>삼각형</dt><dd>31,086 + 검 300</dd>
+              <dt>검</dt><dd>0.72 m</dd>
+              <dt>원본</dt><dd>30 fps · 4.9 MB</dd>
+            </dl>
+          </div>
+        </div>
+      </div>
+      <div class="vcard">
+        <model-viewer id="mv-C" src="models/C_sd.glb" poster="img/beauty_C.jpg" alt="C안 프라우 3D 모델" camera-controls disable-pan autoplay animation-name="idle" camera-orbit="25deg 78deg auto" shadow-intensity="0.7" interaction-prompt="none" touch-action="pan-y"></model-viewer>
+        <div class="spec">
+          <span class="ruler" style="--h: 0.95; --heads: 2.6" aria-hidden="true"></span>
+          <div class="spec-body">
+            <span class="spec-title"><span class="tag">C</span>SD 비율</span>
+            <dl>
+              <dt>등신</dt><dd>약 2.6</dd>
+              <dt>키</dt><dd>0.95 m</dd>
+              <dt>삼각형</dt><dd>30,706 + 검 300</dd>
+              <dt>검</dt><dd>0.52 m</dd>
+              <dt>원본</dt><dd>30 fps · 5.0 MB</dd>
+            </dl>
+          </div>
+        </div>
+      </div>
+    </div>
+    <p class="small">카드 옆 막대는 키에 비례한 등신 자입니다. 칸 하나가 머리 하나이고, 맨 위 칸이 머리입니다. 세 모델의 머리 크기는 A안(1.70 m)에 맞춰 만들었습니다.</p>
+  </section>
+
+  <section id="turnaround" aria-labelledby="h-turn">
+    <div class="section-head">
+      <h2 id="h-turn">3면도</h2>
+      <p class="small">gpt-image-2로 만든 정면, 옆면, 뒷면 그림입니다. Meshy multi-image-to-3d의 입력으로 썼습니다.</p>
+    </div>
+    <div class="turns">
+      <figure>
+        <img src="img/turnaround_A.jpg" width="1536" height="1024" loading="lazy" alt="A안 3면도">
+        <figcaption><span class="tag">A</span>원작 비율, 약 7등신, 1.70 m</figcaption>
+      </figure>
+      <figure>
+        <img src="img/turnaround_B.jpg" width="1536" height="1024" loading="lazy" alt="B안 3면도">
+        <figcaption><span class="tag">B</span>중간 비율, 약 4.6등신, 1.25 m</figcaption>
+      </figure>
+      <figure>
+        <img src="img/turnaround_C.jpg" width="1536" height="1024" loading="lazy" alt="C안 3면도">
+        <figcaption><span class="tag">C</span>SD 비율, 약 2.6등신, 0.95 m</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section id="verdict" aria-labelledby="h-verdict">
+    <div class="section-head">
+      <h2 id="h-verdict">이 게임에서의 장단점</h2>
+      <p class="small">세로 화면, 8 m 거리의 아이소 카메라, 한 손가락 조작, KayKit 던전과 해골 적을 전제로 판단했습니다. 판독성 항목은 Knight 키에 맞춘 렌더를 기준으로 했습니다.</p>
+    </div>
+    <table class="verdict">
+      <thead>
+        <tr><th scope="col">항목</th><th scope="col">A 원작</th><th scope="col">B 중간</th><th scope="col">C SD</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th scope="row">아이소 카메라 8 m 판독성</th>
+          <td data-k="A"><span class="r weak">불리</span><p>머리 약 30 px. 얼굴과 표정이 보이지 않고 긴 다리가 실루엣을 차지합니다.</p></td>
+          <td data-k="B"><span class="r good">유리</span><p>머리 약 45 px. 머리 모양, 옷 색, 검이 모두 구분됩니다.</p></td>
+          <td data-k="C"><span class="r mid">보통</span><p>머리 약 80 px로 얼굴은 가장 크지만 위에서 보면 머리가 상체와 팔을 가립니다.</p></td>
+        </tr>
+        <tr>
+          <th scope="row">한 손가락 액션</th>
+          <td data-k="A"><span class="r mid">보통</span><p>런지와 구르기의 동작 폭은 크지만 몸이 가늘어 방향 전환과 피격 반응이 작게 보입니다.</p></td>
+          <td data-k="B"><span class="r good">유리</span><p>향한 방향과 자세 변화가 모두 보이는 크기입니다.</p></td>
+          <td data-k="C"><span class="r mid">보통</span><p>머리로 방향은 바로 읽히지만 팔다리가 짧아 동작 폭이 작습니다.</p></td>
+        </tr>
+        <tr>
+          <th scope="row">검 휘두름 가독성</th>
+          <td data-k="A"><span class="r mid">보통</span><p>검이 가늘고, 수평 베기 타격 순간에는 앞을 향해 짧아 보입니다.</p></td>
+          <td data-k="B"><span class="r good">유리</span><p>팔과 검이 몸 밖으로 나와 궤적이 읽힙니다.</p></td>
+          <td data-k="C"><span class="r mid">보통</span><p>칼날은 크게 보이지만 팔이 짧아 궤적 반지름이 작고 머리와 가깝습니다.</p></td>
+        </tr>
+        <tr>
+          <th scope="row">KayKit·환경과의 어울림</th>
+          <td data-k="A"><span class="r weak">불리</span><p>큰 머리 SD 체형인 Knight와 해골 사이에서 혼자 사실적 비율이라 튑니다.</p></td>
+          <td data-k="B"><span class="r mid">보통</span><p>어색하지 않지만 KayKit보다 머리가 작아 한 세트로 보이지는 않습니다.</p></td>
+          <td data-k="C"><span class="r good">유리</span><p>KayKit Knight(투구까지 약 2등신)와 비율이 가장 가깝습니다.</p></td>
+        </tr>
+        <tr>
+          <th scope="row">애니메이션 비용</th>
+          <td data-k="A"><span class="r good">유리</span><p>사람 비율이라 Meshy 동작 라이브러리를 거의 그대로 쓸 수 있습니다.</p></td>
+          <td data-k="B"><span class="r mid">보통</span><p>Meshy 동작이 대체로 맞지만 검이 몸을 뚫는 프레임을 확인해야 합니다.</p></td>
+          <td data-k="C"><span class="r weak">불리</span><p>큰 머리와 짧은 팔 때문에 동작마다 손봐야 합니다. attack_3은 손 위치를 옮겨 머리 관통을 피했습니다.</p></td>
+        </tr>
+        <tr>
+          <th scope="row">원작 충실도</th>
+          <td data-k="A"><span class="r good">유리</span><p>원작의 약 7등신 비율과 인상을 그대로 따릅니다.</p></td>
+          <td data-k="B"><span class="r mid">보통</span><p>의상과 색은 원작대로이고 비율만 줄였습니다.</p></td>
+          <td data-k="C"><span class="r weak">불리</span><p>SD로 다시 그린 모습이라 원작 일러스트와 인상이 다릅니다.</p></td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="call" aria-labelledby="h-call">
+    <div class="call">
+      <h2 id="h-call">어느 쪽을 고를까</h2>
+      <p>정해진 답은 없고 무엇을 우선하느냐에 달려 있습니다. 원작 재현이 가장 중요하면 A, 지금의 KayKit 화면과 귀여운 손맛이 가장 중요하면 C, 둘을 절충하려면 B가 맞습니다. 렌더만 놓고 보면 B가 가장 무난했습니다. Knight 키에 맞췄을 때 얼굴, 옷 색, 검이 모두 읽히고, 사람 비율 동작을 크게 고치지 않고 쓸 수 있습니다. C는 KayKit 세계와 가장 잘 어울리지만 위에서 내려다보는 카메라에서 머리가 몸과 검 동작을 가립니다. A는 원작에 가장 충실하지만 이 거리에서는 얼굴이 거의 보이지 않습니다. 배경과 적을 나중에 원작풍 에셋으로 바꿀 계획이라면 A의 단점인 환경과의 부조화는 줄어듭니다.</p>
+      <p class="small">어느 안이든 게임에 넣기 전에 할 일: 배율(A ×1.45, B ×1.97, C ×2.60) 정하기, 외곽선 굵기를 모델별로 다시 맞추기, 삼각형 수 줄이기(세 안 모두 약 31,000개로 Knight 약 5,300개의 6배).</p>
+    </div>
+  </section>
+
+  <section id="method" aria-labelledby="h-method">
+    <h2 id="h-method">찍은 조건</h2>
+    <ul class="notes">
+      <li>장면은 <code>ploh/game/tests/compare_shot.tscn</code>입니다. 720×1280 SubViewport에 그려 PNG로 저장했습니다. 창이 화면 크기에 맞춰 줄어도 렌더 해상도가 바뀌지 않게 하기 위해서입니다.</li>
+      <li>카메라는 게임과 같은 요 45°, 피치 38°, 거리 8 m, 가로 기준 시야 50°(<code>KEEP_WIDTH</code>)입니다. 줄 비교는 줄 가운데 바닥에서 1 m 위를 봅니다. 한 명씩 찍은 그림은 게임처럼 초점을 화면 위쪽으로 1.6 m 당겼습니다.</li>
+      <li>줄 간격은 요청한 2.2 m 대신 1.9 m로 했습니다. 2.2 m면 8 m 거리의 세로 화면(폭 약 7.5 m)에서 양 끝 인물이 잘립니다. 줄 비교에서 모델은 카메라 방향에서 화면 왼쪽으로 45° 돌려 세웠습니다.</li>
+      <li>공격 1 자세는 README의 타격 프레임입니다. A는 0.34초, B와 C는 10/30초(0.333초)이고, Knight의 <code>1H_Melee_Attack_Slice_Diagonal</code>은 칼끝이 가장 빠른 0.433초입니다. 대기는 0.5초 지점입니다.</li>
+      <li>환경은 <code>game.gd</code>의 <code>_build_env</code>와 같습니다(주변광, Filmic 톤매핑, 글로우, 안개). 조명은 따뜻한 주광(그림자 있음)과 차가운 보조광 두 개이고, 발밑에 게임과 같은 그림자 원을 깔았습니다.</li>
+      <li>툰 셰이더는 <code>Fx.toonify</code>로 입혔습니다. 외곽선은 Knight에 게임 값 0.014를, 아스트리드 세 안에는 월드 기준 0.005를 썼습니다.</li>
+    </ul>
+  </section>
+</div>
+
+<script type="module" src="https://cdn.jsdelivr.net/npm/@google/model-viewer@3.5.0/dist/model-viewer.min.js"></script>
+<script>
+(function () {
+  // 게임 카메라 그림 전환
+  var state = { fit: true, attack: true };
+  var PX = { fit: { A: 209, B: 209, C: 209 }, raw: { A: 133, B: 94, C: 69 } };
+  function setPressed(on, off) { on.setAttribute("aria-pressed", "true"); off.setAttribute("aria-pressed", "false"); }
+  function renderShots() {
+    var pose = state.attack ? "attack" : "idle";
+    var fit = state.fit ? "_fit" : "";
+    document.getElementById("lineup").src = "img/lineup_" + pose + fit + ".jpg";
+    document.getElementById("lineup-full").src = "img/lineup_" + pose + fit + "_full.jpg";
+    document.getElementById("lineup").alt = "게임 카메라로 본 A, B, C와 KayKit Knight. " + (state.fit ? "Knight 키에 맞춤" : "만든 크기 그대로") + ", " + (state.attack ? "공격 순간" : "대기");
+    ["A", "B", "C"].forEach(function (k) {
+      document.getElementById("solo-" + k).src = "img/solo_" + k + "_" + pose + fit + ".jpg";
+      var px = document.querySelector('[data-px="' + k + '"]');
+      if (px) px.textContent = (state.fit ? PX.fit[k] : PX.raw[k]) + " px";
+    });
+    document.getElementById("solo-K").src = "img/solo_K_" + pose + ".jpg";
+    document.getElementById("lineup-cap").textContent = state.fit
+      ? "세 안을 Knight 키(2.47 m)에 맞춰 A ×1.45, B ×1.97, C ×2.60배로 키웠습니다. 720×1280 화면의 가운데 띠(y 430–870)만 잘랐고, 간격은 1.9 m입니다."
+      : "만든 크기 그대로입니다(A 1.70 m, B 1.25 m, C 0.95 m, Knight 2.47 m). 720×1280 화면의 가운데 띠(y 430–870)만 잘랐고, 간격은 1.9 m입니다.";
+  }
+  var bFit = document.getElementById("scale-fit"), bRaw = document.getElementById("scale-raw");
+  var bAtk = document.getElementById("pose-attack"), bIdle = document.getElementById("pose-idle");
+  bFit.addEventListener("click", function () { state.fit = true; setPressed(bFit, bRaw); renderShots(); });
+  bRaw.addEventListener("click", function () { state.fit = false; setPressed(bRaw, bFit); renderShots(); });
+  bAtk.addEventListener("click", function () { state.attack = true; setPressed(bAtk, bIdle); renderShots(); });
+  bIdle.addEventListener("click", function () { state.attack = false; setPressed(bIdle, bAtk); renderShots(); });
+
+  // 3D 뷰어
+  var mvs = ["mv-A", "mv-B", "mv-C"].map(function (id) { return document.getElementById(id); });
+  var equal = document.getElementById("equal");
+  var sync = document.getElementById("sync");
+  var slow = document.getElementById("slow");
+  var EQUAL = { target: "0m 0.85m 0m", fov: "30deg", radius: "4.6m" };
+
+  function restartAll() {
+    requestAnimationFrame(function () {
+      requestAnimationFrame(function () {
+        mvs.forEach(function (mv) {
+          try { mv.currentTime = 0; mv.play(); } catch (e) {}
+        });
+      });
+    });
+  }
+  function setAnim(name) {
+    mvs.forEach(function (mv) { mv.animationName = name; });
+    document.querySelectorAll(".chip[data-anim]").forEach(function (c) {
+      c.setAttribute("aria-pressed", c.dataset.anim === name ? "true" : "false");
+    });
+    restartAll();
+  }
+  document.querySelectorAll(".chip[data-anim]").forEach(function (c) {
+    c.addEventListener("click", function () { setAnim(c.dataset.anim); });
+  });
+
+  function orbitOf(mv) {
+    try {
+      var o = mv.getCameraOrbit();
+      return { theta: o.theta + "rad", phi: o.phi + "rad" };
+    } catch (e) { return { theta: "25deg", phi: "78deg" }; }
+  }
+  function applyScale() {
+    mvs.forEach(function (mv) {
+      var o = orbitOf(mv);
+      if (equal.checked) {
+        mv.maxCameraOrbit = "Infinity 157.5deg 20m";
+        mv.cameraTarget = EQUAL.target;
+        mv.fieldOfView = EQUAL.fov;
+        mv.cameraOrbit = o.theta + " " + o.phi + " " + EQUAL.radius;
+      } else {
+        mv.maxCameraOrbit = "Infinity 157.5deg auto";
+        mv.cameraTarget = "auto auto auto";
+        mv.fieldOfView = "auto";
+        mv.cameraOrbit = o.theta + " " + o.phi + " auto";
+      }
+    });
+  }
+  equal.addEventListener("change", applyScale);
+  slow.addEventListener("change", function () {
+    mvs.forEach(function (mv) { mv.timeScale = slow.checked ? 0.3 : 1; });
+  });
+
+  mvs.forEach(function (mv) {
+    mv.addEventListener("camera-change", function (e) {
+      if (!sync.checked || !e.detail || e.detail.source !== "user-interaction") return;
+      var o;
+      try { o = mv.getCameraOrbit(); } catch (err) { return; }
+      mvs.forEach(function (other) {
+        if (other === mv) return;
+        var r;
+        try { r = equal.checked ? o.radius : other.getCameraOrbit().radius; } catch (err) { return; }
+        other.cameraOrbit = o.theta + "rad " + o.phi + "rad " + r + "m";
+        if (other.jumpCameraToGoal) other.jumpCameraToGoal();
+      });
+    });
+  });
+
+  // 세 모델이 모두 불러와지면 같은 시점부터 다시 재생
+  var loaded = 0;
+  mvs.forEach(function (mv) {
+    mv.addEventListener("load", function () {
+      loaded += 1;
+      if (slow.checked) mv.timeScale = 0.3;
+      if (loaded === mvs.length) restartAll();
+    });
+  });
+})();
+</script>
+</body>
+</html>
