@@ -518,7 +518,7 @@ func _physics_process(delta: float) -> void:
 				want = move_input.normalized() * data.speed * clampf(move_input.length(), 0.4, 1.0)
 			elif manual_t >= AUTO_RESUME:
 				want = _auto_move()
-			_steer(want, delta)
+			_steer(want, delta, true, manual)
 			if state == "idle" and _vel.length() > 0.5:
 				face = _vel.normalized()
 		"brake":
@@ -580,29 +580,30 @@ func _physics_process(delta: float) -> void:
 
 
 ## 관성 이동. 원하는 속도로 가속하되 빠를수록 크게 돌고, 빨리 달리다 급히 서거나 크게 꺾으면 버티는 자세를 잡는다
-func _steer(want: Vector3, delta: float, allow_brake := true) -> void:
+## snappy: 손가락으로 직접 움직일 때는 더 빨리 가속하고 꺾는다(조작이 굼뜨지 않게)
+func _steer(want: Vector3, delta: float, allow_brake := true, snappy := false) -> void:
 	want.y = 0
 	var spd := _vel.length()
 	var wspd := want.length()
 	if allow_brake and spd > BRAKE_SPEED and (wspd < spd * 0.35 or (wspd > 0.1 and want.dot(_vel) / (wspd * spd) < -0.3)):
 		_brake()
 		return
-	var rate := ACCEL if wspd > spd else STOP_DECEL
+	var rate := (ACCEL * (1.6 if snappy else 1.0)) if wspd > spd else STOP_DECEL
 	if spd < 0.5 or wspd < 0.05:
 		_vel = _vel.move_toward(want, rate * delta)
 		return
 	var cur := _vel / spd
-	var turn := lerpf(14.0, 4.5, clampf(spd / 7.0, 0.0, 1.0)) * delta
+	var turn := (lerpf(16.0, 8.0, clampf(spd / 7.0, 0.0, 1.0)) if snappy else lerpf(14.0, 4.5, clampf(spd / 7.0, 0.0, 1.0))) * delta
 	var ang := cur.signed_angle_to(want / wspd, Vector3.UP)
 	_vel = cur.rotated(Vector3.UP, clampf(ang, -turn, turn)) * move_toward(spd, wspd, rate * delta)
 
 
-## 급정지: 빠를수록 길게 미끄러지고 깊이 버틴다(6m/s에서 약 0.29초). 이 동안 공격은 기다린다
+## 급정지: 빠를수록 길게 미끄러지고 깊이 버틴다(6m/s에서 약 0.2초). 디딘 발은 붙잡는다
 func _brake() -> void:
 	var spd := _vel.length()
 	state = "brake"
 	t = 0.0
-	_brake_len = 0.12 + 0.028 * spd
+	_brake_len = 0.08 + 0.02 * spd
 	_brake_decel = spd / (_brake_len * 0.55)
 	proc.crouch = clampf(0.03 + 0.012 * spd, 0.0, 0.12)
 	proc.lock_feet = true

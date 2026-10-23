@@ -6,6 +6,7 @@ const Fx := preload("res://scripts/fx.gd")
 const Weapon := preload("res://scripts/weapon.gd")
 const Procedural := preload("res://scripts/procedural.gd")
 const Ragdoll := preload("res://scripts/ragdoll.gd")
+const Hero := preload("res://scripts/hero.gd")
 const SWING_AFTER := 0.16   # 예고가 끝난 뒤 칼이 내려오는 동안 판정을 이어 가는 시간
 const SOLDIER := "res://assets/soldiers/%s/%s.glb"
 
@@ -31,6 +32,10 @@ var hp := 0.0
 var radius := 0.5
 var state := "spawn"      # spawn, chase, wind, recover, stagger, dead
 var dormant := false      # 방에 미리 서 있는 보초(영웅이 들어오면 activate)
+var root_motion := {}     # 클립에서 지운 수평 루트 이동(공격 런지를 몸 이동으로 되살린다)
+var _rm_clip := ""
+var _rm_prev := Vector2.INF
+static var _root_cache := {}
 var t := 0.0
 var wind_time := 0.0
 var strike_area := 1.4
@@ -72,7 +77,11 @@ func setup(g: Node, k: String) -> void:
 	shape.shape = cap
 	shape.position.y = stats.scale
 	add_child(shape)
-	model = load(SOLDIER % [stats.model, stats.model]).instantiate()
+	var path: String = SOLDIER % [stats.model, stats.model]
+	if not _root_cache.has(path):
+		_root_cache[path] = Hero.load_root_motion(path)
+	root_motion = _root_cache[path]
+	model = load(path).instantiate()
 	model.scale = Vector3.ONE * stats.scale
 	add_child(model)
 	mats = Fx.toonify(model, 0.002, stats.tint)
@@ -159,7 +168,7 @@ func _physics_process(delta: float) -> void:
 	var to: Vector3 = hero.global_position - global_position
 	to.y = 0
 	var dist := to.length()
-	velocity = knock
+	velocity = knock + _root_velocity(delta)
 	knock = knock.move_toward(Vector3.ZERO, delta * knock_decel)
 	match state:
 		"spawn":
@@ -216,6 +225,25 @@ func _physics_process(delta: float) -> void:
 	# 공격 예고 막바지(카운터 구간)에는 몸이 달아올라 동작으로도 알린다
 	var late := state == "wind" and wind_time - t <= COUNTER_WINDOW
 	Fx.set_param(mats, "glow", 0.8 if late else 0.0)
+
+
+## 지금 클립의 루트 이동만큼 몸을 옮길 속도(월드). 공격·피격 클립에서만
+func _root_velocity(delta: float) -> Vector3:
+	var clip: String = anim.current_animation
+	if root_motion.is_empty() or not root_motion.has(clip) or delta <= 0.0 or state not in ["wind", "recover", "stagger"]:
+		_rm_clip = ""
+		return Vector3.ZERO
+	var arr: PackedVector2Array = root_motion[clip]
+	var f := clampf(anim.current_animation_position * 30.0, 0.0, arr.size() - 1.001)
+	var cur := arr[int(f)].lerp(arr[int(f) + 1], f - int(f))
+	var v := Vector3.ZERO
+	if clip == _rm_clip and _rm_prev != Vector2.INF:
+		var d := cur - _rm_prev
+		v = model.global_transform.basis * Vector3(d.x, 0.0, d.y) / delta
+		v.y = 0.0
+	_rm_clip = clip
+	_rm_prev = cur
+	return v
 
 
 func _separation() -> Vector3:
