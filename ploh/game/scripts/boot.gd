@@ -57,7 +57,8 @@ func _detect() -> void:
 		query = str(JavaScriptBridge.eval("location.search", true))
 		mobile = ua.contains("iPhone") or ua.contains("iPad") or ua.contains("Android") or ua.contains("Mobile")
 	else:
-		mobile = OS.has_feature("mobile")
+		# 개발용: 데스크톱에서 -- --mobile 로 휴대폰 설정을 흉내 낸다
+		mobile = OS.has_feature("mobile") or "--mobile" in OS.get_cmdline_user_args()
 	# 휴대폰은 실제 픽셀이 화면 크기의 2~3배라 처음부터 낮춰 시작한다
 	max_scale = 0.7 if mobile else 1.0
 	scale = 0.55 if mobile else 1.0

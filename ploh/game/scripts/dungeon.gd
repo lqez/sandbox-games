@@ -1064,9 +1064,9 @@ func _flame(parent: Node3D, pos: Vector3) -> void:
 	flame.gravity = Vector3(0, 1.5, 0)
 	flame.scale_amount_min = 0.5
 	flame.scale_amount_max = 1.0
-	var m := SphereMesh.new()
-	m.radius = 0.08
-	m.height = 0.16
+	# 불꽃 알갱이는 작게 보이므로 거친 구로 충분하다(기본 구는 64×32 분할이라 알갱이 하나가 삼각형 4천 개)
+	var m := _ball(0.08, 6)
+	m.rings = 3
 	m.material = Fx.mat(Color(1.0, 0.6, 0.2), 4.0, true)
 	flame.mesh = m
 	flame.position = pos

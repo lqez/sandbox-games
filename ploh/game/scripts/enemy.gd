@@ -32,6 +32,7 @@ var hp := 0.0
 var radius := 0.5
 var state := "spawn"      # spawn, chase, wind, recover, stagger, dead
 var dormant := false      # 방에 미리 서 있는 보초(영웅이 들어오면 activate)
+var _wake_check := 0.0
 var root_motion := {}     # 클립에서 지운 수평 루트 이동(공격 런지를 몸 이동으로 되살린다)
 var _rm_clip := ""
 var _rm_prev := Vector2.INF
@@ -135,6 +136,9 @@ func look_toward(p: Vector3) -> void:
 ## 영웅이 방에 들어왔다: 잠깐 알아채는 틈(0.3~0.8초) 뒤에 달려든다
 func activate() -> void:
 	dormant = false
+	visible = true
+	anim.active = true
+	proc.active = true
 	state = "spawn"
 	t = 1.1 - randf_range(0.3, 0.8)
 
@@ -155,6 +159,14 @@ func _physics_process(delta: float) -> void:
 	if _trail_wait <= 0.0:
 		hp_trail = move_toward(hp_trail, hp, max_hp * 1.2 * delta)
 	if dormant:
+		# 보초는 영웅이 다가오기 전까지 그리지도 움직이지도 않는다(다음 방까지 미리 세워 두는 비용을 줄인다)
+		_wake_check -= delta
+		if _wake_check <= 0.0:
+			_wake_check = 0.25
+			var near: bool = game.player != null and is_instance_valid(game.player) and global_position.distance_to(game.player.global_position) < 15.0
+			visible = near
+			anim.active = near
+			proc.active = near
 		return
 	if freeze_t > 0.0:
 		freeze_t -= delta / maxf(Engine.time_scale, 0.05)
