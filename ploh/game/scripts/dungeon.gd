@@ -110,7 +110,7 @@ func _layout(rng: RandomNumberGenerator) -> void:
 		c = nxt
 
 
-## 방마다 높은 단(경사로 포함)과 잔해 둔덕을 둔다
+## 방마다 높은 단(경사로 포함)과 잔해 둔덕을 둔다. 서서 싸우는 자리라 경사는 10° 안팎으로 완만하게
 func _terrain(rng: RandomNumberGenerator) -> void:
 	for ri in rooms.size():
 		var r: Dictionary = rooms[ri]
@@ -120,20 +120,20 @@ func _terrain(rng: RandomNumberGenerator) -> void:
 		for k in rng.randi_range(1, 2):
 			var a := rng.randf() * TAU
 			var c: Vector2 = r.c2 + Vector2(cos(a) * r.rx, sin(a) * r.rz).rotated(r.rot) * rng.randf_range(0.35, 0.6)
-			_features.append({"c": c, "r": rng.randf_range(2.6, 3.8), "h": rng.randf_range(0.45, 0.8)})
+			_features.append({"c": c, "r": rng.randf_range(3.0, 4.2), "h": rng.randf_range(0.3, 0.5)})
 		for k in rng.randi_range(1, 3):
 			var a := rng.randf() * TAU
 			var c: Vector2 = r.c2 + Vector2(cos(a) * r.rx, sin(a) * r.rz).rotated(r.rot) * rng.randf_range(0.2, 0.75)
-			_features.append({"c": c, "r": rng.randf_range(0.9, 1.5), "h": rng.randf_range(0.2, 0.38)})
+			_features.append({"c": c, "r": rng.randf_range(1.4, 2.2), "h": rng.randf_range(0.12, 0.2)})
 
 
-## 지형 높이(m). 단은 가운데가 평평하고 가장자리 45%가 경사로다
+## 지형 높이(m). 단은 가운데가 평평하고 가장자리 60%가 경사로다
 func height(p: Vector2) -> float:
 	var h := _noise.get_noise_2d(p.x * 0.7 + 113.0, p.y * 0.7) * 0.1
 	for f in _features:
 		var d: float = p.distance_to(f.c) / f.r
 		if d < 1.0:
-			h += f.h * (1.0 - smoothstep(0.55, 1.0, d))
+			h += f.h * (1.0 - smoothstep(0.4, 1.0, d))
 	return h
 
 

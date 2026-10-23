@@ -242,13 +242,13 @@ func _step(dt: float) -> void:
 	vel.y = 0
 	var accel := (vel - _prev_vel) / dt
 	_prev_vel = vel
-	var lean_target := Vector3.UP.cross(accel) * 0.011 * lean_strength
+	# 달리기 클립에 이미 앞 기울기가 있으므로 여기서는 가감속과 선회만 조금 싣는다(과하면 엎어져 보인다)
+	var lean_target := Vector3.UP.cross(accel) * 0.006 * lean_strength
 	var spd := vel.length()
 	if spd > 0.5:
-		# 달리는 방향으로 앞으로 숙인다
-		lean_target += Vector3.UP.cross(vel.normalized()) * 0.1 * minf(spd / 6.0, 1.0) * lean_strength
-	if lean_target.length() > 0.32:
-		lean_target = lean_target.normalized() * 0.32
+		lean_target += Vector3.UP.cross(vel.normalized()) * 0.03 * minf(spd / 6.0, 1.0) * lean_strength
+	if lean_target.length() > 0.18:
+		lean_target = lean_target.normalized() * 0.18
 	_lean_v += ((lean_target - _lean) * LEAN_STIFF - _lean_v * LEAN_DAMP) * dt
 	_lean += _lean_v * dt
 	_crouch_v += ((crouch - _crouch) * 160.0 - _crouch_v * 18.0) * dt
@@ -285,7 +285,11 @@ func _plan_feet(sk: Skeleton3D, dt: float) -> void:
 			t = t.lerp(lk, _lock_w * w)
 		elif _lock_w > 0.0 and _locked.size() > i:
 			t = t.lerp(_locked[i], _lock_w * w)
-		_targets.append([t, fw])
+		# 디딘 발은 발바닥을 경사면에 맞춘다(수평 그대로면 발끝이나 뒤꿈치가 뜬다)
+		var e := 0.12
+		var n := Vector3(height_fn.call(Vector2(fw.x - e, fw.z)) - height_fn.call(Vector2(fw.x + e, fw.z)), 2.0 * e,
+			height_fn.call(Vector2(fw.x, fw.z - e)) - height_fn.call(Vector2(fw.x, fw.z + e))).normalized()
+		_targets.append([t, fw, Vector3.UP.lerp(n, w * 0.8).normalized()])
 	if not lock_feet and _lock_w <= 0.0:
 		_locked.clear()
 
@@ -306,11 +310,13 @@ func _feet(sk: Skeleton3D, dt: float) -> void:
 		var shift := sk_global.basis.inverse() * Vector3(0, total, 0)
 		sk.set_bone_global_pose(_hips, Transform3D(hp.basis, hp.origin + shift))
 	for i in _legs.size():
-		_two_bone(sk, _legs[i][0], _legs[i][1], _legs[i][2], inv * (_targets[i][0] as Vector3))
+		var n_sk: Vector3 = (sk_global.basis.inverse() * (_targets[i][2] as Vector3)).normalized()
+		var up_sk: Vector3 = (sk_global.basis.inverse() * Vector3.UP).normalized()
+		_two_bone(sk, _legs[i][0], _legs[i][1], _legs[i][2], inv * (_targets[i][0] as Vector3), _rot_between(up_sk, n_sk))
 
 
 ## 두 관절 IK(스켈레톤 공간). 무릎은 원래 굽은 방향을 유지한다
-func _two_bone(sk: Skeleton3D, up: int, low: int, foot: int, target: Vector3) -> void:
+func _two_bone(sk: Skeleton3D, up: int, low: int, foot: int, target: Vector3, tilt := Basis.IDENTITY) -> void:
 	var gu := sk.get_bone_global_pose(up)
 	var gl := sk.get_bone_global_pose(low)
 	var gf := sk.get_bone_global_pose(foot)
@@ -321,7 +327,7 @@ func _two_bone(sk: Skeleton3D, up: int, low: int, foot: int, target: Vector3) ->
 	var lb := b.distance_to(c)
 	var to_t := target - a
 	var d := clampf(to_t.length(), absf(la - lb) + 0.001, la + lb - 0.001)
-	if (c - target).length() < 0.003:
+	if (c - target).length() < 0.003 and tilt.is_equal_approx(Basis.IDENTITY):
 		return
 	var dir := to_t.normalized()
 	# 무릎이 굽는 방향(원래 무릎 위치에서 다리 축에 수직인 성분)
@@ -340,8 +346,8 @@ func _two_bone(sk: Skeleton3D, up: int, low: int, foot: int, target: Vector3) ->
 	var c2 := gl2.origin + (r1 * (c - b))
 	var r2 := _rot_between(c2 - knee, target - knee)
 	sk.set_bone_global_pose(low, Transform3D(r2 * r1 * gl.basis, knee))
-	# 발은 원래 방향을 유지한 채 목표에 놓는다
-	sk.set_bone_global_pose(foot, Transform3D(gf.basis, target))
+	# 발은 원래 방향에서 경사만큼 기울여 목표에 놓는다
+	sk.set_bone_global_pose(foot, Transform3D(tilt * gf.basis, target))
 
 
 func _rot_between(from: Vector3, to: Vector3) -> Basis:

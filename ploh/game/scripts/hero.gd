@@ -559,8 +559,10 @@ func _physics_process(delta: float) -> void:
 	# 지형 위를 걷는다(발은 절차적 IK가 지형에 붙인다)
 	position.y = lerpf(position.y, game.height_at(position.x, position.z), 1.0 - exp(-delta * 25.0))
 	# 상체와 시선은 싸우는 상대를 먼저 향한다
+	# 달리는 동안에는 비틀지 않는다(다리와 상체가 따로 놀아 보인다)
 	var look_at_t: Node3D = target if (state == "attack" and target != null and is_instance_valid(target)) else game.nearest_enemy(global_position, 7.0)
-	proc.look(look_at_t.global_position if look_at_t != null else null)
+	var running := _vel.length() > 1.5
+	proc.look(look_at_t.global_position if (look_at_t != null and not running) else null)
 	if weapon != null:
 		weapon.update(delta)
 		trail.push(weapon.hilt, weapon.tip, delta)
