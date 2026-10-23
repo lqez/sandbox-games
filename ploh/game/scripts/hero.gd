@@ -46,7 +46,7 @@ const STRIKE_RATE := 1.8
 const HOLD := 0.1
 const EASE_K := 1.077                # 재생 위치에 따른 가감속(1.45 → 0.55)이 늘이는 시간만큼 미리 빠르게
 const WIND_MAX := 2.2                # 예비 동작을 이보다 빠르게 감지 않는다. 더 길면 앞부분을 건너뛰고 뒷부분부터 재생
-const STRIKE_MAX := 2.5              # 베기 구간도 이보다 빠르게 감지 않는다(모션캡처의 긴 베기를 욱여넣으면 튄다)
+const STRIKE_MAX := 1.6              # 베기 구간도 이보다 빠르게 감지 않는다(모션캡처의 긴 베기를 욱여넣으면 튄다)
 const AUTO_RESUME := 0.8             # 직접 이동을 멈추고 이만큼 지나면 자동 이동
 ## 관성 이동
 const ACCEL := 20.0                  # 출발 가속(m/s²)
@@ -319,7 +319,7 @@ func _tap(now: float, auto: bool) -> void:
 ## 한 박을 쉬고 그다음 박자에 정확히(±0.09초) 누르면 패턴 기술이다
 func _idle_tap(now: float, auto: bool) -> void:
 	if _phrase_hits > 0:
-		if _due > 0.0 and absf(now - _due - game.BEAT) <= AND_WINDOW and chain_i != CHAIN.size() - 1 and not auto:
+		if _due > 0.0 and absf(now - _due - game.BEAT) <= AND_WINDOW and _prev_tap < _due - GOOD_WINDOW and chain_i != CHAIN.size() - 1 and not auto:
 			_pause_move(_grade(now, auto))
 			return
 		if now - _chain_end <= MIN_HOLD + CHAIN_WINDOW:
@@ -331,15 +331,15 @@ func _idle_tap(now: float, auto: bool) -> void:
 ## 기본 공격 중의 입력. 누르면 칼이 지나가자마자(최소 MIN_HOLD 뒤) 바로 다음 타가 나간다(박자를 기다리지 않는다).
 ## 박자에 정확히 맞춘 입력만 JUST이고, 한 타 사이에 거듭 누르면(연타) JUST를 잃는다
 func _chain_tap(now: float, auto: bool) -> void:
-	# 따닥: 바로 앞 입력 뒤 0.14~0.3초에 한 번 더 누르면, 지금 타 뒤에 빠른 베기를 끼워 넣는다
-	if not _extra and not _double and not _buffered and _end_t < 0.0 and now - _prev_tap >= 0.14 and now - _prev_tap <= 0.3:
+	# 따닥: 바로 앞 입력 뒤 0.08~0.22초에(지금 타가 아직 예비 동작일 때) 한 번 더 누르면, 지금 타 뒤에 빠른 베기를 끼워 넣는다
+	if not _extra and not _double and not _buffered and _end_t < 0.0 and _clip_pos() < clips.get(_clip, {"start": 0.0}).start and now - _prev_tap >= 0.08 and now - _prev_tap <= 0.22:
 		_double = true
 		return
 	if _buffered:
 		_buf_grade = "good"
 		return
 	# 칼을 뻗은 뒤 한 박 쉬고 그다음 박자에 정확히 누르면 패턴 기술
-	if _end_t >= 0.0 and _due > 0.0 and absf(now - _due - game.BEAT) <= AND_WINDOW and chain_i != CHAIN.size() - 1 and not auto:
+	if _end_t >= 0.0 and _due > 0.0 and absf(now - _due - game.BEAT) <= AND_WINDOW and _prev_tap < _due - GOOD_WINDOW and chain_i != CHAIN.size() - 1 and not auto:
 		_pause_move(_grade(now, auto))
 		return
 	# 칼이 아직 지나가는 중에 서둘러 누른 입력은 '서두른 타'(피해 0.8배). 뻗은 자세를 보고 누르면 제대로 들어간다
@@ -792,7 +792,8 @@ func _begin_swing() -> void:
 	_hold_len = HOLD
 	_wind_start = 0.0
 	_strike_spd = minf(_rate * STRIKE_RATE, (c.end - c.start) / 0.07)
-	_set_wind(c, c.start / (_rate * WIND_RATE))
+	# 특수 동작도 예비 동작은 0.3초 안(모션캡처 클립은 예비 동작이 길다)
+	_set_wind(c, clampf(c.start / (_rate * WIND_RATE), 0.12, 0.3))
 	if move_kind == "chain":
 		var now: float = game.beat_clock()
 		_swing_clock = now
@@ -860,7 +861,7 @@ func _clip_speed(c: Dictionary) -> float:
 
 ## 지금 클립의 실제 재생 위치(클립 초). 단계 판단은 시간표가 아니라 이것으로 한다(애니메이션이 한두 틱 밀려도 칼과 판정이 어긋나지 않게)
 ## <모델>_root.json: 모델을 만들 때 클립에서 지운 수평 루트 이동. 형식이 조금 달라도 읽는다
-## ({"clips": {클립: [[x, z], ...]}} 또는 {클립: [[x, z], ...]}, 원소는 [x, z] 또는 {"x":, "z":})
+## ({"clips": {클립: {"x": [...], "z": [...]}}}, {"clips": {클립: [[x, z], ...]}} 또는 {클립: [[x, z], ...]})
 static func load_root_motion(model_path: String) -> Dictionary:
 	var path := model_path.get_basename() + "_root.json"
 	if not FileAccess.file_exists(path):
@@ -872,11 +873,18 @@ static func load_root_motion(model_path: String) -> Dictionary:
 	var out := {}
 	for clip in src:
 		var v = src[clip]
+		var arr := PackedVector2Array()
+		if typeof(v) == TYPE_DICTIONARY and v.has("x") and v.has("z"):
+			# {"frames": N, "x": [...], "z": [...]} (mocap 파이프라인 형식)
+			for i in mini(v.x.size(), v.z.size()):
+				arr.append(Vector2(float(v.x[i]), float(v.z[i])))
+			if arr.size() > 1:
+				out[clip] = arr
+			continue
 		if typeof(v) == TYPE_DICTIONARY:
 			v = v.get("frames", v.get("offsets", []))
 		if typeof(v) != TYPE_ARRAY:
 			continue
-		var arr := PackedVector2Array()
 		for e in v:
 			if typeof(e) == TYPE_ARRAY and e.size() >= 2:
 				arr.append(Vector2(float(e[0]), float(e[e.size() - 1])))
@@ -916,12 +924,13 @@ func _root_forward(clip: String) -> float:
 
 ## 이번 틱에 클립의 루트 이동만큼 몸을 옮길 속도(월드)
 func _root_velocity(delta: float) -> Vector3:
-	if root_motion.is_empty() or not root_motion.has(_clip) or delta <= 0.0:
+	# 클립이 끝나 재생이 멈추면 위치가 0으로 돌아가므로 그때는 움직이지 않는다(되돌아가는 거리가 속도로 튄다)
+	if root_motion.is_empty() or not root_motion.has(_clip) or delta <= 0.0 or anim.current_animation != _clip:
 		return Vector3.ZERO
 	var cur := _root_at(_clip, _clip_pos())
 	var v := Vector3.ZERO
 	if _rm_prev != Vector2.INF:
-		var d := cur - _rm_prev
+		var d := (cur - _rm_prev).limit_length(0.08)
 		v = model.global_transform.basis * Vector3(d.x, 0.0, d.y) / delta
 		v.y = 0.0
 	_rm_prev = cur
@@ -981,13 +990,15 @@ func _update_attack(delta: float) -> void:
 	# 칼이 지나간 뒤에는 남은 속도로 미끄러지며 선다(빠르면 몸을 낮춰 버틴다)
 	if _end_t < 0.0:
 		var k := clampf(1.0 - t / maxf(c.end, 0.01), 0.0, 1.0)
+		# 몸놀림은 거리로 정한다(클립 길이에 따라 너무 멀리 가지 않게): 돌진 2.6m, 물러남·옆걸음 1.6m
+		var span := maxf(c.end, 0.12)
 		match h.get("motion", ""):
 			"dash":
-				_vel = face * 13.0 * (0.35 + 0.65 * k)
+				_vel = face * (2.0 * 2.6 / span) * k
 			"back":
-				_vel = -face * 9.0 * (0.3 + 0.7 * k)
+				_vel = -face * (2.0 * 1.6 / span) * k
 			"side":
-				_vel = _side_dir * 9.0 * (0.3 + 0.7 * k)
+				_vel = _side_dir * (2.0 * 1.6 / span) * k
 			_:
 				_vel = face * (2.0 * (0.15 + _lunge) / maxf(c.end, 0.05)) * k
 	else:
@@ -1017,7 +1028,8 @@ func _update_attack(delta: float) -> void:
 			_followed = true
 			proc.momentum(_peak_vel, _peak_tip, global_position, data.get("weapon_mass", 1.0) * (1.0 + _move_weight * 0.6))
 	# 미끄러짐이 멎어야 다음 동작으로 넘어간다
-	var steady := _vel.length() < 1.2
+	var big_move: bool = _hits[_hit_i].get("motion", "") in ["dash", "back", "side"]
+	var steady := _vel.length() < 1.2 or not big_move
 	var after := t - _end_t if _end_t >= 0.0 else -1.0
 	if _hit_i < _hits.size() - 1 and after >= 0.02:
 		_hit_i += 1

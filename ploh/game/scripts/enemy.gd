@@ -10,17 +10,17 @@ const Hero := preload("res://scripts/hero.gd")
 const SWING_AFTER := 0.16   # 예고가 끝난 뒤 칼이 내려오는 동안 판정을 이어 가는 시간
 const SOLDIER := "res://assets/soldiers/%s/%s.glb"
 
-## 종류별 능력치. model은 assets/soldiers의 병사, attacks는 [클립, 접촉 시점(클립 길이 비율)]
+## 종류별 능력치. model은 assets/soldiers의 병사, attacks는 [클립, 접촉 시점(클립 길이 비율, 모션캡처 README의 타격 프레임)]
 ## 체력: 잡병 2~3타, 정예 5~7타, 보스 15~20타(영웅 공격력 42 기준)
 const KINDS := {
 	"minion": {"model": "conscript", "blade": ["weapon_sword"], "hp": 95.0, "atk": 9.0, "speed": 3.4, "reach": 1.35, "wind": 0.75, "area": 1.4, "scale": 1.6, "radius": 0.5, "poise": 1.0,
-		"attacks": [["attack_1", 0.467]], "tint": Color(0.5, 0.48, 0.7)},
+		"attacks": [["attack_1", 0.566]], "tint": Color(0.5, 0.48, 0.7)},
 	"rogue": {"model": "conscript", "blade": ["weapon_sword"], "hp": 80.0, "atk": 11.0, "speed": 4.6, "reach": 1.4, "wind": 0.6, "area": 1.3, "scale": 1.5, "radius": 0.45, "poise": 1.0,
-		"attacks": [["attack_2", 0.467]], "tint": Color(0.62, 0.5, 0.55)},
+		"attacks": [["attack_2", 0.5]], "tint": Color(0.62, 0.5, 0.55)},
 	"warrior": {"model": "shieldbearer", "blade": ["weapon_sword"], "hp": 280.0, "atk": 18.0, "speed": 2.6, "reach": 1.25, "wind": 1.0, "area": 1.8, "scale": 1.75, "radius": 0.65, "poise": 0.4,
-		"attacks": [["attack_1", 0.467], ["shield_bash", 0.467]], "guard": true, "tint": Color(0.5, 0.48, 0.7)},
+		"attacks": [["attack_1", 0.536], ["shield_bash", 0.519]], "guard": true, "tint": Color(0.5, 0.48, 0.7)},
 	"boss": {"model": "boss", "blade": ["weapon_pendulum"], "hp": 1050.0, "atk": 26.0, "speed": 2.8, "reach": 2.6, "wind": 1.1, "area": 3.2, "scale": 2.3, "radius": 1.0, "poise": 0.1,
-		"attacks": [["attack_2", 0.5]], "slam": ["attack_1", 0.526], "tint": Color(0.55, 0.45, 0.6)},
+		"attacks": [["attack_2", 0.6]], "slam": ["attack_1", 0.578], "tint": Color(0.55, 0.45, 0.6)},
 }
 const COUNTER_WINDOW := 0.35
 

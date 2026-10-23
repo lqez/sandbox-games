@@ -59,6 +59,15 @@ func _process(delta: float) -> void:
 	var p: Node3D = g.player
 	if p == null or not is_instance_valid(p):
 		return
+	# -- <장면> <카메라> <초> <로그> <영웅 번호>: 0 프라우, 1 프람, 2 슈나이더
+	var args := OS.get_cmdline_user_args()
+	if args.size() > 4 and int(args[4]) > 0 and _once("hero"):
+		var pos := p.global_position
+		p.queue_free()
+		g.active = int(args[4])
+		g._spawn_player(pos)
+		_skel = null
+		return
 	if t > 0.2 and not g.music.playing:
 		g.music.play()
 	if cam_mode != "game":

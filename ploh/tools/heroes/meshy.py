@@ -3,7 +3,7 @@
 사용: python meshy.py balance
       python meshy.py <fram|schneider> mi23d [태그]      # 태그를 주면 다시 시도한 작업으로 따로 기록
       python meshy.py <hero> rig [height_m=1.25] [태그]
-      python meshy.py <hero> anim <action_id,...>
+      python meshy.py <hero> anim <action_id,...> [태그]   # <hero>는 assets 아래 경로(fram, astrid/B_mid, soldiers/boss 등)
 환경 변수 MESHY_API_KEY 필요.
 """
 import base64, json, os, sys, time
@@ -80,8 +80,10 @@ elif STAGE == "rig":
     if ba.get("walking_glb_url"):
         dl(ba["walking_glb_url"], f"basic_walking{tag}.glb")
 elif STAGE == "anim":
+    # 태그를 주면 animations_<태그>로 따로 기록하고 raw/animations_<태그>.glb로 받는다(라이브러리 모캡 교체 등 추가 요청)
     ids = [int(x) for x in sys.argv[3].split(",")]
-    tid = create("animations", {"rig_task_id": log["rigging"], "action_ids": ids}, "animations")
-    log["action_ids"] = ids; save()
-    t = wait("animations", tid); log["animations_credits"] = t.get("consumed_credits"); save()
-    dl(t["result"]["animation_glb_url"], "animations.glb")
+    tag = ("_" + sys.argv[4]) if len(sys.argv) > 4 else ""
+    tid = create("animations", {"rig_task_id": log["rigging"], "action_ids": ids}, "animations" + tag)
+    log["action_ids" + tag] = ids; save()
+    t = wait("animations", tid); log["animations_credits" + tag] = t.get("consumed_credits"); save()
+    dl(t["result"]["animation_glb_url"], f"animations{tag}.glb")

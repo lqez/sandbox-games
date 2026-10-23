@@ -23,7 +23,44 @@
 ## 본 이름
 징집병·B_mid와 같은 Meshy 24본입니다: `Hips`, `Spine02`, `Spine01`, `Spine`, `neck`, `Head`, `head_end`, `headfront`, `LeftShoulder`, `LeftArm`, `LeftForeArm`, `LeftHand`, `RightShoulder`, `RightArm`, `RightForeArm`, `RightHand`, `LeftUpLeg`, `LeftLeg`, `LeftFoot`, `LeftToeBase`, `RightUpLeg`, `RightLeg`, `RightFoot`, `RightToeBase`. Godot는 `weapon_pendulum`(RightHand 자식)을 본으로도 만들어 25본이 되고, 메시는 같은 이름의 BoneAttachment3D 아래에 있습니다.
 
-## 액션(`boss.glb`, 30 fps)
+## 모캡 액션(현재 `boss.glb`, 30 fps)
+손으로 키를 준 액션을 Meshy 애니메이션 라이브러리의 모캡 클립으로 바꿨습니다(2026-10-24). 클립은 이 캐릭터의 리깅 작업(`01a16967-4ce6-7015-bec1-f46b1e88eb8a`)에 요청해 받았고, 몸 메시·텍스처·무기 노드(`weapon_*`는 손 본의 자식, 가장 먼 정점이 끝)·주먹 고침은 이전 GLB에서 그대로 가져왔습니다. 이전 GLB는 `raw/boss_handkeyed.glb`이고, 아래 '손 키 액션' 절은 그 버전 설명입니다.
+
+| 액션 | 라이브러리 액션(ID) | 원본 프레임 | 길이 | 타격 프레임(빠른 구간), 칼끝 최고 속도 | 손질 |
+|---|---|---|---|---|---|
+| idle | Combat Idel (89) | 0–50 | 51 (1.67 s) | – | 루프 |
+| walk | Walk Fight Forward (21) | 0–50 | 51 (1.67 s) | – | 루프 |
+| run | 리깅 기본 달리기 | 0–19 | 20 (0.63 s) | – | 루프 |
+| attack_1 | Charged Ground Slam (127) | 0–90 | 91 (3.00 s) | 52 (39–53), 16 m/s | idle에서 6프레임 섞어 시작, 끝 6프레임 idle로 섞음 |
+| attack_2 | Charged Slash (242) | 0–60 | 61 (2.00 s) | 36 (32–39), 25 m/s | idle에서 6프레임 섞어 시작, 끝 8프레임 idle로 섞음 |
+| cast | Jump Attack (86) | 32–122 | 91 (3.00 s) | 42 (34–43), 21 m/s | idle에서 6프레임 섞어 시작, 끝 12프레임 idle로 섞음 |
+| hit | Hit Reaction 1 (179) | 0–22 | 23 (0.73 s) | – | idle에서 3프레임 섞어 시작, 끝 8프레임 idle로 섞음, 양팔 idle 고정 |
+| death | Dying Backwards (189) | 0–66 | 67 (2.20 s) | – | idle에서 4프레임 섞어 시작 |
+
+- 모든 클립의 모든 프레임에 24본 키가 있고 보간은 선형입니다. 반복 설정은 GLB에 없습니다(idle·run·walk·block은 게임에서 루프로 바꿔야 함).
+- 타격 프레임은 칼끝(무기 메시에서 손 본 원점과 가장 먼 정점) 속도가 가장 빠른 프레임이고, 빠른 구간은 최고 속도의 25% 이상인 연속 프레임입니다(`hero_measure.py`).
+- 루트 이동: Hips의 수평 이동은 지우고(세로 이동은 남김) `boss_root.json`에 클립별·프레임별 X/Z로 남겼습니다. 값은 0프레임 기준이고 모델 크기 m(게임 배율을 곱해 씀), 캐릭터 기준 +Z 앞, +X 캐릭터 왼쪽입니다. 루프 클립은 평균·드리프트만 지우고 작은 흔들림은 남겼습니다.
+- 공격·스킬은 idle 0프레임 자세에서 시작하고(콤보 2·3타는 앞 타의 마지막 프레임에서 이어짐) 마지막 타는 idle로 끝납니다. 자세를 섞는 구간에서 발이 미끄러지지 않게 발을 들어 옮기는 2본 IK를 넣었습니다.
+- hit는 맞는 동안 무기 팔을 idle 자세로 고정한 짧은 움찔(23프레임)입니다.
+- 몸 메시는 모바일용으로 줄였습니다: 삼각형 20,035 → 8,000. Blender Decimate(collapse) 전에 같은 위치·같은 방향 법선의 정점만 붙이고(UV 이음매 중복), 얼굴(가중치 0)·머리(0.1)·손(0.2)·UV 이음매(0.35)를 보호했습니다. 게임 카메라 거리에서는 원본과 구분되지 않습니다.
+- Meshy 요청(라이브러리 애니메이션, 액션당 3 크레딧):
+
+| 작업 ID | action_id | 크레딧 |
+|---|---|---|
+| `01a169ec-0820-7479-abd7-e3621e57b101` | 89, 21, 127, 242, 86, 179 | 18 |
+
+### 문제
+- 손 키 버전은 펜듈럼을 손등 쪽으로 뻗게 붙였는데, 모캡의 무기 동작은 엄지 쪽으로 뻗는 칼 쥠새를 전제로 해서 `weapon_pendulum`의 손 안 방향만 바꿨습니다(손잡이 원점과 구조는 같음, 가장 먼 정점이 끝).
+- attack_1(Charged Ground Slam)의 머리 위 들어올림(47–50프레임)에서 펜듈럼이 머리를 최대 12 cm 지나갑니다.
+- cast는 Jump Attack입니다(프람·슈나이더와 같은 원본).
+- 라이브러리 클립은 레퍼런스(예비 150–250 ms, 베기 50–130 ms)보다 예비 동작이 깁니다. 시간 재배치는 게임 코드가 맡습니다.
+
+### 재현
+- Meshy 요청: `uv run --no-project --with requests python ploh/tools/heroes/meshy.py soldiers/boss anim <action_id,...> <태그>` (`raw/animations_<태그>.glb`)
+- GLB·사이드카: `uv run --no-project --with numpy python ploh/tools/mocap/mocap_build.py boss` (클립 표는 이 스크립트의 `SPEC`, 몸 감축은 `decimate_body.py`를 헤드리스 Blender로 실행, 검사는 `qa.py`)
+
+## 손 키 액션(이전 버전, `raw/boss_handkeyed.glb`, 30 fps)
+이 절과 아래 하위 절은 모캡으로 바꾸기 전의 액션 설명입니다.
 공격 구조: 경계 자세(idle 0프레임) → 긴 예비 동작 → 3–4프레임 타격(접촉까지 가속) → 무기 무게에 끌려가는 오버슈트 → 복귀.
 
 | 액션 | 출처 | 길이 | 예비 끝 / **접촉** / 타격 끝 | 내용 |

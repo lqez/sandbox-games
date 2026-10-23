@@ -56,6 +56,9 @@ void fragment() {
 	// 벽 너머 흙 면은 영웅을 실제로 가리는 높은 부분만 좁게 녹인다(넓게 녹이면 그 뒤 빈 배경이 구멍으로 보인다)
 	float r = is_top ? hole_radius * 0.6 : hole_radius;
 	float hole = (1.0 - smoothstep(r * 0.6, r, dist)) * step(t, len - 0.4);
+	// 영웅보다 카메라 쪽에 있는 것만 녹인다(내려다보는 각도라 영웅 뒤 벽의 윗부분도 시선 앞쪽으로 잡힌다)
+	vec3 to_cam = vec3(cam_pos.x - target.x, 0.0, cam_pos.z - target.z);
+	hole *= step(0.3, dot(wpos - target, normalize(to_cam)));
 	if (is_top) {
 		hole *= step(player_pos.y + 0.6, wpos.y);
 	}

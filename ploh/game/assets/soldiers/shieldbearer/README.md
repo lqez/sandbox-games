@@ -23,7 +23,47 @@
 ## 본 이름
 징집병·B_mid와 같은 Meshy 24본입니다: `Hips`, `Spine02`, `Spine01`, `Spine`, `neck`, `Head`, `head_end`, `headfront`, `LeftShoulder`, `LeftArm`, `LeftForeArm`, `LeftHand`, `RightShoulder`, `RightArm`, `RightForeArm`, `RightHand`, `LeftUpLeg`, `LeftLeg`, `LeftFoot`, `LeftToeBase`, `RightUpLeg`, `RightLeg`, `RightFoot`, `RightToeBase`. Godot는 `weapon_shield`(LeftHand 자식)와 `weapon_sword`(RightHand 자식)를 본으로도 만들어 26본이 되고, 각 메시는 같은 이름의 BoneAttachment3D 아래에 있습니다.
 
-## 액션(`shieldbearer.glb`, 30 fps)
+## 모캡 액션(현재 `shieldbearer.glb`, 30 fps)
+손으로 키를 준 액션을 Meshy 애니메이션 라이브러리의 모캡 클립으로 바꿨습니다(2026-10-24). 클립은 이 캐릭터의 리깅 작업(`01a16967-4ced-7165-bfde-517992b60fff`)에 요청해 받았고, 몸 메시·텍스처·무기 노드(`weapon_*`는 손 본의 자식, 가장 먼 정점이 끝)·주먹 고침은 이전 GLB에서 그대로 가져왔습니다. 이전 GLB는 `raw/shieldbearer_handkeyed.glb`이고, 아래 '손 키 액션' 절은 그 버전 설명입니다.
+
+| 액션 | 라이브러리 액션(ID) | 원본 프레임 | 길이 | 타격 프레임(빠른 구간), 칼끝 최고 속도 | 손질 |
+|---|---|---|---|---|---|
+| idle | Combat Idel (89) | 0–50 | 51 (1.67 s) | – | 루프 |
+| walk | Walk Fight Forward (21) | 0–50 | 51 (1.67 s) | – | 루프 |
+| run | 리깅 기본 달리기 | 0–19 | 20 (0.63 s) | – | 루프 |
+| attack_1 | Triple Combo Attack (105) | 0–29 | 44 (1.43 s) | 23 (21–29), 16 m/s | idle에서 6프레임 섞어 시작, idle 복귀 14프레임 덧붙임 |
+| shield_bash | Boxing Guard, Prep Straight Punch (210) | 30–84 | 55 (1.80 s) | 28 (22–33), 4 m/s | 좌우 반전, idle에서 10프레임 섞어 시작, 끝 12프레임 idle로 섞음, 무기 팔 idle 고정 |
+| block | Sword Parry (147) | 0–54 | 55 (1.80 s) | – | 루프 |
+| block_hit | Sword Parry Backward (148) | 0–39 | 40 (1.30 s) | – | – |
+| hit | Hit Reaction 1 (179) | 0–22 | 23 (0.73 s) | – | idle에서 3프레임 섞어 시작, 끝 8프레임 idle로 섞음, 양팔 idle 고정 |
+| death | Fall Dead from Abdominal Injury (188) | 0–105 | 106 (3.50 s) | – | idle에서 4프레임 섞어 시작 |
+
+- 모든 클립의 모든 프레임에 24본 키가 있고 보간은 선형입니다. 반복 설정은 GLB에 없습니다(idle·run·walk·block은 게임에서 루프로 바꿔야 함).
+- 타격 프레임은 칼끝(무기 메시에서 손 본 원점과 가장 먼 정점) 속도가 가장 빠른 프레임이고, 빠른 구간은 최고 속도의 25% 이상인 연속 프레임입니다(`hero_measure.py`).
+- 루트 이동: Hips의 수평 이동은 지우고(세로 이동은 남김) `shieldbearer_root.json`에 클립별·프레임별 X/Z로 남겼습니다. 값은 0프레임 기준이고 모델 크기 m(게임 배율을 곱해 씀), 캐릭터 기준 +Z 앞, +X 캐릭터 왼쪽입니다. 루프 클립은 평균·드리프트만 지우고 작은 흔들림은 남겼습니다.
+- 공격·스킬은 idle 0프레임 자세에서 시작하고(콤보 2·3타는 앞 타의 마지막 프레임에서 이어짐) 마지막 타는 idle로 끝납니다. 자세를 섞는 구간에서 발이 미끄러지지 않게 발을 들어 옮기는 2본 IK를 넣었습니다.
+- hit는 맞는 동안 무기 팔을 idle 자세로 고정한 짧은 움찔(23프레임)입니다.
+- 몸 메시는 모바일용으로 줄였습니다: 삼각형 20,585 → 8,000. Blender Decimate(collapse) 전에 같은 위치·같은 방향 법선의 정점만 붙이고(UV 이음매 중복), 얼굴(가중치 0)·머리(0.1)·손(0.2)·UV 이음매(0.35)를 보호했습니다. 게임 카메라 거리에서는 원본과 구분되지 않습니다.
+- Meshy 요청(라이브러리 애니메이션, 액션당 3 크레딧):
+
+| 작업 ID | action_id | 크레딧 |
+|---|---|---|
+| `01a169eb-ae39-71f0-8439-c505c37f4537` | 89, 21, 92, 220, 147, 148, 151, 179 | 24 |
+| `01a169f8-a810-7092-9dee-f2c7e11d3acd` | 105 | 3 |
+| `01a16a08-f395-7502-bcde-b347fb44b526` | 210 | 3 |
+
+### 문제
+- 라이브러리에 방패 치기가 없습니다. Shield Push Left는 방패를 옆으로 세워 미는 동작이라 쓰지 않았고, 주먹(=방패 앞면)이 앞으로 나가는 Boxing Guard, Prep Straight Punch를 좌우 반전해 방패 팔에 입혔습니다. 칼 든 팔은 idle 자세를 유지합니다. 준비 자세에서 방패를 머리 높이로 듭니다.
+- block은 Sword Parry(정지한 막기 자세), block_hit은 Sword Parry Backward입니다. 방패로 막는 전용 동작은 라이브러리에 없습니다.
+- attack_1의 5프레임(예비 동작, 칼을 머리 뒤로 젖힘)에서 칼날이 투구를 최대 9.5 cm 지나갑니다.
+- 라이브러리 클립은 레퍼런스(예비 150–250 ms, 베기 50–130 ms)보다 예비 동작이 깁니다. 시간 재배치는 게임 코드가 맡습니다.
+
+### 재현
+- Meshy 요청: `uv run --no-project --with requests python ploh/tools/heroes/meshy.py soldiers/shieldbearer anim <action_id,...> <태그>` (`raw/animations_<태그>.glb`)
+- GLB·사이드카: `uv run --no-project --with numpy python ploh/tools/mocap/mocap_build.py shieldbearer` (클립 표는 이 스크립트의 `SPEC`, 몸 감축은 `decimate_body.py`를 헤드리스 Blender로 실행, 검사는 `qa.py`)
+
+## 손 키 액션(이전 버전, `raw/shieldbearer_handkeyed.glb`, 30 fps)
+이 절과 아래 하위 절은 모캡으로 바꾸기 전의 액션 설명입니다.
 공격 구조는 징집병과 같습니다: 가드(idle 0프레임) → 예비(무기를 크게 당김) → 4프레임 타격(접촉까지 가속) → 오버슈트 → 가드로 복귀.
 
 | 액션 | 출처 | 길이 | 예비 끝 / **접촉** / 타격 끝 | 내용 |
