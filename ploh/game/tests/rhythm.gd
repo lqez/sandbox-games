@@ -87,6 +87,10 @@ func _process(delta: float) -> void:
 			log_lines.append("%.3f KILL #%d (%s)" % [t, kills, e.kind])
 	if p.state == "stumble" and _last_state == "stumble" and log_lines[-1].find("-> stumble") >= 0:
 		fumbles += 1
+	if mode == "swap" and (absf(t - (WARM + 2.0)) < delta * 0.6 or absf(t - (WARM + 5.5)) < delta * 0.6):
+		g.swap()
+		log_lines.append("%.3f SWAP -> %s" % [t, g.party[g.active].name])
+		return
 	var near: bool = g.nearest_enemy(p.global_position, 4.5) != null
 	if t >= WARM and t < WARM + RUN and near:
 		if first_tap < 0.0:
@@ -94,7 +98,7 @@ func _process(delta: float) -> void:
 		var bc: float = g.beat_clock()
 		var b := int(floorf((bc + 0.03) / g.BEAT))
 		match mode:
-			"beat":
+			"beat", "swap":
 				if b != _last_beat:
 					_last_beat = b
 					_tap()

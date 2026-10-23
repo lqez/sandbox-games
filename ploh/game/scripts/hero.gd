@@ -776,10 +776,12 @@ func _begin_swing() -> void:
 		var now: float = game.beat_clock()
 		_swing_clock = now
 		var heavy := _move_weight >= 1.0
-		var strike := STRIKE_TIME * (1.35 if heavy else 1.0)
+		# 무거운 무기일수록 예비 동작이 길다(영웅마다 strike_time)
+		var base: float = data.get("strike_time", STRIKE_TIME)
+		var strike := base * (1.35 if heavy else 1.0)
 		if _extra:
 			# 반 박 베기는 지금 박자의 끝(_due)에 같이 맞춘다
-			strike = clampf(_due - now - 0.06, 0.12, STRIKE_TIME * 0.75)
+			strike = clampf(_due - now - 0.06, 0.12, base * 0.75)
 		else:
 			var beats := 2.0 if heavy else 1.0
 			var due: float = _due + beats * game.BEAT

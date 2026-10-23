@@ -24,6 +24,20 @@ const HEROES := [
 		"skill_name": "돌진 찌르기", "skill": "dash",
 		"anims": {"moves": {"idle": "idle", "run": "run", "a1": "attack_1", "a2": "attack_2", "a3": "attack_3", "a4": "cast",
 			"spin": "spin", "dodge": "dodge", "hit": "hit", "death": "death", "charge": "idle", "skill": "attack_3", "ult": "spin"}}},
+	# 프람(불꽃의 용병): 검과 방패. 단단하고 표준 속도
+	{"name": "프람", "model": "res://assets/fram/fram.glb", "scale": 1.6, "color": Color(1.0, 0.5, 0.38),
+		"max_hp": 640.0, "atk": 38.0, "speed": 5.6, "reach": 2.6, "guard": 0.7, "ranged": false,
+		"blade": ["weapon_sword"], "weapon_bone": "RightHand", "attack_speed": 1.0, "weapon_mass": 1.2,
+		"skill_name": "홍련 일섬", "skill": "wave",
+		"anims": {"moves": {"idle": "idle", "run": "run", "a1": "attack_1", "a2": "attack_2", "a3": "attack_3", "a4": "cast",
+			"spin": "spin", "dodge": "dodge", "hit": "hit", "death": "death", "charge": "idle", "skill": "attack_3", "ult": "spin"}}},
+	# 슈나이더(온화한 수인기사): 양손 철퇴. 예비 동작이 길고 한 방이 무겁다
+	{"name": "슈나이더", "model": "res://assets/schneider/schneider.glb", "scale": 1.6, "color": Color(0.55, 0.8, 1.0),
+		"max_hp": 600.0, "atk": 56.0, "speed": 5.2, "reach": 2.8, "guard": 0.75, "ranged": false,
+		"blade": ["weapon_mace"], "weapon_bone": "RightHand", "attack_speed": 1.0, "weapon_mass": 1.9, "strike_time": 0.31,
+		"skill_name": "대지 강타", "skill": "quake",
+		"anims": {"moves": {"idle": "idle", "run": "run", "a1": "attack_1", "a2": "attack_2", "a3": "attack_3", "a4": "cast",
+			"spin": "spin", "dodge": "dodge", "hit": "hit", "death": "death", "charge": "idle", "skill": "attack_3", "ult": "spin"}}},
 ]
 
 var mobile := false          # 저사양 설정(boot.gd가 정한다)
@@ -626,6 +640,13 @@ func hero_skill(hero: Node3D, dir: Vector3) -> void:
 			for e in enemies_in_line(from, dir, 12.0, 1.2):
 				hit_enemy(e, hero.data.atk * 3.0, hero, true, "")
 			beam(from, dir, 12.0, hero.data.color)
+		"quake":
+			# 조준한 쪽으로 한 걸음 내디뎌 철퇴로 바닥을 내려찍는다. 둘레의 적을 모두 친다
+			var at := from + dir * 1.5
+			for e in enemies_in(at, dir, 4.5, 360.0):
+				hit_enemy(e, hero.data.atk * 2.4, hero, true, "", 1.0)
+			ring(at, 4.5, hero.data.color)
+			impact(at + Vector3(0, 0.3, 0), dir, hero.data.color, 1.0)
 
 
 func enemies_in_line(from: Vector3, dir: Vector3, length: float, width: float) -> Array:
