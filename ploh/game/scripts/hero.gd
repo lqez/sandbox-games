@@ -126,6 +126,7 @@ var _sweeping := false
 var _end_t := -1.0                   # 칼이 실제로 다 지나간 시각(t). 단계는 클립의 실제 재생 위치로 나눈다
 var root_motion := {}                # 클립이 원래 갖고 있던 수평 이동(클립에서는 지우고 몸을 그만큼 움직인다)
 var _rm_prev := Vector2.INF
+var _root_v := Vector3.ZERO          # 이번 틱에 클립 루트 이동으로 더할 속도
 var _lunge := 0.0                    # 예비 동작 동안 내디뎌 좁힐 거리
 var _bite := 0.0                     # 베고 지나가는 동안 칼이 무거워지는 남은 시간
 var _whooshed := false
@@ -568,10 +569,12 @@ func _physics_process(delta: float) -> void:
 				state = "idle"
 		_:
 			_vel = _vel.move_toward(Vector3.ZERO, 30.0 * delta)
-	velocity = _vel
+	var v_in := _vel + _root_v
+	_root_v = Vector3.ZERO
+	velocity = v_in
 	move_and_slide()
 	# 벽에 막히면 몸에 실린 속도도 그만큼 줄어든다
-	_vel = Vector3(velocity.x, 0.0, velocity.z)
+	_vel += Vector3(velocity.x, 0.0, velocity.z) - Vector3(v_in.x, 0.0, v_in.z)
 	# 지형 위를 걷는다(발은 절차적 IK가 지형에 붙인다)
 	position.y = lerpf(position.y, game.height_at(position.x, position.z), 1.0 - exp(-delta * 25.0))
 	# 상체와 시선은 싸우는 상대를 먼저 향한다
@@ -1014,8 +1017,8 @@ func _update_attack(delta: float) -> void:
 	else:
 		_vel = _vel.move_toward(Vector3.ZERO, 24.0 * delta)
 		proc.crouch = clampf(_vel.length() * 0.018, 0.0, 0.09)
-	# 클립에 원래 있던 내딛기(모션캡처의 런지)를 몸 이동으로 되살린다
-	_vel += _root_velocity(delta)
+	# 클립에 원래 있던 내딛기(모션캡처의 런지)를 이번 틱의 몸 이동으로 되살린다(관성 속도에는 쌓지 않는다)
+	_root_v = _root_velocity(delta)
 	var cutting: bool = pos >= cl.start and _end_t < 0.0
 	# 칼날 판정·궤적은 넓은 구간(속도 25% 이상)에서
 	var sweeping: bool = pos >= cl.get("sweep_start", cl.start) and pos <= cl.get("sweep_end", cl.end) and anim.current_animation == _clip
