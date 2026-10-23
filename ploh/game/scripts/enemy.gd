@@ -35,6 +35,8 @@ var dormant := false      # 방에 미리 서 있는 보초(영웅이 들어오�
 var _wake_check := 0.0
 var _rest := 0.0           # 공격한 뒤 다시 공격하기까지 숨 고르는 시간
 var _orbit := 1.0          # 차례를 기다리며 도는 방향
+var _blocks := 0           # 방패로 연달아 막은 수(두 번 막으면 세 번째에 뚫린다)
+var _block_t := 0.0
 var root_motion := {}     # 클립에서 지운 수평 루트 이동(공격 런지를 몸 이동으로 되살린다)
 var _rm_clip := ""
 var _rm_prev := Vector2.INF
@@ -160,6 +162,9 @@ func _physics_process(delta: float) -> void:
 	_trail_wait -= delta
 	if _trail_wait <= 0.0:
 		hp_trail = move_toward(hp_trail, hp, max_hp * 1.2 * delta)
+	_block_t -= delta
+	if _block_t <= 0.0:
+		_blocks = 0
 	if dormant:
 		# 보초는 영웅이 다가오기 전까지 그리지도 움직이지도 않는다(다음 방까지 미리 세워 두는 비용을 줄인다)
 		_wake_check -= delta
@@ -372,8 +377,11 @@ func take_hit(dmg: float, dir: Vector3, power: float) -> String:
 		state = "stagger"
 		t = 0.0
 		_play("hit", 0.8, 0.05, true)
-	elif stats.has("guard") and state in ["chase", "recover", "spawn"] and power < 9.0 and face.dot(-dir) > 0.3:
-		# 방패병: 정면에서 오는 가벼운 타격은 방패로 받는다. 공격한 직후(예고 중)나 무거운 타격, 옆과 뒤는 뚫린다
+	elif stats.has("guard") and state in ["chase", "recover", "spawn"] and power < 9.0 and face.dot(-dir) > 0.3 and _blocks < 2:
+		# 방패병: 정면에서 오는 가벼운 타격은 방패로 받는다. 공격 예고 중이나 무거운 타격, 옆과 뒤는 뚫린다.
+		# 연달아 두 번 막으면 세 번째 타에 방패가 밀려 뚫린다(막힘 → 막힘 → 뚫림)
+		_blocks += 1
+		_block_t = 1.5
 		result = "block"
 		dmg *= 0.2
 		_play("block_hit", 1.0, 0.05, true)
@@ -383,6 +391,11 @@ func take_hit(dmg: float, dir: Vector3, power: float) -> String:
 		knock = dir * 2.0
 		knock_decel = 20.0
 		return result
+	# 방패를 뚫었으면 크게 휘청인다
+	var guard_broken := stats.has("guard") and _blocks >= 2
+	_blocks = 0
+	if guard_broken:
+		power = maxf(power, 10.0)
 	# 맞은 방향으로 상체가 튕긴다(키프레임 위에 덧입힌다)
 	proc.hit(dir, 0.6 + power * 0.08)
 	if hit_count == 0:

@@ -76,6 +76,8 @@ var _focus_v := Vector3.ZERO
 var _cam_ready := false
 var music: AudioStreamPlayer
 var _clock0 := 0
+var _clock_loops := 0        # 음악이 돈 바퀴 수(박자 시계를 이어 붙인다)
+var _clock_prev := 0.0
 var _last_beat := -1
 var cine_t := 0.0              # 보스 처치 연출이 남은 실제 시간
 var cine_target := Vector3.ZERO
@@ -351,7 +353,16 @@ func screen_to_world(v: Vector2) -> Vector3:
 ## 박자 시계(초). 음악이 돌면 음악 재생 위치를, 아니면 내부 시계를 쓴다
 func beat_clock() -> float:
 	if music.playing:
-		return music.get_playback_position() + AudioServer.get_time_since_last_mix() - AudioServer.get_output_latency()
+		var pos := music.get_playback_position() + AudioServer.get_time_since_last_mix() - AudioServer.get_output_latency()
+		# 음악이 한 바퀴(16초) 돌아 처음으로 돌아가도 시계는 앞으로만 간다.
+		# 되돌아가면 '직전 입력보다 이른 입력'이 되어 한 바퀴 동안 탭이 모두 무시되던 문제
+		var span: float = music.stream.get_length() if music.stream != null else 0.0
+		var c: float = pos + _clock_loops * span
+		if span > 0.0 and c < _clock_prev - span * 0.5:
+			_clock_loops += 1
+			c += span
+		_clock_prev = c
+		return c
 	return (Time.get_ticks_msec() - _clock0) / 1000.0
 
 
@@ -381,6 +392,8 @@ func tap_down(at := -1.0) -> void:
 	if not music.playing:
 		music.play()
 		_clock0 = Time.get_ticks_msec()
+		_clock_loops = 0
+		_clock_prev = 0.0
 		at = -1.0
 	if state == "play":
 		player.tap_down(at)

@@ -1102,7 +1102,8 @@ func _auto_play() -> void:
 	var now: float = game.beat_clock()
 	if state == "idle" and game.nearest_enemy(global_position, _strike_range() + (6.0 if data.ranged else 2.0)) != null:
 		_tap(now, true)
-	elif state == "attack" and move_kind == "chain" and phase == "swing" and not _buffered and _end_t >= 0.0 and t - _end_t >= MIN_HOLD * 0.5:
+	elif state == "attack" and move_kind == "chain" and phase == "swing" and not _buffered and _end_t >= 0.0 and t - _end_t >= MIN_HOLD * 0.5 \
+			and game.nearest_enemy(global_position, _strike_range() + 2.5) != null:
 		_tap(now, true)
 	if data.ult >= 100.0 and game.nearest_enemy(global_position, 5.0) != null:
 		game.use_ult()
