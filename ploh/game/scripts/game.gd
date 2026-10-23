@@ -580,6 +580,15 @@ func hit_enemy(e: Node3D, dmg: float, hero: Node3D, just: bool, label: String, w
 			slowmo(0.45, 0.3)
 
 
+## 동시에 공격하는 적은 둘까지(보스는 혼자 둘 몫). 나머지는 둘레를 돌며 차례를 기다린다
+func can_attack(e: Node3D) -> bool:
+	var busy := 0
+	for o in enemies:
+		if o != e and is_instance_valid(o) and o.state == "wind":
+			busy += 2 if o.kind == "boss" else 1
+	return busy + (2 if e.kind == "boss" else 1) <= 2
+
+
 func enemy_strike(e: Node3D, at: Vector3, area: float, dmg: float) -> void:
 	shake(0.5 if area > 4.0 else 0.15)
 	ring(at, area, Color(1, 0.3, 0.25))

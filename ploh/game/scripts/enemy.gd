@@ -33,6 +33,8 @@ var radius := 0.5
 var state := "spawn"      # spawn, chase, wind, recover, stagger, dead
 var dormant := false      # 방에 미리 서 있는 보초(영웅이 들어오면 activate)
 var _wake_check := 0.0
+var _rest := 0.0           # 공격한 뒤 다시 공격하기까지 숨 고르는 시간
+var _orbit := 1.0          # 차례를 기다리며 도는 방향
 var root_motion := {}     # 클립에서 지운 수평 루트 이동(공격 런지를 몸 이동으로 되살린다)
 var _rm_clip := ""
 var _rm_prev := Vector2.INF
@@ -189,8 +191,16 @@ func _physics_process(delta: float) -> void:
 		"chase":
 			if dist > 0.01:
 				face = to.normalized()
-			if hero.state != "dead" and dist <= stats.reach + 0.4:
+			_rest = maxf(_rest - delta, 0.0)
+			var ready: bool = _rest <= 0.0 and game.can_attack(self)
+			if hero.state != "dead" and dist <= stats.reach + 0.4 and ready:
 				_start_wind(hero)
+			elif hero.state != "dead" and not ready and dist <= stats.reach + 1.6:
+				# 차례를 기다린다: 칼이 닿지 않는 거리를 지키며 영웅 둘레를 천천히 돈다
+				var side := Vector3(-face.z, 0, face.x) * _orbit
+				var keep := face * clampf(dist - (stats.reach + 1.1), -1.0, 1.0) * 2.0
+				velocity += side * 1.1 + keep + _separation()
+				_play("walk", 0.9, 0.2)
 			elif hero.state != "dead":
 				velocity += face * stats.speed + _separation()
 				# 클립이 원래 나아가는 속도에 맞춰 재생해서 발이 미끄러지지 않게 한다
@@ -220,6 +230,8 @@ func _physics_process(delta: float) -> void:
 		"recover":
 			if t >= 0.55:
 				state = "chase"
+				_rest = randf_range(0.5, 1.3)
+				_orbit = 1.0 if randf() < 0.5 else -1.0
 			elif not anim.is_playing():
 				_play("block" if stats.has("guard") else "idle", 1.0, 0.15)
 		"stagger":
