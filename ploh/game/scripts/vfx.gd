@@ -207,10 +207,11 @@ static func blood(parent: Node3D, at: Vector3, dir: Vector3, amount: int, ground
 
 static func stain(parent: Node3D, at: Vector3, size: float) -> void:
 	_init_shared()
+	_stains = _stains.filter(func(x): return is_instance_valid(x))
 	while _stains.size() >= STAIN_MAX:
-		var old: Node3D = _stains.pop_front()
+		var old: Variant = _stains.pop_front()
 		if is_instance_valid(old):
-			old.queue_free()
+			(old as Node).queue_free()
 	var mi := MeshInstance3D.new()
 	mi.mesh = _stain_mesh
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF

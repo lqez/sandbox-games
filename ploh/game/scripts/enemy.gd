@@ -21,7 +21,7 @@ const KINDS := {
 	"rogue": {"model": "conscript", "blade": ["weapon_sword"], "hp": 80.0, "atk": 11.0, "speed": 4.6, "reach": 1.4, "wind": 0.6, "area": 1.3, "scale": 1.6, "radius": 0.45, "poise": 1.0,
 		"attacks": [["attack_2", 0.5]], "tint": Color(0.62, 0.5, 0.55)},
 	"warrior": {"model": "shieldbearer", "blade": ["weapon_sword"], "hp": 280.0, "atk": 18.0, "speed": 2.6, "reach": 1.25, "wind": 1.0, "area": 1.8, "scale": 1.75, "radius": 0.65, "poise": 0.4,
-		"attacks": [["attack_1", 0.536], ["shield_bash", 0.519]], "guard": true, "tint": Color(0.5, 0.48, 0.7)},
+		"attacks": [["attack_1", 0.536], ["shield_bash", 0.519]], "guard": true, "parry": 0.35, "counter": ["attack_1", 0.536], "tint": Color(0.5, 0.48, 0.7)},
 	"boss": {"model": "boss", "blade": ["weapon_pendulum"], "hp": 1050.0, "atk": 26.0, "speed": 2.8, "reach": 2.6, "wind": 1.1, "area": 3.2, "scale": 2.3, "radius": 1.0, "poise": 0.1,
 		"attacks": [["attack_2", 0.6]], "slam": ["attack_1", 0.578], "tint": Color(0.55, 0.45, 0.6)},
 }
@@ -72,6 +72,8 @@ var weapon: RefCounted
 var proc: SkeletonModifier3D
 var ragdoll: RefCounted
 var _struck := false        # 이번 공격으로 이미 맞혔는지
+var thrusting := false      # 받아친 뒤의 반격 찌르기(내디디며 찔러 평소보다 멀리 닿는다)
+var _counter_wait := -1.0   # 받아친 뒤 반격 찌르기를 시작하기까지 남은 시간
 var _current := ""
 
 
@@ -214,6 +216,13 @@ func _physics_process(delta: float) -> void:
 	to.y = 0
 	var dist := to.length()
 	velocity = knock + _root_velocity(delta)
+	if _counter_wait >= 0.0:
+		_counter_wait -= delta
+		if _counter_wait < 0.0 and state not in ["dead", "stagger"] and hero.state != "dead":
+			_start_counter(hero)
+	if thrusting and state == "wind" and wind_time - t <= 0.22 and wind_time - t > -0.05:
+		# 찌르기: 닿기 직전에 한 걸음 내디딘다
+		velocity += face * 4.5
 	knock = knock.move_toward(Vector3.ZERO, delta * knock_decel)
 	match state:
 		"spawn":
@@ -352,6 +361,50 @@ func _start_wind(hero: Node3D) -> void:
 	telegraph.global_position = Vector3(strike_at.x, game.height_at(strike_at.x, strike_at.z) + 0.06, strike_at.z)
 
 
+## 받아친 뒤의 반격 찌르기: 짧은 예고(0.5초) 뒤 내디디며 찌른다. 영웅은 피하거나 받아 낼 수 있다
+func _start_counter(hero: Node3D) -> void:
+	state = "wind"
+	t = 0.0
+	_struck = false
+	thrusting = true
+	attacks += 1
+	wind_time = 0.5
+	strike_area = stats.area
+	var to: Vector3 = hero.global_position - global_position
+	to.y = 0
+	if to.length() > 0.01:
+		face = to.normalized()
+	strike_at = global_position + face * (stats.reach + 0.6)
+	var pick: Array = stats.get("counter", stats.attacks[0])
+	var clip: String = "counter" if anim.has_animation("counter") else pick[0]
+	var contact: float = 0.5 if clip == "counter" else pick[1]
+	_play(clip, anim.get_animation(clip).length * contact / wind_time, 0.06, true)
+	telegraph = Node3D.new()
+	_tg_edge = Fx.mat(Color(1, 0.85, 0.3, 0.75), 0.0, true)
+	telegraph.add_child(_ring(strike_area * 0.7, _tg_edge))
+	_tg_grow = _ring(strike_area * 0.7, Fx.mat(Color(1, 0.8, 0.3, 0.6), 0.0, true))
+	_tg_grow.scale = Vector3(0.05, 1.0, 0.05)
+	telegraph.add_child(_tg_grow)
+	game.add_child(telegraph)
+	telegraph.global_position = Vector3(strike_at.x, game.height_at(strike_at.x, strike_at.z) + 0.06, strike_at.z)
+
+
+## 영웅에게 칼을 받아내졌다: 크게 휘청이며 물러난다(반격 찌르기를 맞을 틈)
+func parried(dir: Vector3) -> void:
+	if state == "dead":
+		return
+	_clear_telegraph()
+	_struck = true
+	thrusting = false
+	state = "stagger"
+	t = 0.0
+	_play("hit", 0.8, 0.05, true)
+	proc.hit(dir, 1.3)
+	knock = dir * 4.0
+	knock_decel = 16.0
+	flash = 0.05
+
+
 func _ring(radius: float, m: Material) -> MeshInstance3D:
 	var tm := TorusMesh.new()
 	tm.inner_radius = radius - 0.05
@@ -384,6 +437,7 @@ func _clear_telegraph() -> void:
 
 func _strike(area: bool) -> void:
 	_clear_telegraph()
+	thrusting = false
 	state = "recover"
 	t = 0.0
 	# 무게에 끌려간 팔로스루와 복귀는 원래 속도로
@@ -411,6 +465,15 @@ func take_hit(dmg: float, dir: Vector3, power: float) -> String:
 		_block_t = 1.5
 		result = "block"
 		dmg *= 0.2
+		# 방패로 받아쳐 칼을 튕겨 내고 곧바로 찌르기로 반격한다(두 번째로 막을 때나 가끔)
+		if stats.has("parry") and (_blocks == 2 or randf() < stats.parry):
+			result = "parry"
+			_counter_wait = 0.12
+			_play("parry" if anim.has_animation("parry") else "block_hit", 1.0, 0.05, true)
+			proc.hit(dir, 0.15)
+			knock = dir * 0.8
+			knock_decel = 12.0
+			return result
 		_play("block_hit", 1.0, 0.05, true)
 		proc.hit(dir, 0.3)
 		hp = maxf(hp - dmg, 1.0)

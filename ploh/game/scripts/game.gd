@@ -29,21 +29,24 @@ const HEROES := [
 		"blade": ["weapon_sword"], "weapon_bone": "RightHand", "attack_speed": 1.0,
 		"skill_name": "돌진 찌르기", "skill": "dash",
 		"anims": {"moves": {"idle": "idle", "run": "run", "a1": "attack_1", "a2": "attack_2", "a3": "attack_3", "a4": "cast",
-			"spin": "spin", "dodge": "dodge", "hit": "hit", "death": "death", "charge": "idle", "skill": "attack_3", "ult": "spin"}}},
+			"spin": "spin", "dodge": "dodge", "hit": "hit", "death": "death", "charge": "idle", "skill": "attack_3", "ult": "spin",
+			"parry": "parry", "thrust": "thrust", "step_l": "sidestep_l", "step_r": "sidestep_r"}}},
 	# 프람(불꽃의 용병): 검과 방패. 단단하고 표준 속도
 	{"name": "프람", "model": "res://assets/fram/fram.glb", "scale": 1.6, "color": Color(1.0, 0.5, 0.38),
 		"max_hp": 640.0, "atk": 38.0, "speed": 5.6, "reach": 2.6, "guard": 0.7, "ranged": false,
 		"blade": ["weapon_sword"], "weapon_bone": "RightHand", "attack_speed": 1.0, "weapon_mass": 1.2,
 		"skill_name": "홍련 일섬", "skill": "wave",
 		"anims": {"moves": {"idle": "idle", "run": "run", "a1": "attack_1", "a2": "attack_2", "a3": "attack_3", "a4": "cast",
-			"spin": "spin", "dodge": "dodge", "hit": "hit", "death": "death", "charge": "idle", "skill": "attack_3", "ult": "spin"}}},
+			"spin": "spin", "dodge": "dodge", "hit": "hit", "death": "death", "charge": "idle", "skill": "attack_3", "ult": "spin",
+			"parry": "parry", "thrust": "thrust", "step_l": "sidestep_l", "step_r": "sidestep_r"}}},
 	# 슈나이더(온화한 수인기사): 양손 철퇴. 예비 동작이 길고 한 방이 무겁다
 	{"name": "슈나이더", "model": "res://assets/schneider/schneider.glb", "scale": 1.6, "color": Color(0.55, 0.8, 1.0),
 		"max_hp": 600.0, "atk": 56.0, "speed": 5.2, "reach": 2.8, "guard": 0.75, "ranged": false,
 		"blade": ["weapon_mace"], "weapon_bone": "RightHand", "attack_speed": 1.0, "weapon_mass": 1.9, "strike_time": 0.34,
 		"skill_name": "대지 강타", "skill": "quake",
 		"anims": {"moves": {"idle": "idle", "run": "run", "a1": "attack_1", "a2": "attack_2", "a3": "attack_3", "a4": "cast",
-			"spin": "spin", "dodge": "dodge", "hit": "hit", "death": "death", "charge": "idle", "skill": "attack_3", "ult": "spin"}}},
+			"spin": "spin", "dodge": "dodge", "hit": "hit", "death": "death", "charge": "idle", "skill": "attack_3", "ult": "spin",
+			"parry": "parry", "thrust": "thrust", "step_l": "sidestep_l", "step_r": "sidestep_r"}}},
 ]
 
 var mobile := false          # 저사양 설정(boot.gd가 정한다)
@@ -68,6 +71,7 @@ var max_combo := 0
 var just_count := 0
 var swap_cd := 0.0
 var boss: Node3D
+var arrows: Array = []       # 날아가는 화살(arrow.gd)
 
 var camera: Camera3D
 var cam_dist := CAM_DIST
@@ -547,6 +551,31 @@ func threatened(hero: Node3D) -> bool:
 	return false
 
 
+## 영웅에게 horizon초 안에 닿을 적의 칼: [적, 닿기까지 남은 초]. 없으면 빈 배열.
+## 넓은 내려찍기(범위 공격)는 받아 낼 수 없어 빼고, 날아오는 화살은 넣는다
+func incoming(hero: Node3D, horizon: float) -> Array:
+	var best: Array = []
+	var p: Vector3 = hero.global_position
+	for e in enemies:
+		if not is_instance_valid(e) or e.state != "wind" or e.strike_area > 4.0:
+			continue
+		var ttc: float = e.wind_time - e.t
+		if ttc > horizon or ttc < -0.06:
+			continue
+		var reach: float = e.stats.reach + e.radius + 1.0 + (0.8 if e.get("thrusting") else 0.0)
+		if Vector2(p.x - e.global_position.x, p.z - e.global_position.z).length() > reach:
+			continue
+		if best.is_empty() or ttc < best[1]:
+			best = [e, ttc]
+	for a in arrows:
+		if not is_instance_valid(a):
+			continue
+		var ttc2: float = a.time_to(p)
+		if ttc2 >= 0.0 and ttc2 <= horizon and (best.is_empty() or ttc2 < best[1]):
+			best = [a, ttc2]
+	return best
+
+
 func can_swap() -> bool:
 	return state == "play" and swap_cd <= 0.0 and _next_alive() != active
 
@@ -628,6 +657,21 @@ func hit_enemy(e: Node3D, dmg: float, hero: Node3D, just: bool, label: String, w
 	if just:
 		weight = maxf(weight, 0.6)
 	var result: String = e.take_hit(dmg, dir, 5.0 + weight * 7.0)
+	if result == "parry":
+		# 방패병이 받아쳤다: 칼이 크게 튕기고 영웅이 휘청인다. 방패병은 곧바로 찌르기로 반격한다
+		popup(e.global_position + Vector3(0, 2.0 * e.stats.scale + 0.4, 0), "받아침", Color(1, 0.75, 0.4), 40)
+		var at2: Vector3 = e.global_position + Vector3(0, 1.1 * e.stats.scale, 0) - dir * e.radius
+		Vfx.sparks(self, at2, -dir, Vector3.UP, Color(1, 0.85, 0.5), 18)
+		Vfx.cut(self, at2, Vector3.UP, Color(1, 0.8, 0.5), 0.5, false)
+		hero.freeze(0.06)
+		e.freeze(0.04)
+		hero.recoil(e.global_position)
+		kick(-dir, 0.012)
+		sfx("glint", 0.05)
+		sfx("counter", 0.1, -6.0)
+		vibrate(40)
+		combo = 0
+		return
 	if result == "block":
 		# 방패에 막혔다: 칼이 튕겨 나온다(짧게 멎고, 쇳소리). 콤보는 이어지지 않는다
 		popup(e.global_position + Vector3(0, 2.0 * e.stats.scale + 0.4, 0), "막힘", Color(0.75, 0.8, 0.9), 30)
@@ -707,7 +751,13 @@ func enemy_strike(e: Node3D, at: Vector3, area: float, dmg: float) -> void:
 	var p := player.global_position
 	if Vector2(p.x - at.x, p.z - at.z).length() > area + 0.3:
 		return
-	var dodging: bool = player.state == "dodge"
+	if player.parrying():
+		# 넓은 내려찍기는 받아 낼 수 없고, 막아서 피해만 줄인다
+		popup(p + Vector3(0, 2.4, 0), "막음", Color(0.8, 0.85, 0.95), 40)
+		player.take_damage(dmg * 0.3, at)
+		sfx("glint", 0.1, -2.0)
+		return
+	var dodging: bool = player.state in ["dodge", "step"]
 	var hurt: bool = player.take_damage(dmg)
 	if not hurt and dodging:
 		player.perfect_dodge()
@@ -740,13 +790,41 @@ func _finish_cinematic(e: Node3D, boss_kill: bool) -> void:
 func enemy_hit(e: Node3D, dmg: float) -> void:
 	if player.state == "dead":
 		return
-	var dodging: bool = player.state == "dodge"
+	var to_e: Vector3 = e.global_position - player.global_position
+	to_e.y = 0
+	if player.parrying() and player.face.dot(to_e.normalized()) > -0.2:
+		parried(e)
+		return
+	var dodging: bool = player.state in ["dodge", "step"]
 	var hurt: bool = player.take_damage(dmg, e.global_position)
 	if not hurt and dodging:
 		player.perfect_dodge()
 	if hurt:
 		combo = 0
 		shake_dir = (player.global_position - e.global_position).normalized()
+
+
+## 영웅이 적의 칼(또는 화살)을 받아 냈다: 쇳소리, 불티, 짧은 슬로, 적은 크게 휘청이고 영웅은 반격할 수 있다
+func parried(e: Node3D) -> void:
+	var hp: Vector3 = player.global_position
+	var dir: Vector3 = e.global_position - hp
+	dir.y = 0
+	dir = dir.normalized() if dir.length() > 0.01 else player.face
+	var at: Vector3 = hp + dir * 0.7 + Vector3(0, 1.3, 0)
+	Vfx.cut(self, at, dir.cross(Vector3.UP), Color(0.75, 0.9, 1.0), 0.6, true)
+	Vfx.sparks(self, at, dir, Vector3.UP, Color(1, 0.9, 0.6), 22)
+	popup(hp + Vector3(0, 2.6, 0), "패링!", Color(0.7, 0.92, 1.0), 60)
+	sfx("glint", 0.05, 2.0)
+	sfx("counter", 0.05, -2.0)
+	vibrate(50)
+	kick(dir, 0.012)
+	slowmo(0.3, 0.22)
+	player.freeze(0.06)
+	player.on_parry(e)
+	if e.has_method("parried"):
+		e.parried(dir)
+	combo += 1
+	max_combo = maxi(max_combo, combo)
 
 
 func ultimate_burst(hero: Node3D) -> void:
