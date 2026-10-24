@@ -7,6 +7,7 @@ const Weapon := preload("res://scripts/weapon.gd")
 const Procedural := preload("res://scripts/procedural.gd")
 const Ragdoll := preload("res://scripts/ragdoll.gd")
 const Hero := preload("res://scripts/hero.gd")
+const Vfx := preload("res://scripts/vfx.gd")
 const Breakable := preload("res://scripts/breakable.gd")
 const AIM := preload("res://shaders/aim.gdshader")
 const SWING_AFTER := 0.16   # 예고가 끝난 뒤 칼이 내려오는 동안 판정을 이어 가는 시간
@@ -39,6 +40,8 @@ const COUNTER_WINDOW := 0.35
 ## 영웅의 칼을 뒤로·옆으로 빠져 헛치게 할 확률(종류별). 방패병은 빠지지 않고 막는다
 const EVADE := {"minion": 0.22, "rogue": 0.5, "warrior": 0.1, "guard": 0.0, "archer": 0.35, "boss": 0.15}
 const EVADE_TIME := 0.32
+## 받아 내졌을 때 칼을 놓칠 확률. 칼을 놓치면 주우러 가는 동안 공격하지 못한다
+const DISARM := {"minion": 0.35, "rogue": 0.3, "warrior": 0.15, "guard": 0.2, "archer": 0.0, "boss": 0.0}
 ## 공격하는 척하다 거두는 확률(영웅이 받아 내기를 미리 쓰게 꾄다)
 const FEINT := {"minion": 0.08, "rogue": 0.2, "warrior": 0.1, "guard": 0.0, "archer": 0.0, "boss": 0.12}
 
@@ -111,6 +114,11 @@ var whiff_t := 0.0           # 헛친 뒤 빈틈(이 동안 맞으면 더 아프
 var _feint := false
 var _hover := randf() * TAU  # 기다리며 거리를 재는 들락날락의 위상
 var _punish := false         # 영웅이 헛친 틈: 바로 공격권을 받아 친다
+var disarmed := false        # 칼을 놓쳤다(주우러 간다)
+var _dropped: RigidBody3D    # 떨어진 칼(물리)
+var _blade_mesh: MeshInstance3D
+var _blade_parent: Node
+var _blade_xf := Transform3D.IDENTITY
 var _skel: Skeleton3D
 var _down_pose: Array = []  # 쓰러진 동안 래그돌 자세(뼈마다 월드 변환). 일어날 때 여기서 섞어 나온다
 
@@ -197,6 +205,11 @@ func _ready() -> void:
 	ragdoll = Ragdoll.build(skel, Ragdoll.BONES_MESHY if meshy else Ragdoll.BONES_KAYKIT, BAKED.get(model_name, 1.0))
 	_skel = skel
 	skel.skeleton_updated.connect(_on_skeleton)
+	if kind == "boss":
+		# 보스의 발걸음: 디딜 때마다 땅이 울린다
+		proc.planted.connect(func(at: Vector3, hard: float):
+			game.shake(0.05 + 0.08 * hard)
+			Vfx.dust(game, at, Vector3.ZERO))
 
 
 ## 쓰러진 동안 화면에 그려진 자세(래그돌이 덮은 뒤)를 받아 둔다. 일어날 때 이 자세에서 섞어 나온다
@@ -290,7 +303,7 @@ func _physics_process(delta: float) -> void:
 	_check_evade(hero)
 	if _counter_wait >= 0.0:
 		_counter_wait -= delta
-		if _counter_wait < 0.0 and state not in ["dead", "stagger"] and hero.state != "dead" and game.claim_counter(self):
+		if _counter_wait < 0.0 and state not in ["dead", "stagger"] and not disarmed and hero.state != "dead" and game.claim_counter(self):
 			_start_counter(hero)
 	if thrusting and state == "wind" and wind_time - t <= 0.22 and wind_time - t > -0.05:
 		# 찌르기: 닿기 직전에 한 걸음 내디딘다
@@ -303,6 +316,8 @@ func _physics_process(delta: float) -> void:
 			"spawn":
 				if t >= 1.1:
 					state = "chase"
+			"chase" when disarmed:
+				_fetch(delta)
 			"chase":
 				if dist > 0.01:
 					face = to.normalized()
@@ -520,18 +535,26 @@ func _posture(dist: float) -> void:
 	p.swing_bend = 0.0
 	p.swing_rate = 9.0
 	p.arm_busy = state == "wind"
+	var boss := kind == "boss"
 	if state == "wind" and not stats.has("ranged"):
 		p.gaze_strength = 0.25
 		var u := t / maxf(wind_time, 0.01)
 		if u < 0.85:
-			p.swing_bend = -0.08
-			p.swing_rate = 10.0
+			# 들어 올리기: 보스는 무게를 받치려 윗몸을 뒤로 젖히고 골반을 낮춘 채 천천히 끌어올린다
+			p.swing_bend = -0.2 if boss else -0.08
+			p.swing_rate = 5.0 if boss else 10.0
+			p.crouch = 0.07 * u if boss else 0.0
 		else:
-			p.swing_bend = 0.3 if stats.scale < 2.0 else 0.22
-			p.swing_rate = 30.0
-	elif state == "recover" and t < 0.25:
-		p.swing_bend = 0.25
-		p.swing_rate = 30.0
+			p.swing_bend = 0.4 if boss else (0.3 if stats.scale < 2.0 else 0.22)
+			p.swing_rate = 26.0 if boss else 30.0
+			p.crouch = 0.1 if boss else 0.0
+	elif state == "recover" and t < (0.7 if boss else 0.25):
+		# 내려친 뒤: 보스는 무기가 바닥에 박힌 채 숙인 자세로 버티다가 천천히 끌어올린다
+		p.swing_bend = 0.32 if boss else 0.25
+		p.swing_rate = 6.0 if boss and t > 0.35 else 30.0
+		p.crouch = 0.08 if boss else 0.0
+	elif boss:
+		p.crouch = 0.0
 
 
 ## 공격 밖 동작의 이징: 빠르게 자세로 들어가(fast) 잠깐 머물고(hold) 나머지를 제 속도로(rest)
@@ -553,7 +576,9 @@ func _servo_wind(delta: float) -> void:
 	var s0 := c - strike
 	var p: float
 	if u < 0.7:
-		p = s0 * (1.0 - pow(1.0 - u / 0.7, 3.0))
+		var k := u / 0.7
+		# 보스는 무거워서 천천히 들기 시작해(힘을 모으며) 끝에서 가라앉는다(ease in-out), 나머지는 빠르게 들고 가라앉는다
+		p = s0 * (k * k * (3.0 - 2.0 * k) if kind == "boss" else 1.0 - pow(1.0 - k, 3.0))
 	elif u < 0.85:
 		p = s0 + 0.015 * (u - 0.7) / 0.15
 	else:
@@ -835,6 +860,8 @@ func parried(dir: Vector3) -> void:
 	_play("hit", 2.0, 0.04, true)
 	_snap("hit", [2.0, 0.08, 0.2, 0.25, 0.7])
 	proc.hit(dir, 1.3)
+	if not disarmed and randf() < DISARM.get(kind, 0.0):
+		_disarm(dir)
 	# 크게 휘청이며 뒷걸음친다: 윗몸이 젖혀진 채 밀리고 발이 몇 걸음 따라간다(약 0.6m, 0.4초)
 	proc.push(dir, 2.0)
 	knock = dir * 3.0
@@ -885,9 +912,14 @@ func _strike(area: bool) -> void:
 		t = -0.25
 		proc.push(face, 0.6)
 		game.on_enemy_whiff(self)
-	# 무게에 끌려간 팔로스루: 빠르게 휘둘러 나갔다가 늦추며 거둔다
+	# 무게에 끌려간 팔로스루: 빠르게 휘둘러 나갔다가 늦추며 거둔다.
+	# 보스는 무기가 바닥에 박혀 잠깐 멎었다가(0.35초) 힘겹게 끌어올린다
 	anim.speed_scale = 1.4
-	_snap(anim.current_animation, [1.4, 0.15, 1.0, 0.2, 0.8])
+	if kind == "boss":
+		_snap(anim.current_animation, [1.3, 0.08, 0.12, 0.35, 0.55])
+		game.shake(0.35)
+	else:
+		_snap(anim.current_animation, [1.4, 0.15, 1.0, 0.2, 0.8])
 	if area:
 		game.enemy_strike(self, strike_at, strike_area, stats.atk * (1.8 if strike_area > 4.0 else 1.0))
 
@@ -931,6 +963,9 @@ func take_hit(dmg: float, dir: Vector3, power: float, at := Vector3.INF, blade :
 		_blocks += 1
 		_block_t = 1.5
 		result = "block"
+		# 방패를 공격하는 쪽으로 똑바로 돌린다(수직으로 받도록)
+		face = -dir
+		model.rotation.y = lerp_angle(model.rotation.y, atan2(face.x, face.z), 0.75)
 		dmg *= 0.2
 		# 방패로 받아쳐 칼을 튕겨 내고 곧바로 찌르기로 반격한다(두 번째로 막을 때나 가끔)
 		if stats.has("parry") and (_blocks == 2 or randf() < stats.parry):
@@ -1007,6 +1042,76 @@ func take_hit(dmg: float, dir: Vector3, power: float, at := Vector3.INF, blade :
 		_die(dir)
 		return "dead"
 	return result
+
+
+## 칼을 놓쳤다: 칼 메시를 손에서 떼어 물리 몸체에 붙이고 튕겨 보낸다(돌며 날아가 바닥에 떨어진다)
+func _disarm(dir: Vector3) -> void:
+	var names: Array = stats.blade if model_name == stats.model else ["weapon_sword"]
+	if names.is_empty():
+		return
+	var mi := model.find_child(names[0], true, false) as MeshInstance3D
+	if mi == null:
+		return
+	disarmed = true
+	ready_to_attack = false
+	_blade_mesh = mi
+	_blade_parent = mi.get_parent()
+	_blade_xf = mi.transform
+	var gx := mi.global_transform
+	var aabb := mi.get_aabb()
+	var rb := RigidBody3D.new()
+	rb.collision_layer = 4
+	rb.collision_mask = 1 | 2 | 16 | 32
+	rb.mass = 1.2
+	game.world.add_child(rb)
+	rb.global_position = gx * aabb.get_center()
+	mi.reparent(rb, true)
+	var cs := CollisionShape3D.new()
+	var box := BoxShape3D.new()
+	var sc := gx.basis.get_scale()
+	box.size = (aabb.size * sc).max(Vector3.ONE * 0.04)
+	cs.shape = box
+	cs.transform = Transform3D(mi.transform.basis.orthonormalized(), mi.transform * aabb.get_center())
+	rb.add_child(cs)
+	rb.linear_velocity = dir * 3.5 + Vector3.UP * 4.5 + Vector3(randf_range(-1, 1), 0, randf_range(-1, 1))
+	rb.angular_velocity = Vector3(randf_range(-14, 14), randf_range(-6, 6), randf_range(-14, 14))
+	_dropped = rb
+	game.popup(global_position + Vector3(0, 2.0 * stats.scale + 0.3, 0), "무장 해제!", Color(1, 0.85, 0.4), 34)
+	game.sfx("glint", 0.05, 2.0)
+
+
+## 맨손: 떨어진 칼로 뛰어가 몸을 숙여 주워 든다(그동안은 공격하지 않는다)
+func _fetch(delta: float) -> void:
+	if _dropped == null or not is_instance_valid(_dropped):
+		_regrab()
+		return
+	var go := _dropped.global_position - global_position
+	go.y = 0
+	var gd := go.length()
+	if gd > 0.7:
+		face = go / gd
+		var mv: Vector3 = face * _speed() * 1.1 + _separation()
+		velocity += mv
+		_locomote(mv)
+		t = 0.0
+	else:
+		# 몸을 숙여 줍는다(0.45초)
+		proc.crouch = 0.28
+		_play("idle", 1.0, 0.15)
+		if t > 0.45 and _dropped.linear_velocity.length() < 1.0:
+			_regrab()
+
+
+func _regrab() -> void:
+	proc.crouch = 0.0
+	disarmed = false
+	if _blade_mesh != null and is_instance_valid(_blade_mesh) and _blade_parent != null and is_instance_valid(_blade_parent):
+		_blade_mesh.reparent(_blade_parent, false)
+		_blade_mesh.transform = _blade_xf
+	if _dropped != null and is_instance_valid(_dropped):
+		_dropped.queue_free()
+	_dropped = null
+	_rest = 0.4
 
 
 ## 영웅이 나를 노리고 휘두른다: 칼이 닿기 직전(0.08~0.3초 전)에 한 번 정해서, 확률로 뒤나 옆으로 빠진다
@@ -1181,6 +1286,11 @@ func _get_up() -> void:
 
 
 func _die(dir: Vector3) -> void:
+	if _dropped != null and is_instance_valid(_dropped):
+		# 놓친 칼은 바닥에 남았다가 함께 사라진다
+		var tw2 := _dropped.create_tween()
+		tw2.tween_interval(3.2)
+		tw2.tween_callback(_dropped.queue_free)
 	state = "dead"
 	ready_to_attack = false
 	game.release_token(self)

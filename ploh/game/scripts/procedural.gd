@@ -24,6 +24,9 @@ extends SkeletonModifier3D
 ##
 ## 뼈 이름은 rig 사전으로 받는다(Meshy 사람형, KayKit 등).
 
+## 발을 디뎠다(애니메이션이 내려 디뎠거나 절차적 걸음이 내려앉았다). hard는 0~1(빠르게 디딜수록 크다)
+signal planted(at: Vector3, hard: float)
+
 const RIG_MESHY := {
 	"hips": "Hips", "spine": ["Spine02", "Spine01", "Spine"], "neck": "neck", "head": "Head",
 	"legs": [["LeftUpLeg", "LeftLeg", "LeftFoot"], ["RightUpLeg", "RightLeg", "RightFoot"]],
@@ -708,6 +711,7 @@ func _plan_feet(sk: Skeleton3D, dt: float) -> void:
 					f.p = out
 					f.yaw = ya + f.corr
 					f.settle = 0.0
+					planted.emit(Vector3(out.x, h, out.z), clampf(spd / 5.0, 0.2, 1.0))
 			STEP:
 				if _hold <= 0.0:
 					f.s = minf(f.s + dt / f.dur, 1.0)
@@ -727,6 +731,7 @@ func _plan_feet(sk: Skeleton3D, dt: float) -> void:
 					f.p = goal
 					f.yaw = ya
 					f.settle = 0.0
+					planted.emit(Vector3(goal.x, height_fn.call(Vector2(goal.x, goal.z)), goal.z), clampf(float(f.lift) / (0.14 * leg), 0.2, 1.0))
 		if f.mode == PLANT:
 			out = Vector3(f.p.x, height_fn.call(Vector2(f.p.x, f.p.z)) + rel_y, f.p.z)
 			want = f.yaw

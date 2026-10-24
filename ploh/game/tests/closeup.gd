@@ -179,6 +179,23 @@ func _process(delta: float) -> void:
 				_last_beat = b
 				g.tap_down()
 				g.tap_up()
+		"guard":
+			# 막기: 누르고(막는 자세) 조금 끌어 게걸음 → 뒷걸음 → 크게 끌어 달리기 → 놓기
+			if _once("g_on") and t > 1.0:
+				g.auto_mode = false
+			if t > 1.2 and t < 7.5 and not _did.has("g_hold"):
+				_did["g_hold"] = true
+				g.guard(true)
+			if t > 1.8 and t < 3.6:
+				g.set_move(Vector2(1, 0) * 0.35)
+			elif t >= 3.6 and t < 5.2:
+				g.set_move(Vector2(0, 1) * 0.35)
+			elif t >= 5.2 and t < 6.4:
+				g.set_move(Vector2(-1, 0) * 0.9)
+			elif t >= 6.4 and t < 6.5:
+				g.set_move(Vector2.ZERO)
+			if t > 7.5 and _once("g_off"):
+				g.guard(false)
 		"slope":
 			if _once("tp"):
 				var f: Dictionary = g.dungeon._features[0]

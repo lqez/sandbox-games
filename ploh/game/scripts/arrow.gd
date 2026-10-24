@@ -1,6 +1,7 @@
 extends Node3D
 ## 궁병의 화살. 곧게 날아가며 영웅의 몸(세로 캡슐)을 지나면 맞힌다.
-## 영웅이 받아 내면(패링) 쏜 궁병 쪽으로 되튕겨 적을 맞히고, 벽에 닿으면 박혀 사라진다.
+## 영웅이 받아 내면(패링) 쏜 궁병 쪽으로 되튕겨 적을 맞히거나, 칼에 비껴 엉뚱한 데로 날아가 벽·바닥·소품에 꽂힌다.
+## 벽·바닥에 꽂힌 화살은 한동안 남고, 소품에 꽂히면 소품을 따라 움직인다.
 
 const Fx := preload("res://scripts/fx.gd")
 const Vfx := preload("res://scripts/vfx.gd")
@@ -12,6 +13,7 @@ var shooter: Node3D
 var dmg := 10.0
 var vel := Vector3.ZERO
 var friendly := false        # 되튕겨 적을 노리는 중
+var stray := false           # 칼에 비껴 나간 화살(아무도 노리지 않고 떨어지며 날다 꽂힌다)
 var _age := 0.0
 var _dead := false
 
@@ -75,7 +77,7 @@ func _orient() -> void:
 
 ## p(바닥 높이의 몸 위치)까지 닿는 데 남은 시간. 비껴 가면 -1
 func time_to(p: Vector3) -> float:
-	if _dead or friendly:
+	if _dead or friendly or stray:
 		return -1.0
 	var d := Vector3(p.x, global_position.y, p.z) - global_position
 	var dir := vel.normalized()
@@ -95,11 +97,31 @@ func _physics_process(delta: float) -> void:
 		queue_free()
 		return
 	var from := global_position
+	if stray:
+		vel += Vector3.DOWN * 9.8 * delta
+		_orient()
 	var to := from + vel * delta
+	# 소품(강체)에 맞으면 그 소품에 꽂힌다
+	var q := PhysicsRayQueryParameters3D.create(from, to + vel.normalized() * 0.3, 32)
+	var hit := get_world_3d().direct_space_state.intersect_ray(q)
+	if not hit.is_empty() and hit.collider is RigidBody3D:
+		global_position = hit.position - vel.normalized() * 0.2
+		var prop: RigidBody3D = hit.collider
+		prop.sleeping = false
+		prop.apply_impulse(vel.normalized() * 1.5, hit.position - prop.global_position)
+		_stick(prop)
+		return
 	global_position = to
 	# 벽에 박힌다
 	if game.dungeon != null and game.dungeon.sdf(Vector2(to.x, to.z)) > 0.15:
 		_stick()
+		return
+	# 바닥에 꽂힌다(비껴 나간 화살)
+	if stray and to.y <= game.height_at(to.x, to.z) + 0.05:
+		global_position.y = game.height_at(to.x, to.z) + 0.05
+		_stick()
+		return
+	if stray:
 		return
 	if friendly:
 		for e in game.enemies:
@@ -132,10 +154,17 @@ func _passes(a: Vector3, b: Vector3, base: Vector3, r: float, h: float) -> bool:
 	return false
 
 
-## 받아 냈다: 쏜 궁병 쪽으로 더 빠르게 되튕긴다
+## 받아 냈다: 반은 쏜 궁병 쪽으로 더 빠르게 되튕기고, 반은 칼에 비껴 옆·위로 날아가 벽이나 바닥에 꽂힌다
 func _deflect() -> void:
-	friendly = true
 	_age = 0.0
+	if randf() < 0.5:
+		stray = true
+		var side := vel.normalized().cross(Vector3.UP) * (1.0 if randf() < 0.5 else -1.0)
+		vel = (side * 0.8 - vel.normalized() * 0.3 + Vector3.UP * randf_range(0.3, 0.7)).normalized() * SPEED * 0.6
+		_orient()
+		game.parried_arrow(self)
+		return
+	friendly = true
 	var back := -vel
 	if shooter != null and is_instance_valid(shooter) and shooter.state != "dead":
 		back = shooter.global_position + Vector3(0, 1.2 * shooter.stats.scale, 0) - global_position
@@ -144,10 +173,22 @@ func _deflect() -> void:
 	game.parried_arrow(self)
 
 
-func _stick() -> void:
+## 꽂힌다: 촉이 조금 박힌 채 파르르 떨다가 멎고, 한참 남았다가 사라진다. on이 있으면(소품) 그것을 따라 움직인다
+func _stick(on: Node3D = null) -> void:
 	_dead = true
-	global_position -= vel.normalized() * 0.15
+	global_position -= vel.normalized() * 0.12
+	var tail := get_node_or_null("tail")
+	if tail != null:
+		tail.visible = false
+	if on != null:
+		reparent(on, true)
+	var base := rotation
 	var tw := create_tween()
-	tw.tween_interval(1.2)
-	tw.tween_property(self, "scale", Vector3.ONE * 0.01, 0.3)
+	for k in 4:
+		var a := 0.12 * (1.0 - k / 4.0)
+		tw.tween_property(self, "rotation:x", base.x + a, 0.03)
+		tw.tween_property(self, "rotation:x", base.x - a, 0.03)
+	tw.tween_property(self, "rotation", base, 0.03)
+	tw.tween_interval(8.0)
+	tw.tween_property(self, "scale", Vector3.ONE * 0.01, 0.4)
 	tw.tween_callback(queue_free)
