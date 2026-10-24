@@ -94,6 +94,7 @@ func start(g: Node, i: int) -> void:
 	_key.shadow_enabled = false
 	_key.light_energy = 0.0
 	g.add_child(_key)
+	g.set_outlines(false)
 	_fov0 = g.camera.fov
 	_music_db = g.music.volume_db
 	g.music.volume_db = _music_db - 8.0
@@ -493,6 +494,7 @@ func _restore() -> void:
 	if comic != null:
 		comic.cleanup()
 	if is_instance_valid(game):
+		game.set_outlines(true)
 		game.camera.fov = _fov0
 		game.music.volume_db = _music_db
 		if game.state == "cutscene":

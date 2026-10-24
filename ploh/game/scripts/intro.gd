@@ -61,6 +61,7 @@ func start(g: Node) -> void:
 	_key.shadow_enabled = false
 	_key.light_energy = 0.0
 	g.add_child(_key)
+	g.set_outlines(false)
 	_stage()
 
 
@@ -104,7 +105,7 @@ func _puppet(d: Dictionary) -> Node3D:
 	for mi in model.find_children("*", "MeshInstance3D", true, false):
 		if mi.name in d.get("hide", []) or (d.has("weapon_pool") and mi.name in d.weapon_pool and not mi.name in keep):
 			mi.visible = false
-	var mats := Fx.toonify(model, 0.0022)
+	var mats := Fx.toonify(model, 0.0)   # 클로즈업 연출이라 외곽선 없이(game.set_outlines 참고)
 	Fx.set_param(mats, "aura_color", d.color.lightened(0.15))
 	root.add_child(Fx.disc(0.6, Color(0, 0, 0, 0.4)))
 	var ap: AnimationPlayer = model.find_children("*", "AnimationPlayer", true, false)[0]
@@ -281,10 +282,12 @@ func _camera(rd: float) -> void:
 			var hh := _head(_focus_i) - up * 0.3
 			# 전투 대기 자세는 왼어깨가 앞으로 나온 옆선이라 가슴과 얼굴이 오른쪽 앞을 본다: 그쪽(캐릭터 오른쪽 앞)에서 잡는다
 			var dir := _face.rotated(Vector3.UP, -0.55)
-			pos = hh + dir * lerpf(2.6, 2.2, k) - up * 0.15
+			# 방패를 앞에 든 영웅(프람)은 방패 너머로 얼굴이 보이게 조금 위에서 내려다본다
+			var over := 0.45 if game.party[_focus_i].name == "프람" else 0.0
+			pos = hh + dir * lerpf(2.6, 2.2, k) - up * 0.15 + up * over
 			want = hh + up * 0.12
 			fov = 38.0
-			_light(hh + dir * 1.1 + up * 0.2, 3.0, 2.2, Color(1.0, 0.86, 0.7))
+			_light(hh + dir * 1.1 + up * 0.2, 3.0, 0.45, Color(1.0, 0.86, 0.7))
 			# 지금 영웅은 말할 때 카메라 쪽을 본다
 			if _focus_i == game.active:
 				game.player.proc.gaze(pos)
@@ -374,6 +377,7 @@ func _restore() -> void:
 	if comic != null:
 		comic.cleanup()
 	if is_instance_valid(game):
+		game.set_outlines(true)
 		game.camera.fov = _fov0
 		if game.state == "cutscene":
 			game.state = "play"

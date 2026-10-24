@@ -15,7 +15,8 @@ func _process(delta: float) -> void:
 	if t > 2.0 and t < 8.0 and int(t * 4.0) != int((t - delta) * 4.0):
 		samples.append([RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_TOTAL_DRAW_CALLS_IN_FRAME),
 			RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_TOTAL_PRIMITIVES_IN_FRAME),
-			RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_TOTAL_OBJECTS_IN_FRAME)])
+			RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_TOTAL_OBJECTS_IN_FRAME),
+			Performance.get_monitor(Performance.TIME_PROCESS) * 1000.0, Performance.get_monitor(Performance.TIME_PHYSICS_PROCESS) * 1000.0])
 	if t > 8.0:
 		var dc := 0.0
 		var pr := 0.0
@@ -27,4 +28,10 @@ func _process(delta: float) -> void:
 				mx[k] = maxi(mx[k], s[k])
 		var n := float(samples.size())
 		print("draw calls avg %.0f max %d | primitives avg %.0f max %d | objects avg %.0f max %d" % [dc / n, mx[0], pr / n, mx[1], ob / n, mx[2]])
+		var tp := 0.0
+		var tph := 0.0
+		for s2 in samples:
+			tp += s2[3]
+			tph += s2[4]
+		print("cpu ms: process avg %.2f | physics avg %.2f (데스크톱 기준. 휴대폰 웹은 대략 5~10배)" % [tp / n, tph / n])
 		get_tree().quit()

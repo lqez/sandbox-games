@@ -127,7 +127,7 @@ func _physics_process(delta: float) -> void:
 		for e in game.enemies:
 			if is_instance_valid(e) and e.state != "dead" and _passes(from, to, e.global_position, e.radius + 0.2, 2.0 * e.stats.scale):
 				game.hit_enemy(e, dmg * 3.0, game.player, true, "되받아치기", 0.6)
-				queue_free()
+				_stick_body(e)
 				return
 		return
 	var hero: Node3D = game.player
@@ -140,7 +140,10 @@ func _physics_process(delta: float) -> void:
 			_deflect()
 			return
 		game.arrow_hit(self)
-		queue_free()
+		if hero.state != "dead" and hero.invuln <= 0.0:
+			_stick_body(hero)
+		else:
+			queue_free()
 
 
 ## 이번 틱의 비행 선분이 세로 캡슐(바닥 base, 반지름 r, 높이 h)을 지났는지
@@ -174,6 +177,40 @@ func _deflect() -> void:
 
 
 ## 꽂힌다: 촉이 조금 박힌 채 파르르 떨다가 멎고, 한참 남았다가 사라진다. on이 있으면(소품) 그것을 따라 움직인다
+## 몸에 꽂힌다: 화살이 닿은 점에서 가장 가까운 뼈에 붙어(뼈를 따라 움직이고, 쓰러지면 함께 넘어간다) 잠시 남는다
+func _stick_body(who: Node3D) -> void:
+	var sk: Skeleton3D = who.model.find_children("*", "Skeleton3D", true, false)[0] if who.get("model") != null else null
+	if sk == null:
+		queue_free()
+		return
+	var best := -1
+	var bd := INF
+	for bn in ["Hips", "Spine01", "Spine", "Head", "LeftArm", "LeftForeArm", "RightArm", "RightForeArm", "LeftUpLeg", "LeftLeg", "RightUpLeg", "RightLeg"]:
+		var b := sk.find_bone(bn)
+		if b < 0:
+			continue
+		var d := global_position.distance_to(sk.global_transform * sk.get_bone_global_pose(b).origin)
+		if d < bd:
+			bd = d
+			best = b
+	if best < 0:
+		queue_free()
+		return
+	var ba := BoneAttachment3D.new()
+	ba.bone_name = sk.get_bone_name(best)
+	sk.add_child(ba)
+	_dead = true
+	global_position += vel.normalized() * 0.12
+	reparent(ba, true)
+	var tail := get_node_or_null("tail")
+	if tail != null:
+		tail.visible = false
+	var tw := create_tween()
+	tw.tween_interval(3.5)
+	tw.tween_property(self, "scale", Vector3.ONE * 0.01, 0.3)
+	tw.tween_callback(ba.queue_free)
+
+
 func _stick(on: Node3D = null) -> void:
 	_dead = true
 	global_position -= vel.normalized() * 0.12

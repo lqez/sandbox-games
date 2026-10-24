@@ -253,6 +253,29 @@ func play_intro() -> void:
 	cutscene.start(self)
 
 
+## 캐릭터 외곽선을 켜고 끈다. 연출의 클로즈업에서는 끈다: 외곽선(뒤집은 껍데기)이 앞머리 안쪽 면 등에서 얼굴 위로 번져
+## 얼굴이 검게 나온다. 게임 카메라 거리에서는 실루엣을 살리려 켠다
+func set_outlines(on: bool) -> void:
+	var lists: Array = []
+	if player != null and is_instance_valid(player):
+		lists.append(player.mats)
+	for e in enemies:
+		if is_instance_valid(e):
+			lists.append(e.mats)
+	for k in dormant:
+		for e in dormant[k]:
+			if is_instance_valid(e):
+				lists.append(e.mats)
+	for mats in lists:
+		for m: ShaderMaterial in mats:
+			if on:
+				if m.has_meta("line"):
+					m.next_pass = m.get_meta("line")
+			elif m.next_pass != null:
+				m.set_meta("line", m.next_pass)
+				m.next_pass = null
+
+
 ## 박자 음악을 시작한다(웹은 첫 터치 뒤에만 소리를 낼 수 있다)
 func start_music() -> void:
 	if not music.playing:

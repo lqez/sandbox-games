@@ -247,6 +247,9 @@ func hit_at(point: Vector3, dir: Vector3, power: float, hurt := 1.0, blade := Ve
 	for i in _legs.size():
 		segs.append(["leg%d" % i, _legs[i][0], _legs[i][1]])
 		segs.append(["leg%d" % i, _legs[i][1], _legs[i][2]])
+	# 칼이 닿은 점은 몸 겉이고 뼈 선분은 몸속이다: 부위마다 굵기를 빼고 견준다(굵은 몸통이 가는 다리에 밀리지 않게)
+	var sy := g.basis.get_scale().y
+	var thick := {"head": 0.11, "chest": 0.15, "belly": 0.14}
 	var part := "chest"
 	var best := INF
 	for sg in segs:
@@ -256,7 +259,7 @@ func hit_at(point: Vector3, dir: Vector3, power: float, hurt := 1.0, blade := Ve
 			b += Vector3.UP * (b - a).length()
 		var ab := b - a
 		var t := clampf((point - a).dot(ab) / maxf(ab.length_squared(), 0.0001), 0.0, 1.0)
-		var d := point.distance_to(a + ab * t)
+		var d := point.distance_to(a + ab * t) - float(thick.get(sg[0], 0.06 if String(sg[0]).begins_with("arm") else 0.075)) * unit * sy
 		if d < best:
 			best = d
 			part = sg[0]
