@@ -12,11 +12,16 @@ extends SkeletonModifier3D
 ## - 발 IK: 애니메이션의 발 높이는 그대로 두고, 몸 아래 바닥과 발 아래 바닥의 높이 차만큼만 옮긴다(평지에서는 손대지 않는다).
 ##   디딘 발일수록 지형을 따르고, 공중에 뜬 발은 애니메이션 그대로 둔다. 내리막 쪽 발이 닿도록 골반을 내린다.
 ##   발 위치는 기울기·피격 반응을 넣기 전의 원래 자세에서 잡는다(골반이 돌아도 다리가 휩쓸리지 않는다)
-## - 발 디딤(IK가 애니메이션보다 먼저): 애니메이션에서 발이 바닥에 닿아 있으면 그 자리(월드)와 방향에 붙잡는다.
+## - 걸음 주기 발 배치(Johansen 2009, Unity Locomotion System의 방식): 걷기·달리기처럼 발이 번갈아 디디는 클립은 미리 발마다
+##   디딤(stance)·들림(swing) 구간과 발자국을 재 둔다(analyze_gait). 디딤 동안 발은 내려 디딘 자리에 월드로 붙잡히고,
+##   들림 동안은 클립의 발 궤적을 따르되 "내려 디딜 때 몸이 있을 자리 + 클립의 발자국"에 닿도록 궤적을 비틀어(warp) 간다.
+##   들어 올릴 때는 붙잡혔던 자리와 클립 자리의 차이가 서서히 0이 되고, 내려 디딜 때는 예측 자리에 정확히 닿으므로 양 끝에서 튀지 않는다.
+##   발자국은 다른 발을 건너지 않게 옆으로 제한하고(다리 꼬임 금지), 보폭은 다리 길이의 STEP_MAX까지만 늘인다
+## - 발 디딤(발이 번갈아 디디지 않는 클립: 대기·막기·공격·피격): 애니메이션에서 발이 바닥에 닿아 있으면 그 자리(월드)와 방향에 붙잡는다.
 ##   몸이 밀리거나 돌거나 클립보다 빨리 움직여 붙잡은 발이 애니메이션 자리에서 멀어지면, 한 발씩 들어 옮겨 딛는다(절차적 걸음).
 ##   다른 발이 디디고 있을 때만 들고, 걸음은 몸이 가는 쪽을 내다보고 딛는다. 멈춘 뒤 어긋난 발은 작은 걸음으로 바로잡는다.
 ##   애니메이션이 발을 들면(달리기, 내딛기) 붙잡았던 자리에서 애니메이션 자리로 옮겨 가며 따라간다.
-##   다리가 닿지 않으면 골반을 내린다. 일부러 미끄러지는 동작(구르기, 횡대시)에서는 slide를 켜서 붙잡지 않는다
+##   다리가 닿지 않으면 골반을 내린다. 다리는 절대 늘이지 않는다(IK 목표가 멀면 무릎을 다 펴기 전(98.5%)에 멈추고 골반이 내려간다). 일부러 미끄러지는 동작(구르기, 횡대시)에서는 slide를 켜서 붙잡지 않는다
 ## - 밀려남(push): 윗몸이 미는 쪽으로 젖혀지고, 발은 디딘 채 남았다가 몇 걸음 뒷걸음쳐 몸을 따라잡는다
 ## - 맞은 자리(hit_at): 칼이 닿은 점에서 가장 가까운 몸 부위로 반응을 나눈다. 머리는 목째 꺾이고, 가슴은 젖혀지고,
 ##   배는 앞으로 접히며, 팔은 뒤로 튕기고, 다리는 무릎이 꺾인다. 그리고 부상이 잠시 남았다가 회복된다:
@@ -57,8 +62,10 @@ const PLANT_IN := 0.035      # 애니메이션 발목이 쉬는 높이에서 이
 const PLANT_OUT := 0.07      # 이만큼 넘게 들면 뗐다고 본다(두 문턱으로 들고 내릴 때 떨지 않게)
 const STEP_FAR := 0.24       # 디딘 발이 애니메이션 자리에서 이만큼 멀어지면 옮겨 딛는다
 const STEP_TURN := 0.55      # 발 방향이 이만큼(라디안) 어긋나면 옮겨 딛는다
-const STEP_MAX := 0.95       # 한 걸음의 최대 보폭
-const STEP_TIME := 0.24      # 한 걸음 시간(초, 다리 길이 0.9m 기준). 몸이 빠를수록 짧다
+const STEP_MAX := 0.85       # 한 걸음의 최대 보폭
+const STEP_TIME := 0.3       # 한 걸음 시간(초, 다리 길이 0.9m 기준). 몸이 빠를수록 짧다(0.2초 아래로는 가지 않는다: 발이 휙 넘어가 보인다)
+const GAIT_LIFT := 0.08      # 클립이 발을 거의 들지 않고 끄는 걸음(옆걸음 등)에 더해 주는 들림(다리 길이 비율)
+const CROSS_GAP := 0.1       # 발자국이 다른 발을 건너지 않게 두는 최소 옆 간격(다리 길이 비율)
 const STEP_LEAD := 0.08      # 걸음이 끝난 뒤 이만큼(초) 더 갈 자리를 내다보고 딛는다(밀리는 몸이 발을 바로 지나치지 않게)
 const SETTLE := 0.07         # 멈춰 선 뒤 이만큼 어긋난 채 SETTLE_T초가 지나면 작은 걸음으로 자세를 바로잡는다
 const SETTLE_T := 0.3
@@ -73,6 +80,9 @@ var lean_strength := 1.0
 var crouch := 0.0                  # 골반을 내리는 깊이(m, 모델 크기 1 기준)
 var unit := 1.0                    # 스켈레톤에 구워 넣은 모델 크기(crouch를 이만큼 키운다)
 var plant := true                  # 발 디딤(끄면 애니메이션 발을 지형에만 맞춘다: 쓰러짐, 일어남)
+var anim: AnimationPlayer          # 걸음 주기를 읽을 애니메이션(주인이 넣어 준다)
+static var debug_feet := false     # 개발용: 걸음 주기 발 배치의 항을 매 틱 찍는다
+var gait_key := ""                 # 걸음 주기 캐시 키(모델 경로)
 var slide := false                 # 일부러 미끄러지는 동작(구르기, 횡대시): 디딘 발을 붙잡지 않는다
 var twist_limit := 0.35            # 상체 비틀기 한계(라디안)
 var extra_lean := Vector3.ZERO     # 주인이 더하는 기울기(월드 회전 벡터). 헛디뎌 쏠린 자세 등
@@ -172,6 +182,141 @@ func setup(r: Dictionary, root: Node3D, hfn: Callable) -> void:
 	height_fn = hfn
 
 
+## 걸음 주기 분석(클립마다 한 번, 모델 경로별로 캐시). 발마다 클립을 60프레임으로 훑어
+## 디딤(stance: 발이 가장 낮은 높이 근처이고 수평으로 거의 멎음)과 들림(swing) 구간을 찾고,
+## 디딤 동안의 발자국(몸 기준 위치)과 들림의 최고 높이, 그리고 클립 전체가 어떤 주기로 도는지 적는다.
+## Johansen(2009) "Automated Semi-Procedural Animation for Character Locomotion"의 발걸음 주기 분석을 단순화한 것.
+## 돌려주는 값: {"len": 길이, "feet": [{"stance": [[시작, 끝], ...](클립 초, 끝 < 시작이면 끝을 감아 돈다), "print": [Vector3(몸 기준)], "lift": 최고 들림(m)}, ...], "loop": bool}
+static var _gait_cache := {}
+
+static func analyze_gait(ap: AnimationPlayer, skel: Skeleton3D, clip: String, legs: Array, key: String) -> Dictionary:
+	var ck := key + ":" + clip
+	if _gait_cache.has(ck):
+		return _gait_cache[ck]
+	var out := {"len": 0.0, "feet": [], "loop": false, "speed": 0.0}
+	if not ap.has_animation(clip) or legs.is_empty():
+		_gait_cache[ck] = out
+		return out
+	var a := ap.get_animation(clip)
+	var length := a.length
+	out.len = length
+	out.loop = a.loop_mode != Animation.LOOP_NONE
+	var n := 60
+	var dt := length / n
+	var hips := skel.find_bone("Hips")
+	if hips < 0:
+		hips = skel.find_bone("hips")
+	var was_playing := ap.current_animation
+	var was_pos := ap.current_animation_position if was_playing != "" else 0.0
+	ap.play(clip)
+	var samples: Array = []   # [프레임][발] = Vector3(스켈레톤 공간)
+	var hip_xz: Array = []
+	for i in n + 1:
+		ap.seek(i * dt, true)
+		skel.force_update_all_bone_transforms()
+		var row: Array = []
+		for leg in legs:
+			row.append(skel.get_bone_global_pose(leg[2]).origin)
+		samples.append(row)
+		var h := skel.get_bone_global_pose(hips).origin if hips >= 0 else Vector3.ZERO
+		hip_xz.append(Vector3(h.x, 0.0, h.z))
+	ap.stop()
+	if was_playing != "":
+		ap.play(was_playing)
+		ap.seek(was_pos, true)
+	var leg_len := 0.0
+	for leg in legs:
+		leg_len = maxf(leg_len, skel.get_bone_global_rest(leg[0]).origin.distance_to(skel.get_bone_global_rest(leg[1]).origin) + skel.get_bone_global_rest(leg[1]).origin.distance_to(skel.get_bone_global_rest(leg[2]).origin))
+	for f in legs.size():
+		var lowest := INF
+		for i in n + 1:
+			lowest = minf(lowest, samples[i][f].y)
+		# 디딤: 가장 낮은 높이 + 다리 길이의 4% 안이고, 수평 속도가 보폭 속도의 35% 아래(루트 이동이 지워진 클립에서 디딘 발은 뒤로 흐른다)
+		var h_th := lowest + 0.04 * leg_len
+		var speeds: Array = []
+		for i in n + 1:
+			var j := (i + 1) % (n + 1) if out.loop else mini(i + 1, n)
+			var k := i if out.loop or i < n else n - 1
+			var pa: Vector3 = samples[k][f]
+			var pb: Vector3 = samples[j if out.loop else k + 1][f]
+			speeds.append(Vector2(pb.x - pa.x, pb.z - pa.z).length() / dt)
+		var ground_speeds: Array = []
+		for i in n + 1:
+			if samples[i][f].y < h_th:
+				ground_speeds.append(speeds[i])
+		ground_speeds.sort()
+		var med: float = ground_speeds[ground_speeds.size() / 2] if ground_speeds.size() > 0 else 0.0
+		var v_th := maxf(med * 1.6, 0.25)
+		var down: Array = []
+		for i in n + 1:
+			down.append(samples[i][f].y < h_th and speeds[i] < v_th)
+		# 2프레임 미만의 들림·디딤은 잡음으로 보고 메운다
+		for pass_i in 2:
+			for i in n + 1:
+				var p := (i - 1 + n + 1) % (n + 1)
+				var q := (i + 1) % (n + 1)
+				if down[p] == down[q] and down[i] != down[p]:
+					down[i] = down[p]
+		var stance: Array = []
+		var prints: Array = []
+		var i0 := 0
+		if out.loop:
+			# 디딤 한가운데가 아닌 들림 시작점에서 훑기 시작한다
+			for i in n + 1:
+				if down[i] and not down[(i + 1) % (n + 1)]:
+					i0 = (i + 1) % (n + 1)
+					break
+		var i := i0
+		var seen := 0
+		var cur_start := -1
+		var acc := Vector3.ZERO
+		var acc_n := 0
+		while seen <= n:
+			var d: bool = down[i]
+			if d and cur_start < 0:
+				cur_start = i
+				acc = Vector3.ZERO
+				acc_n = 0
+			if d:
+				acc += samples[i][f] - hip_xz[i]
+				acc_n += 1
+			var nxt := (i + 1) % (n + 1) if out.loop else i + 1
+			var ends: bool = d and (nxt > n or not down[nxt % (n + 1)])
+			if ends and cur_start >= 0:
+				stance.append([cur_start * dt, i * dt])
+				prints.append(acc / maxf(acc_n, 1))
+				cur_start = -1
+			seen += 1
+			i = nxt
+			if not out.loop and i > n:
+				break
+		var lift := 0.0
+		for k in n + 1:
+			lift = maxf(lift, samples[k][f].y - lowest)
+		out.feet.append({"stance": stance, "print": prints, "lift": lift, "low": lowest})
+	# 클립의 걷는 속도(Johansen 4장): 디딘 발은 몸 기준으로 몸의 속도만큼 뒤로 흐른다. 디딤 구간에서 발이 골반 기준으로 움직인 속도의 중앙값
+	var rel_speeds: Array = []
+	for f in legs.size():
+		var gi: Dictionary = out.feet[f]
+		for sp in gi.stance:
+			var i_a := int(round(sp[0] / dt))
+			var i_b := int(round(sp[1] / dt))
+			var cnt := (i_b - i_a) if i_b >= i_a else (i_b + n + 1 - i_a)
+			if cnt < 2:
+				continue
+			var i := i_a
+			for _k in cnt:
+				var j := (i + 1) % (n + 1)
+				var da: Vector3 = samples[i][f] - hip_xz[i]
+				var db: Vector3 = samples[j][f] - hip_xz[j]
+				rel_speeds.append(Vector2(db.x - da.x, db.z - da.z).length() / dt)
+				i = j
+	rel_speeds.sort()
+	out.speed = rel_speeds[rel_speeds.size() / 2] if rel_speeds.size() >= 3 else 0.0
+	_gait_cache[ck] = out
+	return out
+
+
 func _ready() -> void:
 	var sk := get_skeleton()
 	if sk == null or rig.is_empty():
@@ -199,7 +344,8 @@ func _ready() -> void:
 			_leg_len.append(r0.distance_to(r1) + r1.distance_to(r2))
 			_ft.append({"mode": FREE, "contact": true, "p": Vector3.ZERO, "yaw": 0.0, "off": Vector3.ZERO, "yoff": 0.0, "ow": 0.0,
 				"blend": SWING_BLEND, "from": Vector3.ZERO, "goal": Vector3.ZERO, "from_yaw": 0.0, "s": 0.0, "dur": STEP_TIME, "lift": 0.0,
-				"settle": 0.0, "need": 0.0, "out": Vector3.ZERO, "corr": 0.0, "fsign": 1.0})
+				"settle": 0.0, "need": 0.0, "out": Vector3.ZERO, "corr": 0.0, "fsign": 1.0,
+				"gait": false, "gstance": false, "lock": Vector3.ZERO, "lock_yaw": 0.0, "land": Vector3.INF, "gidx": -1, "gclip": "", "rel_t": 0.0})
 
 
 ## 맞았을 때: dir은 맞은 방향(공격자 → 피격자, 월드), power는 0~2 정도
@@ -658,6 +804,7 @@ func _plan_feet(sk: Skeleton3D, dt: float) -> void:
 	var spd := _body_v.length()
 	var side := Vector3(sk_global.basis.x.x, 0.0, sk_global.basis.x.z).normalized()
 	var free := not plant or slide
+	var gait := _current_gait()
 	_targets.clear()
 	for i in _legs.size():
 		var foot: int = _legs[i][2]
@@ -694,6 +841,45 @@ func _plan_feet(sk: Skeleton3D, dt: float) -> void:
 		var out := a
 		var want := NAN                 # 붙잡은 발의 방향(월드 yaw)
 		var tilt := w
+		# 걸음 주기 클립이면 주기 기반 발 배치가 맡는다(들어오고 나갈 때는 지금 자리를 넘겨 튀지 않게)
+		var gi: Dictionary = gait.feet[i] if not gait.is_empty() and gait.feet.size() > i else {}
+		var stepping: bool = not gait.is_empty() and (gait.loop or _steps_twice(gait))
+		var use_gait: bool = not free and not jump and stepping and not gi.is_empty() and gi.stance.size() > 0 and float(gi.lift) > 0.015 * leg
+		if use_gait:
+			if not f.gait:
+				f.gait = true
+				f.gclip = ""
+				f.gstance = false
+				f.lock = f.out if f.mode != FREE or f.ow > 0.0 else a
+				f.lock_yaw = (f.yaw if f.mode == PLANT else ya)
+				f.land = Vector3.INF
+				f.gidx = -1
+				f.mode = FREE
+				f.ow = 0.0
+			var gr := _plan_gait(sk, dt, i, gi, a, h, rel_y, ya, leg, side, spd)
+			out = gr[0]
+			want = gr[1]
+			tilt = gr[2]
+			f.out = out
+			f.need = 0.0
+			f.corr = angle_difference(ya, want) if not is_nan(want) else 0.0
+			var n2 := _ground_normal(out)
+			_targets.append([out, fw, Vector3.UP.lerp(n2, tilt * 0.8).normalized(), want])
+			continue
+		elif f.gait:
+			# 주기 클립에서 나왔다: 지금 자리에서 애니메이션 자리로 옮겨 가거나(들린 발) 그 자리에 붙잡는다(디딘 발)
+			f.gait = false
+			if f.gstance and f.contact and not free:
+				f.mode = PLANT
+				f.p = f.lock
+				f.yaw = f.lock_yaw
+				f.settle = 0.0
+			else:
+				f.mode = FREE
+				f.off = f.out - a
+				f.yoff = f.corr
+				f.ow = 1.0
+				f.blend = SWING_BLEND
 		match f.mode:
 			FREE:
 				if f.ow > 0.0:
@@ -774,12 +960,195 @@ func _plan_feet(sk: Skeleton3D, dt: float) -> void:
 		# 앞으로 딛는 걸음인지 뒤로 딛는 걸음인지(골반이 도는 쪽)
 		var fwd_w := Vector3(sk_global.basis.z.x, 0.0, sk_global.basis.z.z).normalized()
 		f.fsign = signf(_body_v.dot(fwd_w)) if spd > 0.3 else 1.0
-		f.dur = clampf(STEP_TIME - 0.022 * spd, 0.12, STEP_TIME) * sqrt(leg / 0.9)
+		f.dur = clampf(STEP_TIME - 0.02 * spd, 0.2, STEP_TIME) * sqrt(leg / 0.9)
 		f.lift = clampf(0.1 + 0.06 * f.need, 0.1, 0.16) * leg
 		# 다친 다리는 낮고 느리게 끌며 옮긴다
 		var lame: float = _inj_now["leg%d" % best]
 		f.lift *= 1.0 - 0.65 * lame
 		f.dur *= 1.0 + 0.5 * lame
+
+
+## 지금 클립의 걸음 주기(없으면 빈 사전)
+func _current_gait() -> Dictionary:
+	if anim == null or not is_instance_valid(anim) or anim.current_animation == "" or _legs.is_empty():
+		return {}
+	var sk := get_skeleton()
+	return analyze_gait(anim, sk, anim.current_animation, _legs, gait_key if gait_key != "" else str(sk.get_instance_id()))
+
+
+## 클립 시각 pos가 디딤 구간 안인지: [안인가, 구간 번호]. 끝이 시작보다 앞이면 클립 끝을 감아 도는 구간
+func _in_stance(gi: Dictionary, pos: float) -> Array:
+	for k in gi.stance.size():
+		var a: float = gi.stance[k][0]
+		var b: float = gi.stance[k][1]
+		if a <= b:
+			if pos >= a and pos <= b:
+				return [true, k]
+		elif pos >= a or pos <= b:
+			return [true, k]
+	return [false, -1]
+
+
+## 다음 디딤 구간(시각 pos 뒤에 처음 시작하는 것)의 번호와 그 시작까지 남은 클립 초
+func _next_stance(gi: Dictionary, pos: float, length: float, loop: bool) -> Array:
+	var best := -1
+	var best_dt := INF
+	for k in gi.stance.size():
+		var a: float = gi.stance[k][0]
+		var d := a - pos
+		if d < 0.0:
+			if not loop:
+				continue
+			d += length
+		if d < best_dt:
+			best_dt = d
+			best = k
+	return [best, best_dt]
+
+
+## 바로 앞 디딤 구간의 끝(시각 pos 앞에서 가장 가까운 끝). 없으면 -INF
+func _prev_stance_end(gi: Dictionary, pos: float, length: float, loop: bool) -> float:
+	var best := -INF
+	var best_d := INF
+	for sp in gi.stance:
+		var e: float = sp[1]
+		var d := pos - e
+		if d < 0.0:
+			if not loop:
+				continue
+			d += length
+		if d < best_d:
+			best_d = d
+			best = pos - d
+	return best
+
+
+## 걸음 주기 발 배치(한 발). 돌려주는 값: [자리(월드), 방향 yaw(붙잡혔으면 값, 아니면 NAN), 바닥 기울기 적용 비율]
+func _plan_gait(sk: Skeleton3D, dt: float, i: int, gi: Dictionary, a: Vector3, h: float, rel_y: float, ya: float, leg: float, side: Vector3, spd: float) -> Array:
+	var f: Dictionary = _ft[i]
+	var g := _current_gait()
+	var length: float = g.len
+	var pos: float = anim.current_animation_position
+	var st := _in_stance(gi, pos)
+	var sk_global := sk.global_transform
+	if f.gclip != anim.current_animation:
+		# 클립이 바뀌었다(섞이는 중): 발은 지금 자리에서 이어 간다. 새 클립이 디딤이면 그 자리에 붙잡고, 들림이면 차이를 서서히 없앤다
+		f.gclip = anim.current_animation
+		if st[0]:
+			f.lock = f.out
+			f.lock_yaw = ya + float(f.corr)
+			f.gstance = true
+			f.gidx = st[1]
+		else:
+			f.gstance = false
+			f.off = f.out - a
+			f.yoff = float(f.corr)
+		f.land = Vector3.INF
+	var hip_w: Vector3 = sk_global * sk.get_bone_global_pose(_legs[i][0]).origin
+	if st[0] and f.gstance and f.rel_t <= 0.0:
+		# 안전판(UE Foot Placement의 unplant): 붙잡은 발이 엉덩이에서 다리 길이의 92%보다 멀어지면(몸이 밀렸다, 돌진했다) 놓는다
+		if Vector2(f.lock.x - hip_w.x, f.lock.z - hip_w.z).length() > 0.92 * leg:
+			f.rel_t = 0.22
+			f.off = f.lock - a
+			f.yoff = angle_difference(ya, f.lock_yaw)
+	if f.rel_t > 0.0:
+		# 놓은 발: 0.22초에 걸쳐 클립 자리로 돌아간다(디딤 구간이 끝나면 보통 들림으로 이어진다)
+		f.rel_t = maxf(f.rel_t - dt, 0.0)
+		var k1 := smoothstep(0.0, 1.0, f.rel_t / 0.22)
+		f.gstance = false
+		f.land = Vector3.INF
+		var o1: Vector3 = a + (f.off as Vector3) * k1
+		o1.y = height_fn.call(Vector2(o1.x, o1.z)) + rel_y + 0.06 * leg * sin(PI * (1.0 - k1))
+		if st[0]:
+			return [o1, ya + float(f.yoff) * k1, 1.0 - k1]
+	if st[0]:
+		if not f.gstance:
+			# 내려 디뎠다: 지금 자리(들림 끝은 예측 자리에 닿아 있다)에 붙잡는다
+			f.lock = f.out if f.land == Vector3.INF else Vector3(f.land.x, f.out.y, f.land.z)
+			f.lock_yaw = ya
+			planted.emit(Vector3(f.lock.x, h, f.lock.z), clampf(spd / 5.0, 0.2, 1.0))
+		f.gstance = true
+		f.gidx = st[1]
+		f.land = Vector3.INF
+		var lk: Vector3 = f.lock
+		if debug_feet and i == 0:
+			print("GAIT f%d %s pos=%.2f STANCE %d a=(%.2f,%.2f) lock=(%.2f,%.2f)" % [Engine.get_physics_frames(), anim.current_animation, pos, st[1], a.x, a.z, lk.x, lk.z])
+		return [Vector3(lk.x, height_fn.call(Vector2(lk.x, lk.z)) + rel_y, lk.z), f.lock_yaw, 1.0]
+	# 들림
+	var nx := _next_stance(gi, pos, length, g.loop)
+	if f.gstance:
+		# 막 들어 올렸다: 붙잡혔던 자리와 클립 자리의 차이를 적어 두고 서서히 없앤다
+		f.gstance = false
+		f.off = f.lock - a
+		f.yoff = angle_difference(ya, f.lock_yaw)
+		f.land = Vector3.INF
+		f.gidx = -1
+	if nx[0] < 0:
+		# 다시 디디지 않는 클립 끝: 클립을 그대로 따르되 차이를 없앤다
+		var k0 := clampf(1.0 - (length - pos) / 0.25, 0.0, 1.0)
+		return [a + (f.off as Vector3) * (1.0 - k0), NAN, 0.0]
+	# 들림 진행도: 앞 디딤 끝 → 다음 디딤 시작
+	var prev_end := _prev_stance_end(gi, pos, length, g.loop)
+	if prev_end == -INF:
+		prev_end = 0.0   # 감아 돌지 않는 클립의 첫 들림: 클립 시작부터 센다
+	var swing_len: float = maxf(_wrap(gi.stance[nx[0]][0] - prev_end, length), 0.05)
+	var u := clampf(1.0 - float(nx[1]) / maxf(swing_len, 0.001), 0.0, 1.0)
+	var e_in := smoothstep(0.0, 1.0, u)
+	# 내려 디딜 자리: 지금 클립 발자국(몸 기준) + 그때까지 몸이 갈 거리
+	var hips: int = _hips if _hips >= 0 else _legs[i][0]
+	var hw: Vector3 = sk_global * sk.get_bone_global_pose(hips).origin
+	var pr: Vector3 = gi.print[nx[0]]
+	var print_now: Vector3 = Vector3(hw.x, 0.0, hw.z) + sk_global.basis * Vector3(pr.x, 0.0, pr.z)
+	var t_rem: float = float(nx[1]) / maxf(absf(anim.speed_scale), 0.05)
+	var landing: Vector3 = print_now + _body_v * t_rem
+	# 보폭 제한: 붙잡혔던 자리에서 다리 길이의 STEP_MAX 안
+	var from: Vector3 = f.lock
+	var dxz := Vector3(landing.x - from.x, 0.0, landing.z - from.z)
+	if dxz.length() > STEP_MAX * leg:
+		landing = from + dxz.normalized() * STEP_MAX * leg
+	# 다리 꼬임 금지: 다른 발을 건너지 않는다(왼발은 오른발보다 몸 왼쪽(+side)에)
+	if _legs.size() == 2:
+		var sgn := 1.0 if i == 0 else -1.0
+		var other: Vector3 = _ft[1 - i].out
+		var lat: float = (landing - other).dot(side * sgn)
+		if lat < CROSS_GAP * leg:
+			landing += side * sgn * (CROSS_GAP * leg - lat)
+	landing.y = 0.0
+	# 예측 자리는 부드럽게 따라가고, 내려놓기 시작하면(80%) 굳힌다
+	if f.land == Vector3.INF:
+		f.land = landing
+	elif u < 0.8:
+		f.land = (f.land as Vector3).lerp(landing, 1.0 - exp(-dt * 14.0))
+	var corr: Vector3 = (f.land as Vector3) - print_now
+	corr.y = 0.0
+	var out: Vector3 = a + (f.off as Vector3) * (1.0 - e_in) + corr * e_in
+	# 높이: 클립의 들림을 쓰되, 클립이 거의 끌며 걷는 걸음이면 들림을 더하고, 자리를 많이 옮길수록 조금 더 든다
+	var lift_add := 0.0
+	if float(gi.lift) < 0.06 * leg:
+		lift_add += GAIT_LIFT * leg * sin(PI * u)
+	lift_add += 4.0 * e_in * (1.0 - e_in) * minf(corr.length() * 0.25, 0.08 * leg)
+	out.y = height_fn.call(Vector2(out.x, out.z)) + rel_y + lift_add
+	var yaw := lerp_angle(ya + float(f.yoff), ya, e_in)
+	f.corr = angle_difference(ya, yaw)
+	if debug_feet and i == 0:
+		print("GAIT f%d %s pos=%.2f u=%.2f nx=%d rem=%.2f a=(%.2f,%.2f) off=(%.2f,%.2f) corr=(%.2f,%.2f) out=(%.2f,%.2f) lock=(%.2f,%.2f) v=%.1f" % [Engine.get_physics_frames(), anim.current_animation, pos, u, nx[0], nx[1], a.x, a.z, f.off.x, f.off.z, corr.x, corr.z, out.x, out.z, f.lock.x, f.lock.z, spd])
+	return [out, yaw, 1.0 - sin(PI * u)]
+
+
+## 감아 돌지 않는 클립이 걸음 클립인지: 두 발 모두 두 번 넘게 디딘다(뒷걸음질, 달리다 멈추기). 공격·피격은 아니다
+func _steps_twice(g: Dictionary) -> bool:
+	for ft in g.feet:
+		if ft.stance.size() < 2:
+			return false
+	return true
+
+
+func _wrap(d: float, length: float) -> float:
+	while d < 0.0:
+		d += length
+	while d > length:
+		d -= length
+	return d
 
 
 ## 옮겨 딛는 발이 내릴 자리: 걸음이 끝날 때 애니메이션 발이 있을 자리를 내다보고, 보폭과 다리 꼬임을 제한한다
@@ -818,22 +1187,39 @@ func _feet(sk: Skeleton3D, dt: float) -> void:
 		drop = minf(drop, tg[0].y - tg[1].y)
 	_hip_drop = lerpf(_hip_drop, drop, 1.0 - exp(-dt * 14.0))
 	var total := _hip_drop - (maxf(_crouch, 0.0) + STANCE_DROP * _stance) * sy * unit
-	# 디딘 발이 멀어 다리가 닿지 않으면 그만큼 골반을 더 내린다(빨리 내리고 천천히 올린다)
+	# 골반 높이(Johansen 2009, 7.4.2): 다리마다 "원래 자세의 엉덩이-발목 거리를 지키는 높이(hDesired)"와
+	# "다리를 다 편 높이(hMax)"를 발 목표 위에서 재고, 가장 낮은 hMax 아래에 머물되 hDesired 쪽으로 간다.
+	# 다 편 높이에 바짝 붙이면(Kovar) 뻣뻣하고, 이 식은 늘이기보다 조금 더 굽히는 쪽을 고른다
 	var reach := 0.0
 	var sway_goal := Vector3.ZERO
+	var h_des_min := INF
+	var h_des_sum := 0.0
+	var h_max_min := INF
 	for i in _legs.size():
 		var hp_w: Vector3 = sk_global * sk.get_bone_global_pose(_legs[i][0]).origin
 		var tw: Vector3 = _targets[i][0]
+		var fw0: Vector3 = _targets[i][1]
 		var L: float = _leg_len[i] * sy * 0.97
 		var dh := Vector2(tw.x - hp_w.x, tw.z - hp_w.z).length()
-		var max_dy := sqrt(maxf(L * L - dh * dh, 0.0))
-		reach = minf(reach, max_dy - (hp_w.y + total - tw.y))
+		var want_len: float = minf(hp_w.distance_to(fw0), L)          # 원래 자세의 엉덩이-발목 거리
+		var h_des: float = tw.y + sqrt(maxf(want_len * want_len - dh * dh, 0.0)) - hp_w.y
+		var h_max: float = tw.y + sqrt(maxf(L * L - dh * dh, 0.0)) - hp_w.y
+		h_des_min = minf(h_des_min, h_des)
+		h_des_sum += h_des
+		h_max_min = minf(h_max_min, h_max)
 		# 한 발을 드는 동안 몸무게를 디딘 발 쪽으로 옮긴다
 		if _ft[i].mode == STEP and _legs.size() == 2:
 			var sup: Vector3 = _ft[1 - i].out
 			var to_sup := Vector3(sup.x - hp_w.x, 0.0, sup.z - hp_w.z)
 			sway_goal = to_sup.limit_length(0.05 * L) * 0.6 * sin(PI * float(_ft[i].s))
-	reach = maxf(reach, -0.25 * _leg_len[0] * sy)
+	if _legs.size() > 0 and h_max_min != INF:
+		var h_des_avg := h_des_sum / _legs.size()
+		var mintoavg := maxf(h_des_avg - h_des_min, 0.0)
+		var mintomax := maxf(h_max_min - h_des_min, 0.0)
+		var hip_off := h_des_min + (mintoavg * mintomax) / maxf(mintoavg + mintomax, 0.0001)
+		# 원래보다 올라가는 쪽은 쓰지 않는다(발이 바닥보다 높이 걸린 경우는 _hip_drop이 아니라 발 IK가 맡는다)
+		reach = minf(0.0, hip_off - total)
+	reach = maxf(reach, -0.3 * _leg_len[0] * sy)
 	# 다친 다리로 디디면 그 다리가 버티지 못해 골반이 처진다(다른 발을 들고 있을 때 더)
 	for i in _legs.size():
 		var lame: float = _inj_now["leg%d" % i]
@@ -875,7 +1261,8 @@ func _two_bone(sk: Skeleton3D, up: int, low: int, foot: int, target: Vector3, ti
 	var la := a.distance_to(b)
 	var lb := b.distance_to(c)
 	var to_t := target - a
-	var d := clampf(to_t.length(), absf(la - lb) + 0.001, la + lb - 0.001)
+	# 다리를 늘이지 않는다: 무릎을 다 펴기 전(98.5%)에서 멈춘다(모자라는 만큼은 _feet가 골반을 내린다)
+	var d := clampf(to_t.length(), absf(la - lb) + 0.001, (la + lb) * 0.985)
 	if (c - target).length() < 0.003 and tilt.is_equal_approx(Basis.IDENTITY) and absf(yaw) < 0.001:
 		return
 	var dir := to_t.normalized()
@@ -898,8 +1285,9 @@ func _two_bone(sk: Skeleton3D, up: int, low: int, foot: int, target: Vector3, ti
 	var c2 := gl2.origin + (r1 * (c - b))
 	var r2 := _rot_between(c2 - knee, target - knee)
 	sk.set_bone_global_pose(low, Transform3D(r2 * r1 * gl.basis, knee))
-	# 발은 원래 방향에서 경사만큼 기울여 목표에 놓는다
-	sk.set_bone_global_pose(foot, Transform3D(tilt * Basis(up_axis, yaw) * gf.basis, target))
+	# 발은 원래 방향에서 경사만큼 기울여 놓는다. 목표가 닿지 않으면 닿는 데까지만(정강이를 늘이지 않는다)
+	var reach_t: Vector3 = a + dir * d if to_t.length() > d else target
+	sk.set_bone_global_pose(foot, Transform3D(tilt * Basis(up_axis, yaw) * gf.basis, reach_t))
 
 
 func _rot_between(from: Vector3, to: Vector3) -> Basis:

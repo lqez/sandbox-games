@@ -42,6 +42,7 @@ func _process(delta: float) -> void:
 		g.tap_down()
 		g.tap_up()
 	if scenario == "guard":
+		load("res://scripts/procedural.gd").debug_feet = false
 		# 막고 걷기: 누른 채 조금 끌어 게걸음·뒷걸음·앞걸음을 번갈아, 사이사이 크게 끌어 달린다(발이 미끄러지는지 본다)
 		g.auto_mode = false
 		if not _done.has("g_on") and t > 1.0:
@@ -154,7 +155,12 @@ func _measure(w: Dictionary, feet: Array, cat: String) -> void:
 				var md := "?"
 				if pr2 != null and "_ft" in pr2 and pr2._ft.size() > i:
 					md = ["free", "plant", "step"][pr2._ft[i].mode] + ("/slide" if pr2.slide else "")
-				_air.append([va, t, cat, FEET[i], md + " clip=" + str(who.anim.current_animation)])
+				var tg := "?"
+				if pr2 != null and "_targets" in pr2 and pr2._targets.size() > i:
+					tg = "tgt=(%.2f,%.2f,%.2f)" % [pr2._targets[i][0].x, pr2._targets[i][0].y, pr2._targets[i][0].z]
+				var hipb := sk.find_bone("Hips")
+				var hp: Vector3 = sk.global_transform * sk.get_bone_global_pose(hipb).origin
+				_air.append([va, t, cat, FEET[i], md + " clip=" + str(who.anim.current_animation) + " f%d prev=(%.2f,%.2f,%.2f) now=(%.2f,%.2f,%.2f) hip=(%.2f,%.2f,%.2f) %s" % [Engine.get_physics_frames(), prev_any.x, prev_any.y, prev_any.z, fp.x, fp.y, fp.z, hp.x, hp.y, hp.z, tg]])
 		if down and prev != null:
 			var d := Vector2(fp.x - prev.x, fp.z - prev.z).length()
 			var v := d / maxf(dt, 0.0001)

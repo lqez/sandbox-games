@@ -222,6 +222,8 @@ func setup(g: Node, d: Dictionary) -> void:
 	# 배를 맞으면 빈손(왼손)으로 감싼다. 두 손으로 쥐는 무거운 무기는 놓지 않는다. 영웅은 적보다 빨리 추스른다
 	proc.clutch_arm = -1 if d.get("weapon_mass", 1.0) >= 1.8 else 0
 	proc.recover = 0.55
+	proc.anim = anim
+	proc.gait_key = d.model
 	skel.add_child(proc)
 
 
@@ -691,7 +693,10 @@ func _guard_anim() -> void:
 	_guard_clip = clip
 	var key: String = data.model + ":" + clip
 	if not _stride_cache.has(key):
-		_stride_cache[key] = stride_speed(anim, model.find_children("*", "Skeleton3D", true, false)[0], clip, model.scale.z, 1.25)
+		# 보폭 속도는 걸음 주기 분석(디딤 동안 발이 골반 기준으로 흐르는 속도)에서. 못 재면 옛 방법
+		var g: Dictionary = Procedural.analyze_gait(anim, proc.get_skeleton(), clip, proc._legs, data.model)
+		var v: float = float(g.get("speed", 0.0)) * model.scale.z
+		_stride_cache[key] = v if v > 0.3 else stride_speed(anim, model.find_children("*", "Skeleton3D", true, false)[0], clip, model.scale.z, 1.25)
 	_play(clip, clampf(sp / maxf(_stride_cache[key], 0.2), 0.5, 1.8), 0.2)
 
 

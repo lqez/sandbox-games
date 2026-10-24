@@ -202,6 +202,8 @@ func _ready() -> void:
 	proc.unit = BAKED.get(model_name, 1.0)
 	# 배를 맞으면 빈손(왼손)으로 감싼다. 방패나 활을 든 손이면 감싸지 않는다
 	proc.clutch_arm = -1 if (stats.has("guard") or stats.has("ranged")) else 0
+	proc.anim = anim
+	proc.gait_key = SOLDIER % [model_name, model_name]
 	skel.add_child(proc)
 	ragdoll = Ragdoll.build(skel, Ragdoll.BONES_MESHY if meshy else Ragdoll.BONES_KAYKIT, BAKED.get(model_name, 1.0))
 	_skel = skel
