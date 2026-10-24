@@ -809,6 +809,19 @@ func can_attack(e: Node3D) -> bool:
 	return true
 
 
+## 받아친 뒤의 반격 찌르기: 다른 근접 공격자가 없을 때만 바로 공격권을 쥔다(감독의 점수 비교·간격은 건너뛴다)
+func claim_counter(e: Node3D) -> bool:
+	var now := Time.get_ticks_msec() / 1000.0
+	_tokens = _tokens.filter(func(tk): return is_instance_valid(tk[0]) and tk[0].state in ["chase", "wind"] and now - tk[1] < 3.0)
+	for tk in _tokens:
+		if tk[0] != e:
+			return false
+	release_token(e)
+	_tokens.append([e, now])
+	_last_grant = now
+	return true
+
+
 func release_token(e: Node3D) -> void:
 	_tokens = _tokens.filter(func(tk): return tk[0] != e)
 

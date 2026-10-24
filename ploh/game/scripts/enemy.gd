@@ -249,7 +249,7 @@ func _physics_process(delta: float) -> void:
 	velocity = knock + _root_velocity(delta)
 	if _counter_wait >= 0.0:
 		_counter_wait -= delta
-		if _counter_wait < 0.0 and state not in ["dead", "stagger"] and hero.state != "dead":
+		if _counter_wait < 0.0 and state not in ["dead", "stagger"] and hero.state != "dead" and game.claim_counter(self):
 			_start_counter(hero)
 	if thrusting and state == "wind" and wind_time - t <= 0.22 and wind_time - t > -0.05:
 		# 찌르기: 닿기 직전에 한 걸음 내디딘다
