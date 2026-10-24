@@ -7,6 +7,7 @@ const Weapon := preload("res://scripts/weapon.gd")
 const Procedural := preload("res://scripts/procedural.gd")
 const Ragdoll := preload("res://scripts/ragdoll.gd")
 const Hero := preload("res://scripts/hero.gd")
+const AIM := preload("res://shaders/aim.gdshader")
 const SWING_AFTER := 0.16   # 예고가 끝난 뒤 칼이 내려오는 동안 판정을 이어 가는 시간
 const SOLDIER := "res://assets/soldiers/%s/%s.glb"
 ## 임포트할 때 메시·뼈·애니메이션에 구워 넣은 크기(.glb.import의 nodes/root_scale).
@@ -92,7 +93,7 @@ var _spot := Vector3.INF    # 궁병이 옮겨 갈 자리
 var _flee_cd := 0.0         # 궁병이 가까이 온 영웅을 피해 물러난 뒤, 다시 물러나기까지(그동안은 그 자리에서 쏜다)
 var _shot := false
 var _aim_line: MeshInstance3D
-var _aim_mat: StandardMaterial3D
+var _aim_mat: ShaderMaterial
 var _current := ""
 
 
@@ -524,17 +525,32 @@ func _start_aim(hero: Node3D) -> void:
 	_play(pick[0], (_contact - _clip0) / wind_time, 0.1, true)
 	if _clip0 > 0.0:
 		anim.seek(_clip0, true)
-	# 조준선: 궁병에서 영웅까지 바닥에 깔리는 가는 띠. 쏘기 직전에는 금색으로 바뀐다
+	# 조준선(ART_TARGET 5.2): 궁병에서 영웅 발까지 바닥의 주황-빨강 점선과 발밑 원. 쏘기 0.75초 전부터 보이고,
+	# 마지막 0.2초는 실선으로 굵고 밝아진다
 	_aim_line = MeshInstance3D.new()
 	var q := QuadMesh.new()
-	q.size = Vector2(0.08, 1.0)
+	q.size = Vector2(1.0, 1.0)
 	q.orientation = PlaneMesh.FACE_Y
 	q.center_offset = Vector3(0, 0, 0.5)
 	_aim_line.mesh = q
-	_aim_mat = Fx.mat(Color(1, 0.3, 0.25, 0.4), 0.0, true)
-	_aim_mat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	_aim_mat = ShaderMaterial.new()
+	_aim_mat.shader = AIM
 	_aim_line.material_override = _aim_mat
 	_aim_line.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	var mark := MeshInstance3D.new()
+	var tm := TorusMesh.new()
+	tm.inner_radius = 0.34
+	tm.outer_radius = 0.4
+	tm.rings = 24
+	tm.ring_segments = 4
+	mark.mesh = tm
+	var mm := Fx.mat(Color(1.0, 0.353, 0.212, 0.8), 0.0, true)
+	mm.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	mark.material_override = mm
+	mark.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	mark.scale = Vector3(1, 0.05, 1)
+	mark.name = "mark"
+	_aim_line.add_child(mark)
 	game.add_child(_aim_line)
 	_update_aim(hero)
 
@@ -542,16 +558,24 @@ func _start_aim(hero: Node3D) -> void:
 func _update_aim(hero: Node3D) -> void:
 	if _aim_line == null:
 		return
-	var a := global_position + Vector3(0, 0.08, 0)
-	var b: Vector3 = hero.global_position + Vector3(0, 0.08, 0)
+	var a := global_position
+	var b: Vector3 = hero.global_position
 	var d := b - a
 	d.y = 0
-	_aim_line.global_position = Vector3(a.x, game.height_at(a.x, a.z) + 0.07, a.z)
+	var left := wind_time - t
+	_aim_line.visible = left <= 0.75
+	_aim_line.global_position = Vector3(a.x, game.height_at(a.x, a.z) + 0.03, a.z)
 	_aim_line.rotation = Vector3(0, atan2(d.x, d.z), 0)
-	var k := clampf(t / maxf(wind_time, 0.01), 0.0, 1.0)
-	_aim_line.scale = Vector3(1.0 + k, 1.0, d.length() * minf(k * 1.6, 1.0))
-	var late := wind_time - t <= COUNTER_WINDOW
-	_aim_mat.albedo_color = Color(1, 0.85, 0.3, 0.8) if late else Color(1, 0.3, 0.25, 0.2 + 0.3 * k)
+	var solid := left <= 0.2
+	var w := 0.12 if solid else 0.08
+	_aim_line.scale = Vector3(w, 1.0, maxf(d.length(), 0.1))
+	_aim_mat.set_shader_parameter("len", d.length())
+	_aim_mat.set_shader_parameter("solid", 1.0 if solid else 0.0)
+	_aim_mat.set_shader_parameter("color", Color(1.0, 0.353, 0.212, 1.0 if solid else 0.8))
+	# 발밑 원은 선의 길이·굵기 배율을 되돌려 제 크기(지름 0.8m)로
+	var mark: Node3D = _aim_line.get_node("mark")
+	mark.position = Vector3(0, 0, 1.0)
+	mark.scale = Vector3(1.0 / w, 0.05, 1.0 / maxf(d.length(), 0.1))
 
 
 func _clear_aim() -> void:
@@ -596,14 +620,32 @@ func _start_counter(hero: Node3D) -> void:
 	_contact = anim.get_animation(clip).length * contact
 	_clip0 = 0.0
 	_play(clip, _contact / wind_time, 0.06, true)
+	# 반격 예고(ART_TARGET 5.3): 앞쪽 60° 부채꼴(길이 2m, 주황-빨강, 안쪽 옅게)과 테두리. 안에서 자라는 부채꼴이
+	# 테두리에 닿는 순간 찌른다. 마지막 COUNTER_WINDOW에는 테두리가 금색(지금 누르면 기회)
 	telegraph = Node3D.new()
-	_tg_edge = Fx.mat(Color(1, 0.85, 0.3, 0.75), 0.0, true)
-	telegraph.add_child(_ring(strike_area * 0.7, _tg_edge))
-	_tg_grow = _ring(strike_area * 0.7, Fx.mat(Color(1, 0.8, 0.3, 0.6), 0.0, true))
+	var fill := MeshInstance3D.new()
+	fill.mesh = Fx.arc_mesh(2.0, 0.3, deg_to_rad(60.0))
+	var fm := Fx.mat(Color(1.0, 0.353, 0.212, 0.2), 0.0, true)
+	fm.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	fm.cull_mode = BaseMaterial3D.CULL_DISABLED
+	fill.material_override = fm
+	telegraph.add_child(fill)
+	var edge := MeshInstance3D.new()
+	edge.mesh = Fx.arc_mesh(2.0, 1.92, deg_to_rad(60.0))
+	_tg_edge = Fx.mat(Color(1.0, 0.353, 0.212, 0.8), 0.0, true)
+	_tg_edge.cull_mode = BaseMaterial3D.CULL_DISABLED
+	edge.material_override = _tg_edge
+	telegraph.add_child(edge)
+	_tg_grow = MeshInstance3D.new()
+	_tg_grow.mesh = Fx.arc_mesh(2.0, 1.85, deg_to_rad(60.0))
+	var gm := Fx.mat(Color(1.0, 0.45, 0.3, 0.6), 0.0, true)
+	gm.cull_mode = BaseMaterial3D.CULL_DISABLED
+	_tg_grow.material_override = gm
 	_tg_grow.scale = Vector3(0.05, 1.0, 0.05)
 	telegraph.add_child(_tg_grow)
 	game.add_child(telegraph)
-	telegraph.global_position = Vector3(strike_at.x, game.height_at(strike_at.x, strike_at.z) + 0.06, strike_at.z)
+	telegraph.global_position = Vector3(global_position.x, game.height_at(global_position.x, global_position.z) + 0.06, global_position.z)
+	telegraph.rotation.y = atan2(face.x, face.z)
 
 
 ## 영웅에게 칼을 받아내졌다: 크게 휘청이며 물러난다(반격 찌르기를 맞을 틈)

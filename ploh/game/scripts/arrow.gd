@@ -4,7 +4,7 @@ extends Node3D
 
 const Fx := preload("res://scripts/fx.gd")
 const Vfx := preload("res://scripts/vfx.gd")
-const SPEED := 15.0
+const SPEED := 19.0          # ART_TARGET 5.2: 18~22 m/s
 const LIFE := 2.2
 
 var game: Node
@@ -30,14 +30,14 @@ static func make(g: Node, from: Vector3, to: Vector3, who: Node3D, damage: float
 
 
 func _build() -> void:
-	var shaft := Fx.part(self, Fx.box(0.025, 0.025, 0.75), Color(0.45, 0.33, 0.22), Vector3(0, 0, -0.1))
+	var shaft := Fx.part(self, Fx.box(0.025, 0.025, 0.75), Color(0.92, 0.9, 0.86), Vector3(0, 0, -0.1), "", 0.4)
 	shaft.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	var head := Fx.part(self, Fx.cylinder(0.0, 0.035, 0.12, 4), Color(0.75, 0.75, 0.8), Vector3(0, 0, 0.32), "", 0.4)
 	head.rotation.x = PI / 2
 	var fl := Fx.part(self, Fx.box(0.09, 0.005, 0.14), Color(0.85, 0.82, 0.75), Vector3(0, 0, -0.42))
 	fl.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	# 날아가는 줄기가 잘 보이도록 옅은 빛 꼬리
-	var glow := Fx.part(self, Fx.box(0.012, 0.012, 1.1), Color(1, 0.75, 0.5, 0.35), Vector3(0, 0, -0.7), "", 1.5)
+	# 날아가는 줄기가 잘 보이도록 0.6m 주황-빨강 빛 꼬리(예고색과 같은 계열: 적의 공격)
+	var glow := Fx.part(self, Fx.box(0.02, 0.02, 0.6), Color(1.0, 0.353, 0.212, 0.7), Vector3(0, 0, -0.75), "", 2.0)
 	(glow.material_override as StandardMaterial3D).shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	(glow.material_override as StandardMaterial3D).blend_mode = BaseMaterial3D.BLEND_MODE_ADD
 

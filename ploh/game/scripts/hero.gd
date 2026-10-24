@@ -625,7 +625,7 @@ func recoil(from: Vector3) -> void:
 	trail.emitting = false
 	var back := global_position - from
 	back.y = 0
-	_vel = back.normalized() * 3.0 if back.length() > 0.01 else Vector3.ZERO
+	_vel = back.normalized() * 2.0 if back.length() > 0.01 else Vector3.ZERO   # 약 0.15m 밀려난다
 	proc.hit(back, 1.0)
 	_play(_anim("hit"), 2.2, 0.05, true)
 	_snap(_anim("hit"), [2.2, 0.06, 0.3, 0.14, 1.0])
@@ -969,7 +969,7 @@ func _start_move(kind: String, keep_just := false) -> void:
 	_hits = MOVES[kind].hits
 	_hit_i = 0
 	if kind not in ["charge", "enter", "dash_strike"]:
-		game.popup(global_position + Vector3(0, 2.9, 0), MOVES[kind].name, Color(0.85, 0.95, 1), 46)
+		game.popup(global_position + Vector3(0, 2.9, 0), MOVES[kind].name, Color(0.85, 0.95, 1), 38)
 	if kind == "flurry":
 		game.slowmo(0.55, 0.5)
 		game.on_just()

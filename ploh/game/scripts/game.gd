@@ -39,7 +39,7 @@ const HEROES := [
 			"spin": "spin", "dodge": "dodge", "hit": "hit", "death": "death", "charge": "idle", "skill": "attack_3", "ult": "spin",
 			"parry": "parry", "thrust": "thrust", "step_l": "sidestep_l", "step_r": "sidestep_r"}}},
 	# 프람(불꽃의 용병): 검과 방패. 단단하고 표준 속도
-	{"name": "프람", "model": "res://assets/fram/fram.glb", "scale": 1.6, "color": Color(1.0, 0.5, 0.38),
+	{"name": "프람", "model": "res://assets/fram/fram.glb", "scale": 1.6, "color": Color(1.0, 0.416, 0.239),
 		"max_hp": 640.0, "atk": 38.0, "speed": 5.6, "reach": 2.6, "guard": 0.7, "ranged": false,
 		"blade": ["weapon_sword"], "weapon_bone": "RightHand", "attack_speed": 1.0, "weapon_mass": 1.2,
 		"skill_name": "홍련 일섬", "skill": "wave",
@@ -694,7 +694,7 @@ func hit_enemy(e: Node3D, dmg: float, hero: Node3D, just: bool, label: String, w
 		# 방패병이 받아쳤다: 칼이 크게 튕기고 영웅이 휘청인다. 방패병은 곧바로 찌르기로 반격한다
 		popup(e.global_position + Vector3(0, 2.0 * e.stats.scale + 0.4, 0), "받아침", Color(1, 0.75, 0.4), 40)
 		var at2: Vector3 = e.global_position + Vector3(0, 1.1 * e.stats.scale, 0) - dir * e.radius
-		Vfx.sparks(self, at2, -dir, Vector3.UP, Color(1, 0.85, 0.5), 18)
+		Vfx.sparks(self, at2, -dir, Vector3.UP, Color(0.87, 0.92, 1.0), 16)
 		Vfx.clash(self, at2, Vector3.UP, Color(1, 0.8, 0.5))
 		hero.freeze(0.06)
 		e.freeze(0.04)
@@ -712,6 +712,10 @@ func hit_enemy(e: Node3D, dmg: float, hero: Node3D, just: bool, label: String, w
 		e.freeze(0.05)
 		kick(dir, 0.006)
 		sfx("glint", 0.1, -2.0)
+		# 방패에 튀는 흰·청백 불꽃(ART_TARGET 5.3)
+		var at3: Vector3 = e.global_position + Vector3(0, 1.1 * e.stats.scale, 0) - dir * e.radius
+		Vfx.sparks(self, at3, -dir, Vector3.UP, Color(0.87, 0.92, 1.0), 12)
+		Vfx.cut(self, at3, Vector3.UP, Color(0.87, 0.92, 1.0), 0.0, false)
 		return
 	combo += 1
 	max_combo = maxi(max_combo, combo)
@@ -1037,7 +1041,8 @@ func kick(dir: Vector3, frac: float) -> void:
 
 
 func popup(pos: Vector3, text: String, color: Color, size: int) -> void:
-	var l := Fx.label(text, color, size)
+	# 카메라가 가까워져(세로 화각 52°) 글자가 커 보이므로 0.7배로. 겹쳐도 화면을 덮지 않게
+	var l := Fx.label(text, color, int(size * 0.7))
 	add_child(l)
 	l.global_position = pos + Vector3(randf_range(-0.3, 0.3), 0, randf_range(-0.3, 0.3))
 	var tw := l.create_tween()
