@@ -31,6 +31,7 @@ const Vfx := preload("res://scripts/vfx.gd")
 const AWAKEN_TIME := 8.0
 const Procedural := preload("res://scripts/procedural.gd")
 const Bomb := preload("res://scripts/bomb.gd")
+const Blades := preload("res://scripts/blades.gd")
 const Breakable := preload("res://scripts/breakable.gd")
 
 ## 박자 판정(음악 시계 기준, 초)
@@ -102,6 +103,9 @@ var just := false
 var empowered := 0.0
 var awakened := 0.0           # 궁극기 뒤 강화 상태(남은 초). 공격력 1.25배, 몸에 오라
 var aura: Node3D
+var blades: Node3D                   # 이오케이라(프라우): 떠다니는 칼 여섯 자루. 없으면 null(손에 든 무기)
+var blade_contact := Vector3.INF     # 방금 칼이 닿은 점(월드). game._contact가 쓴다
+var blade_dir := Vector3.ZERO        # 그때 칼이 가던 방향
 var holding := false
 var hold_t := 0.0
 var guarding := false                # 손가락을 누르고 있다: 막기(타이밍이 맞으면 패링)
@@ -215,6 +219,8 @@ func setup(g: Node, d: Dictionary) -> void:
 	trail.color = d.color.lightened(0.3)
 	add_child(trail)
 	aura = Vfx.aura(self, d.color, 2.5, 0.75)
+	if d.get("blades", false):
+		blades = Blades.make(self)
 	var skel: Skeleton3D = model.find_children("*", "Skeleton3D", true, false)[0]
 	skel.modifier_callback_mode_process = Skeleton3D.MODIFIER_CALLBACK_MODE_PROCESS_PHYSICS
 	proc = Procedural.new()
@@ -854,6 +860,10 @@ func ultimate() -> void:
 	queued = false
 	_push_len = 0.0
 	_play_near_strike(_anim("ult"), 1.3)
+	if blades != null:
+		var e: Node3D = game.nearest_enemy(global_position, 7.0)
+		var at: Vector3 = e.global_position if e != null else global_position + face * 3.0
+		blades.command("lines", null, at, {"dmg": data.atk * 1.2, "weight": 1.0, "label": "Let's PARTY!", "just": true})
 	game.ultimate_burst(self)
 
 
@@ -1505,6 +1515,46 @@ func _root_velocity(delta: float) -> Vector3:
 	return v
 
 
+## 몸짓에 맞춰 칼을 띄운다(프라우). 타의 종류(클립 키)로 어떤 칼이 어떻게 날지 고른다
+func _command_blades(h: Dictionary) -> void:
+	var key: String = h.clip
+	var kind := "pair_low"
+	match key:
+		"a1": kind = "pair_low"
+		"a2": kind = "pair_mid"
+		"a3": kind = "pair_high"
+		"a4": kind = "star"
+		"spin": kind = "ring"
+		"thrust": kind = "lance"
+	if move_kind in ["dash_thrust", "riposte", "side_thrust", "dash_strike"]:
+		kind = "lance"
+	elif move_kind in ["whirl", "side_slash", "charge"]:
+		kind = "ring"
+	elif move_kind == "enter":
+		kind = "star"
+	var tgt: Variant = target if (target != null and is_instance_valid(target) and target.state != "dead") else game.nearest_enemy(global_position, _strike_range() + 2.5)
+	var at: Vector3 = tgt.global_position if tgt != null else global_position + face * (_strike_range() + 0.5)
+	var label: String = h.get("label", "")
+	if kind == "star" and label == "":
+		label = "Let's SHOOT!"
+	blades.command(kind, tgt, at, {"dmg": data.atk * _move_dmg * (1.6 if just else 1.0) * (1.25 if awakened > 0.0 else 1.0), "weight": _move_weight, "label": label, "just": just})
+
+
+## 칼이 적을 지났다(blades.gd가 부른다): 닿은 점과 방향을 적어 두고 피해를 준다. 한 타에 같은 적은 한 번만
+func blade_strike(hits: Array, at: Vector3, dir: Vector3, m: Dictionary) -> void:
+	var info: Dictionary = m.get("info", {})
+	blade_contact = at
+	blade_dir = dir
+	for e in hits:
+		if not is_instance_valid(e) or e.state == "dead":
+			continue
+		if m.has("line") or not _hit_set.has(e) or state != "attack":
+			if state == "attack":
+				_hit_set[e] = true
+			game.hit_enemy(e, float(info.get("dmg", data.atk)), self, bool(info.get("just", false)), str(m.get("label", "")), float(info.get("weight", 0.0)))
+	blade_contact = Vector3.INF
+
+
 ## 이 적을 노리고 휘두르는 중이면 칼이 닿기까지 남은 시간(초), 아니면 -1. 적이 빠져 헛치게 할 때 본다
 func strike_eta(e: Node3D) -> float:
 	if state != "attack" or target != e or _end_t >= 0.0:
@@ -1592,10 +1642,12 @@ func _update_attack(delta: float) -> void:
 	if not _whooshed and cutting:
 		_whooshed = true
 		game.sfx("whoosh_heavy" if _move_weight >= 1.0 else "whoosh", 0.12)
+		if blades != null:
+			_command_blades(h)
 	# 칼날 판정은 이번 프레임의 칼 위치를 갱신한 뒤에 한다(_physics_process 끝). 프레임 경계를 넘는 몫까지 조금 더 본다
-	_sweeping = (cutting or sweeping or (_end_t >= 0.0 and t - _end_t <= 0.03)) and not data.ranged
+	_sweeping = (cutting or sweeping or (_end_t >= 0.0 and t - _end_t <= 0.03)) and not data.ranged and blades == null
 	if cutting or sweeping:
-		trail.emitting = true
+		trail.emitting = blades == null
 		if weapon != null and weapon.speed > _peak_vel.length():
 			_peak_vel = weapon.tip_vel
 			_peak_tip = weapon.tip
@@ -1757,6 +1809,8 @@ func take_damage(amount: float, from := Vector3.INF, at := Vector3.INF, blade :=
 	if data.hp <= 0.0:
 		state = "dead"
 		trail.emitting = false
+		if blades != null:
+			blades.recall()
 		_play(_anim("death"), 1.0, 0.1, true)
 		game.on_hero_down()
 	elif state == "idle":
@@ -1782,6 +1836,8 @@ func _posture() -> void:
 	proc.swing_bend = 0.0
 	proc.swing_rate = 9.0
 	proc.arm_busy = state in ["attack", "parry", "skill", "guard"]
+	if blades != null:
+		blades.mode = "guard" if state in ["guard", "parry"] else "idle"
 	# 일부러 미끄러지는 동작(구르기, 횡대시, 돌진·물러남·옆걸음 베기의 몸놀림)만 발을 붙잡지 않는다
 	var dash: bool = state == "attack" and phase == "swing" and _hit_i < _hits.size() and _hits[_hit_i].get("motion", "") in ["dash", "back", "side"] and spd > 1.5
 	proc.slide = state in ["dodge", "step"] or dash

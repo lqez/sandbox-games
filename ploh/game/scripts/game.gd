@@ -40,7 +40,9 @@ const HEROES := [
 	{"name": "프라우", "model": "res://assets/astrid/B_mid/astrid.glb", "scale": 1.6, "color": Color(0.95, 0.8, 0.45),
 		"max_hp": 210.0, "atk": 42.0, "speed": 4.4, "reach": 2.6, "guard": 0.85, "ranged": false,
 		"blade": ["weapon_sword"], "weapon_bone": "RightHand", "attack_speed": 1.0,
-		"skill_name": "돌진 찌르기", "skill": "dash",
+		# 이오케이라: 손에 쥐지 않는 떠다니는 칼 여섯 자루(blades.gd). 모델의 검 메시는 숨긴다
+		"blades": true, "hide": ["weapon_sword"],
+		"skill_name": "Let's SHOOT!", "skill": "dash",
 		"anims": {"moves": {"idle": "idle", "run": "run", "a1": "attack_1", "a2": "attack_2", "a3": "attack_3", "a4": "cast",
 			"spin": "spin", "dodge": "dodge", "hit": "hit", "death": "death", "charge": "idle", "skill": "attack_3", "ult": "spin",
 			"parry": "parry", "thrust": "thrust", "step_l": "sidestep_l", "step_r": "sidestep_r"}}},
@@ -1299,6 +1301,14 @@ func _contact(e: Node3D, hero: Node3D, dir: Vector3) -> Vector3:
 	var base: Vector3 = e.global_position
 	var h: float = 2.0 * e.stats.scale
 	_contact_sweep = Vector3.ZERO
+	# 떠다니는 칼(프라우): 칼이 지난 점과 방향을 영웅이 적어 둔다
+	var bc: Variant = hero.get("blade_contact")
+	if bc is Vector3 and bc != Vector3.INF:
+		_contact_sweep = hero.get("blade_dir")
+		var p0: Vector3 = bc
+		var side := Vector3(p0.x - base.x, 0, p0.z - base.z)
+		side = side.normalized() if side.length() > 0.05 else -dir
+		return Vector3(base.x, clampf(p0.y, base.y + 0.3 * e.stats.scale, base.y + h * 0.95), base.z) + side * e.radius * 0.85
 	var w = hero.get("weapon")
 	if w == null:
 		return base + Vector3(0, 1.0 * e.stats.scale, 0) - dir * e.radius * 0.6
