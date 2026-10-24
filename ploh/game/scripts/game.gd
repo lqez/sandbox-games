@@ -954,6 +954,9 @@ func enemy_strike(e: Node3D, at: Vector3, area: float, dmg: float) -> void:
 	var hurt: bool = player.take_damage(dmg)
 	if not hurt and dodging:
 		player.perfect_dodge()
+	if hurt and area > 4.0 and player.state != "dead":
+		# 넓은 내려찍기에 맞으면 나가떨어진다
+		player.knockdown(at)
 	combo = 0 if hurt else combo
 
 
@@ -1015,6 +1018,9 @@ func enemy_hit(e: Node3D, dmg: float) -> void:
 	if hurt:
 		combo = 0
 		shake_dir = (player.global_position - e.global_position).normalized()
+		# 무거운 칼(정예·보스, 또는 체력의 1/4 넘는 일격)에는 가슴이 젖혀지며 뒷걸음친다
+		if player.state != "dead" and (e.kind in ["warrior", "boss"] or dmg >= party[active].max_hp * 0.25):
+			player.stagger_back(e.global_position)
 
 
 func spawn_arrow(from: Vector3, to: Vector3, who: Node3D, dmg: float) -> void:

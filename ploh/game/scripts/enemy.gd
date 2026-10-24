@@ -34,7 +34,7 @@ const KINDS := {
 	"archer": {"model": "archer", "fallback": "conscript", "blade": [], "hp": 118.0, "atk": 68.0, "speed": 4.4, "reach": 9.0, "wind": 0.9, "area": 0.6, "scale": 1.6, "radius": 0.45, "poise": 1.0,
 		"ranged": true, "attacks": [["shoot", 0.586]], "draw_from": 0.667, "fallback_attack": ["attack_1", 0.566], "tint": Color(0.74, 0.72, 0.8)},
 	"boss": {"model": "boss", "blade": ["weapon_pendulum"], "hp": 2293.0, "atk": 182.0, "speed": 2.8, "reach": 2.6, "wind": 1.1, "area": 3.2, "scale": 2.3, "radius": 1.0, "poise": 0.1,
-		"attacks": [["attack_2", 0.6]], "slam": ["attack_1", 0.578], "tint": Color(0.72, 0.62, 0.78)},
+		"attacks": [["attack_2", 0.436]], "slam": ["attack_1", 0.46], "tint": Color(0.72, 0.62, 0.78)},
 }
 const COUNTER_WINDOW := 0.35
 ## 영웅의 칼을 뒤로·옆으로 빠져 헛치게 할 확률(종류별). 방패병은 빠지지 않고 막는다
@@ -393,7 +393,8 @@ func _physics_process(delta: float) -> void:
 					if t >= wind_time + SWING_AFTER:
 						_strike(false)
 			"recover":
-				if t >= 0.55:
+				# 보스는 무기가 바닥에 박힌 채 버티다 끌어올리는 클립 끝까지 거둔다
+				if t >= (1.5 if kind == "boss" else 0.55):
 					state = "chase"
 					_rest = randf_range(0.3, 0.8)
 					_orbit = 1.0 if randf() < 0.5 else -1.0
@@ -541,11 +542,11 @@ func _posture(dist: float) -> void:
 		var u := t / maxf(wind_time, 0.01)
 		if u < 0.85:
 			# 들어 올리기: 보스는 무게를 받치려 윗몸을 뒤로 젖히고 골반을 낮춘 채 천천히 끌어올린다
-			p.swing_bend = -0.2 if boss else -0.08
+			p.swing_bend = -0.1 if boss else -0.08
 			p.swing_rate = 5.0 if boss else 10.0
-			p.crouch = 0.07 * u if boss else 0.0
+			p.crouch = 0.04 * u if boss else 0.0
 		else:
-			p.swing_bend = 0.4 if boss else (0.3 if stats.scale < 2.0 else 0.22)
+			p.swing_bend = 0.25 if boss else (0.3 if stats.scale < 2.0 else 0.22)
 			p.swing_rate = 26.0 if boss else 30.0
 			p.crouch = 0.1 if boss else 0.0
 	elif state == "recover" and t < (0.7 if boss else 0.25):
@@ -916,7 +917,8 @@ func _strike(area: bool) -> void:
 	# 보스는 무기가 바닥에 박혀 잠깐 멎었다가(0.35초) 힘겹게 끌어올린다
 	anim.speed_scale = 1.4
 	if kind == "boss":
-		_snap(anim.current_animation, [1.3, 0.08, 0.12, 0.35, 0.55])
+		# 클립이 무기를 바닥에 박고 버티다 끌어올린다(제 속도로)
+		_snap(anim.current_animation, [1.15, 0.1, 1.0, 0.2, 1.0])
 		game.shake(0.35)
 	else:
 		_snap(anim.current_animation, [1.4, 0.15, 1.0, 0.2, 0.8])
@@ -1035,9 +1037,16 @@ func take_hit(dmg: float, dir: Vector3, power: float, at := Vector3.INF, blade :
 		if state == "wind":
 			_clear_telegraph()
 		state = "stagger"
-		t = 0.75 if stats.poise >= 1.0 else 0.55
-		_play("hit", 1.8, 0.04, true)
-		_snap("hit", [1.8, 0.08, 0.3, 0.1, 0.9])
+		if heavy and anim.has_animation("stumble"):
+			# 무거운 타격: 가슴이 젖혀진 채 두세 걸음 뒷걸음친다(모캡 클립의 걸음이 몸을 옮긴다, 절차적 밀림은 줄인다)
+			t = -0.1
+			knock *= 0.3
+			_play("stumble", 1.15, 0.05, true)
+			_snap("stumble", [1.5, 0.12, 1.0, 0.3, 1.15])
+		else:
+			t = 0.75 if stats.poise >= 1.0 else 0.55
+			_play("hit", 1.8, 0.04, true)
+			_snap("hit", [1.8, 0.08, 0.3, 0.1, 0.9])
 	if hp <= 0.0:
 		_die(dir)
 		return "dead"

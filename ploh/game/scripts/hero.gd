@@ -108,6 +108,9 @@ var guarding := false                # 손가락을 누르고 있다: 막기(타
 var skill_cd := 0.0
 var _block_t := 0.0                  # 막은 충격에 밀려 버티는 시간
 var _stumble := 0.0                  # 급히 서다 넘어질 뻔한 정도(팔을 벌리고 앞으로 쏠렸다가 추스른다)
+var _guard_clip := ""                # 막은 채 걷는 방향 클립(앞·뒤·옆): 경계에서 깜빡이지 않게 잡아 둔다
+var _down_len := 0.0                 # 쓰러진 클립의 길이(재생 속도 반영, 초)
+var _back_decel := 2.4               # 뒷걸음질(stumble)에서 밀리는 속도가 줄어드는 빠르기
 var invuln := 0.0
 var flash := 0.0
 var face := Vector3(0, 0, -1)
@@ -202,7 +205,7 @@ func setup(g: Node, d: Dictionary) -> void:
 	Procedural.strip_root_motion(anim)
 	# 애니메이션을 물리 틱에 맞춰 진행한다. 칼날 판정과 시간표(t)가 같은 시계로 움직여야 프레임이 밀려도 칼을 놓치지 않는다
 	anim.callback_mode_process = AnimationMixer.ANIMATION_CALLBACK_MODE_PROCESS_PHYSICS
-	for loop_name in [d.anims.moves.idle, d.anims.moves.run, d.anims.moves.charge]:
+	for loop_name in [d.anims.moves.idle, d.anims.moves.run, d.anims.moves.charge, "guard", "guard_fwd", "guard_back", "strafe_l", "strafe_r"]:
 		if anim.has_animation(loop_name):
 			anim.get_animation(loop_name).loop_mode = Animation.LOOP_LINEAR
 	add_child(Fx.disc(0.6, Color(0, 0, 0, 0.4)))
@@ -665,6 +668,73 @@ func _start_guard() -> void:
 		_snap(_anim("parry"), [2.0, 0.1, 0.0, 999.0, 0.0])
 
 
+## 막은 채 걷기: 몸이 가는 쪽(몸 기준 앞·뒤·옆)의 막기 걸음 클립을 걸음 속도에 맞춰 튼다. 거의 서 있으면 막기 자세
+func _guard_anim() -> void:
+	if not anim.has_animation("guard"):
+		return
+	var hv := Vector3(_vel.x, 0.0, _vel.z)
+	var sp := hv.length()
+	if sp < 0.3 or not anim.has_animation("guard_fwd"):
+		_guard_clip = ""
+		_play("guard", 1.0, 0.2)
+		return
+	var loc: Vector3 = model.global_transform.basis.inverse() * hv
+	loc = loc.normalized()
+	# 앞뒤(z)와 옆(x) 가운데 큰 쪽. 지금 클립 쪽을 15% 더 쳐 줘서 대각선에서 깜빡이지 않게 한다
+	var fwd_w := absf(loc.z) * (1.15 if _guard_clip in ["guard_fwd", "guard_back"] else 1.0)
+	var side_w := absf(loc.x) * (1.15 if _guard_clip in ["strafe_l", "strafe_r"] else 1.0)
+	var clip: String
+	if fwd_w >= side_w:
+		clip = "guard_fwd" if loc.z > 0.0 else "guard_back"
+	else:
+		clip = "strafe_l" if loc.x > 0.0 else "strafe_r"
+	_guard_clip = clip
+	var key: String = data.model + ":" + clip
+	if not _stride_cache.has(key):
+		_stride_cache[key] = stride_speed(anim, model.find_children("*", "Skeleton3D", true, false)[0], clip, model.scale.z, 1.25)
+	_play(clip, clampf(sp / maxf(_stride_cache[key], 0.2), 0.5, 1.8), 0.2)
+
+
+## 크게 맞아 뒷걸음친다(모캡 stumble: 가슴이 젖혀지고 두세 걸음 물러나 버틴다)
+func stagger_back(from: Vector3) -> void:
+	if state in ["dead", "down", "getup"] or not anim.has_animation("stumble"):
+		return
+	var back := global_position - from
+	back.y = 0
+	back = back.normalized() if back.length() > 0.01 else -face
+	face = -back
+	state = "stumble"
+	t = 0.0
+	queued = false
+	trail.emitting = false
+	_vel = back * 2.2
+	_back_decel = 2.0
+	_play("stumble", 1.2, 0.05, true)
+	_snap("stumble", [1.5, 0.1, 1.0, 0.3, 1.2])
+
+
+## 나가떨어진다(보스의 내려찍기 등): 날아가 등으로 떨어졌다가 일어선다. 그동안은 맞지 않는다
+func knockdown(from: Vector3) -> void:
+	if state == "dead" or not anim.has_animation("knockdown"):
+		return
+	var back := global_position - from
+	back.y = 0
+	back = back.normalized() if back.length() > 0.01 else -face
+	face = -back
+	state = "down"
+	t = 0.0
+	queued = false
+	holding = false
+	guarding = false
+	trail.emitting = false
+	_vel = back * 5.5
+	_back_decel = 6.0
+	invuln = 9.0
+	proc.plant = false
+	_down_len = anim.get_animation("knockdown").length / 1.5
+	_play("knockdown", 1.5, 0.05, true)
+
+
 ## 막는 중에 적의 칼을 받았다: 피해를 크게 줄이고, 충격에 반걸음 밀리며 버틴다
 func blocked(from: Vector3, dmg: float) -> void:
 	var back := global_position - from
@@ -903,6 +973,28 @@ func _physics_process(delta: float) -> void:
 					_do_riposte()
 				else:
 					_to_idle()
+		"stumble":
+			t += delta
+			_vel = _vel.move_toward(Vector3.ZERO, _back_decel * delta)
+			if t >= 0.85:
+				_to_idle()
+		"down":
+			t += delta
+			_vel = _vel.move_toward(Vector3.ZERO, _back_decel * delta)
+			if t >= _down_len - 0.05:
+				# 누운 자세에서 일어난다(얼굴이 위: getup)
+				state = "getup"
+				t = 0.0
+				_down_len = anim.get_animation("getup").length / 1.5 if anim.has_animation("getup") else 0.5
+				_play("getup", 1.5, 0.1, true)
+		"getup":
+			t += delta
+			_vel = Vector3.ZERO
+			if t >= _down_len - 0.1:
+				proc.plant = true
+				invuln = 0.3
+				_to_idle()
+				_play(_anim("idle"), 1.0, 0.2)
 		"guard":
 			# 막은 채 상대를 보고 게걸음·뒷걸음(발은 절차적 걸음이 옮긴다). 막은 충격에 밀리는 동안은 버틴다
 			t += delta
@@ -1002,6 +1094,14 @@ func _brake() -> void:
 		_brake_decel = spd / (_brake_len * 0.7)
 		proc.push(_vel.normalized(), 1.8)
 		proc.crouch = 0.13
+		if anim.has_animation("trip"):
+			# 넘어질 뻔한 모캡 동작(앞으로 쏠려 큰 걸음으로 버티고 팔을 휘저으며 추스른다)
+			_play("trip", 1.15, 0.08, true)
+			_brake_len = maxf(_brake_len, anim.get_animation("trip").length / 1.15 * 0.75)
+			_brake_decel = spd / (_brake_len * 0.6)
+	elif anim.has_animation("run_stop"):
+		# 달리다 멈추는 모캡 동작: 무게를 뒤로 실으며 두세 걸음에 걸쳐 선다(끝까지 이어 튼다)
+		_play("run_stop", clampf(spd / 5.0, 0.8, 1.5), 0.1, true)
 
 
 ## 자동 이동의 목표 속도: 싸울 적이 있으면 붙고, 없으면 다음 방으로 간다. 도착하기 전에 미리 감속한다
@@ -1740,11 +1840,16 @@ func _animate(delta: float) -> void:
 				_play(_anim("run"), clampf(spd / _run_nat, 0.35, 1.6), 0.2)
 			elif _current == _anim("hit") and _react_t > 0.0:
 				pass
-			elif not anim.is_playing() or _current in [_anim("run"), _anim("charge"), _anim("hit"), _anim("dodge"), _anim("parry"), "guard"]:
+			elif _current in ["run_stop", "trip", "stumble", "getup", "getup_front"] and anim.is_playing():
+				pass
+			elif not anim.is_playing() or _current in [_anim("run"), _anim("charge"), _anim("hit"), _anim("dodge"), _anim("parry"), "guard", "guard_fwd", "guard_back", "strafe_l", "strafe_r"]:
 				_play(_anim("idle"), 1.0, 0.25)
 		"brake":
-			# 달리던 다리를 거두며 버틴다(발은 붙잡고, 몸 낮추기와 기울기는 절차적으로)
-			_play(_anim("idle"), 1.0, 0.25)
+			# 달리던 다리를 거두며 버틴다(멈춤·넘어질 뻔 클립이 있으면 그대로 두고, 없으면 대기 자세에 절차적으로)
+			if _current not in ["run_stop", "trip"]:
+				_play(_anim("idle"), 1.0, 0.25)
+		"guard":
+			_guard_anim()
 		"charge", "aim":
 			_play(_anim("charge"))
 	if state == "idle" and not moving and _current != _anim("idle") and not anim.is_playing():

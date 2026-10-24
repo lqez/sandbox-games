@@ -203,6 +203,11 @@ func _process(delta: float) -> void:
 				g.set_move(Vector2.ZERO)
 			if t > 7.5 and _once("g_off"):
 				g.guard(false)
+		"down":
+			# 영웅이 나가떨어졌다 일어난다(보스 내려찍기 대신 직접 부른다)
+			if t > 1.0 and _once("kd"):
+				g.auto_mode = false
+				p.knockdown(p.global_position + p.face * 2.0)
 		"slope":
 			if _once("tp"):
 				var f: Dictionary = g.dungeon._features[0]
