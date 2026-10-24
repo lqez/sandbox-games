@@ -46,7 +46,14 @@ const TURN_MAX := 11.0              # 몸을 돌리는 최대 각속도(rad/s). 
 const WIND_RATE := 0.85
 const STRIKE_RATE := 1.8
 const HOLD := 0.1
-const EASE_K := 1.077                # 재생 위치에 따른 가감속(1.45 → 0.55)이 늘이는 시간만큼 미리 빠르게
+## 동작의 이징(절도): 예비 동작은 빠르게 들어 올려 꼭대기에서 멈칫 모으고(2.0 → 0.3),
+## 베기는 그 멈춤에서 터지듯 나가 가속하며 지나간다(0.9 → 1.5). 뻗은 자세에서 딱 멎고, 거둘 때는 천천히 시작해 가속했다가 내려놓는다.
+## 속도는 클립 재생 위치의 함수이므로, 그만큼 늘어나는 시간(K)을 미리 곱해 전체 길이를 지킨다
+const WIND_EASE := Vector2(2.0, 0.3)
+const STRIKE_EASE := Vector2(0.9, 1.5)
+const WIND_K := 1.1160                # ln(2.0/0.3)/(2.0-0.3)
+const STRIKE_K := 0.8514              # ln(1.5/0.9)/(1.5-0.9)
+const REC_K := 0.9782                 # ∫ds/(0.45+1.1·sin(πs)): 거두기의 천천히-빠르게-천천히
 const WIND_MAX := 2.2                # 예비 동작을 이보다 빠르게 감지 않는다. 더 길면 앞부분을 건너뛰고 뒷부분부터 재생
 const STRIKE_MAX := 1.6              # 베기 구간도 이보다 빠르게 감지 않는다(모션캡처의 긴 베기를 욱여넣으면 튄다)
 const AUTO_RESUME := 0.8             # 직접 이동을 멈추고 이만큼 지나면 자동 이동
@@ -150,6 +157,9 @@ var _whooshed := false
 var _peak_vel := Vector3.ZERO        # 이번 베기에서 가장 빨랐던 칼끝 속도
 var _peak_tip := Vector3.ZERO
 var _followed := false
+var _env_clip := ""                  # 공격 밖 동작(피격·패링·회피)의 이징을 걸 클립
+var _env_t := 0.0
+var _env: Array = []                 # [빠르게 들어가는 속도, 그 시간, 머무는 속도, 그 시간, 나머지 속도]
 var _riposte := 0.0                  # 받아 낸 뒤 반격할 수 있는 남은 시간
 var _riposte_on: Node3D
 var _evade_for := -1                 # 자동 전투: 이미 대응을 정한 적의 공격(인스턴스 id × 100 + 공격 번호)
@@ -303,6 +313,24 @@ func _play_near_strike(name: String, speed: float) -> void:
 
 ## 기본 공격은 3콤보 체인과 4콤보 체인을 번갈아 고리처럼 잇는다.
 ## 한 타: 클립 키(data.anims.moves), 피해 배율, 무게, 재생 속도 배율, 몸놀림
+## 공격 밖 동작의 이징: 빠르게 자세로 들어가(fast) 잠깐 머물고(hold) 나머지를 제 속도로(rest)
+func _snap(clip: String, env: Array) -> void:
+	_env_clip = clip
+	_env_t = 0.0
+	_env = env
+
+
+func _env_speed(delta: float) -> float:
+	if _env.is_empty() or _current != _env_clip or state == "attack":
+		return -1.0
+	_env_t += delta
+	if _env_t < _env[1]:
+		return _env[0]
+	if _env_t < _env[1] + _env[3]:
+		return _env[2]
+	return _env[4]
+
+
 const CHAIN := [
 	{"clip": "a1", "dmg": 1.0}, {"clip": "a2", "dmg": 1.1}, {"clip": "a3", "dmg": 1.35, "weight": 0.5},
 	{"clip": "a1", "dmg": 1.0}, {"clip": "a2", "dmg": 1.1}, {"clip": "a3", "dmg": 1.2},
@@ -508,7 +536,8 @@ func _dodge(dir: Vector3) -> void:
 	proc.crouch = 0.0
 	proc.extra_lean = Vector3.ZERO
 	# 구르기 클립의 구르는 부분(앞 약 70%)만 보여 주고 대기로 섞는다(통째로 욱여넣으면 일어나는 동작이 튄다)
-	_play(_anim("dodge"), 1.8, 0.12, true)
+	_play(_anim("dodge"), 2.4, 0.08, true)
+	_snap(_anim("dodge"), [2.4, 0.18, 1.5, 0.14, 1.1])
 	game.sfx("dodge", 0.15)
 
 
@@ -521,7 +550,8 @@ func _sidestep(dir: Vector3, from: Node3D) -> void:
 	_step_dir = (dir - face * dir.dot(face)).normalized()
 	if _step_dir.length() < 0.1:
 		_step_dir = face.cross(Vector3.UP)
-	target = from
+	if "kind" in from:
+		target = from
 	state = "step"
 	t = 0.0
 	invuln = 0.32
@@ -535,7 +565,8 @@ func _sidestep(dir: Vector3, from: Node3D) -> void:
 	if _anim(key) == _anim("dodge"):
 		# 횡대시 클립이 없으면 구르기 클립을 옆으로(앞부분만)
 		face = _step_dir
-	_play(_anim(key), 1.6, 0.08, true)
+	_play(_anim(key), 2.2, 0.06, true)
+	_snap(_anim(key), [2.2, 0.12, 0.6, 0.12, 1.0])
 	game.sfx("dodge", 0.15, -3.0)
 
 
@@ -553,10 +584,13 @@ func _parry(from: Node3D) -> void:
 	trail.emitting = false
 	_vel *= 0.3
 	proc.crouch = 0.06
+	# 받는 자세로 튀어 들어가(0.08~0.1초) 칼을 받아 내는 동안 버티고, 그 뒤 거둔다
 	if _anim("parry") == _anim("a2"):
-		_play_near_strike(_anim("a2"), 1.2)
+		_play_near_strike(_anim("a2"), 1.8)
+		_snap(_anim("a2"), [1.8, 0.08, 0.1, 0.2, 0.8])
 	else:
-		_play(_anim("parry"), 1.0, 0.06, true)
+		_play(_anim("parry"), 2.2, 0.05, true)
+		_snap(_anim("parry"), [2.2, 0.1, 0.15, PARRY_ACTIVE - 0.1, 1.0])
 
 
 func parrying() -> bool:
@@ -593,7 +627,8 @@ func recoil(from: Vector3) -> void:
 	back.y = 0
 	_vel = back.normalized() * 3.0 if back.length() > 0.01 else Vector3.ZERO
 	proc.hit(back, 1.0)
-	_play(_anim("hit"), 1.3, 0.08, true)
+	_play(_anim("hit"), 2.2, 0.05, true)
+	_snap(_anim("hit"), [2.2, 0.06, 0.3, 0.14, 1.0])
 
 
 ## 스킬 돌진: offset만큼 sec초 동안 감속하며 이동한다
@@ -713,7 +748,8 @@ func _physics_process(delta: float) -> void:
 				_vel = _step_dir * 10.0 * (1.0 - 0.7 * t / STEP_MOVE)
 			else:
 				_vel = _vel.move_toward(Vector3.ZERO, 30.0 * delta)
-			if t >= STEP_TIME * 0.7 and (_step_strike or (game.auto_mode and manual_t >= AUTO_RESUME)) and target != null and is_instance_valid(target) and target.state != "dead":
+			if t >= STEP_TIME * 0.7 and (_step_strike or (game.auto_mode and manual_t >= AUTO_RESUME)) and target != null and is_instance_valid(target) and target.state != "dead" \
+					and global_position.distance_to(target.global_position) < 3.5:
 				proc.crouch = 0.0
 				_step_strike = false
 				var to_t: Vector3 = target.global_position - global_position
@@ -1018,7 +1054,7 @@ func _begin_swing() -> void:
 			# 패턴 판정용 박자: 칼이 닿은 뒤 처음 오는 박자
 			_due = ceilf((now + strike) / game.BEAT) * game.BEAT
 		var cut_dur := maxf(0.1 if heavy else 0.08, (c.end - c.start) / STRIKE_MAX)
-		_strike_spd = (c.end - c.start) / cut_dur * EASE_K
+		_strike_spd = (c.end - c.start) / cut_dur * STRIKE_K
 		_set_wind(c, maxf(strike - cut_dur, 0.06))
 		_rate = _wind_spd
 		# 아무것도 누르지 않으면 뻗은 자세로 잠깐(레퍼런스 100~250ms) 머물렀다가 거둔다
@@ -1033,8 +1069,8 @@ func _begin_swing() -> void:
 ## 예비 동작을 wind_time초에 맞춘다. WIND_MAX배보다 빨라져야 하면 앞부분을 건너뛴다
 func _set_wind(c: Dictionary, wind_time: float) -> void:
 	wind_time = maxf(wind_time, 0.06)
-	_wind_start = maxf(c.start - wind_time * WIND_MAX / EASE_K, 0.0)
-	_wind_spd = maxf(c.start - _wind_start, 0.001) / wind_time * EASE_K
+	_wind_start = maxf(c.start - wind_time * WIND_MAX / WIND_K, 0.0)
+	_wind_spd = maxf(c.start - _wind_start, 0.001) / wind_time * WIND_K
 
 
 ## 이 타의 시간표(초). 칼이 실제로 다 지나간 뒤에는 그 시각을 기준으로 머물고 거둔다
@@ -1053,18 +1089,19 @@ func _rec_speed() -> float:
 	return clampf(_wind_spd * 0.7, 0.6, 1.2)
 
 
-## 지금 재생 속도. 예비 동작은 빠르게 들어 올렸다가 끝에서 멈칫 모으고, 베기는 가속하며 지나간다.
-## 뻗은 자세는 잠깐 멎었다가 칼끝이 무게로 천천히 처진다
+## 지금 재생 속도. 예비 동작은 빠르게 들어 올렸다가 꼭대기에서 멈칫 모으고, 베기는 터지듯 나가 가속하며 지나간다.
+## 뻗은 자세에서 0.1초 딱 멎었다가 칼끝이 무게로 천천히 처지고, 거둘 때는 천천히-빠르게-천천히
 func _clip_speed(c: Dictionary) -> float:
 	var cl: Dictionary = clips.get(_clip, {"len": 0.9, "start": 0.3, "end": 0.45})
 	var pos: float = _clip_pos()
 	if pos < cl.start:
-		return _wind_spd * lerpf(1.45, 0.55, clampf((pos - _wind_start) / maxf(cl.start - _wind_start, 0.001), 0.0, 1.0))
+		return _wind_spd * lerpf(WIND_EASE.x, WIND_EASE.y, clampf((pos - _wind_start) / maxf(cl.start - _wind_start, 0.001), 0.0, 1.0))
 	if _end_t < 0.0:
-		return _strike_spd * lerpf(0.55, 1.45, clampf((pos - cl.start) / maxf(cl.end - cl.start, 0.001), 0.0, 1.0))
+		return _strike_spd * lerpf(STRIKE_EASE.x, STRIKE_EASE.y, clampf((pos - cl.start) / maxf(cl.end - cl.start, 0.001), 0.0, 1.0))
 	if t < c.hold_end:
-		return 0.04 if t < c.end + 0.08 else 0.18
-	return _rec_speed()
+		return 0.02 if t < c.end + 0.1 else 0.15
+	var s := clampf((pos - cl.end) / maxf(cl.len - cl.end, 0.001), 0.0, 1.0)
+	return _rec_speed() * (0.45 + 1.1 * sin(PI * s)) * REC_K
 
 
 ## 지금 클립의 실제 재생 위치(클립 초). 단계 판단은 시간표가 아니라 이것으로 한다(애니메이션이 한두 틱 밀려도 칼과 판정이 어긋나지 않게)
@@ -1358,11 +1395,16 @@ func _auto_evade() -> bool:
 		return false
 	var e: Node3D = th[0]
 	var ttc: float = th[1]
-	var id: int = e.get_instance_id() * 100 + int(e.attacks)
+	var arrow := not ("attacks" in e)
+	var id: int = e.get_instance_id() * 100 + (0 if arrow else int(e.attacks))
 	if id != _evade_for:
 		_evade_for = id
 		var r := randf()
-		_evade_plan = "step" if r < 0.45 else ("parry" if r < 0.8 else ("roll" if r < 0.9 else "none"))
+		if arrow:
+			# 화살은 받아쳐 되튕기거나 옆으로 비껴 간다
+			_evade_plan = "parry" if r < 0.5 else ("step" if r < 0.85 else "none")
+		else:
+			_evade_plan = "step" if r < 0.45 else ("parry" if r < 0.8 else ("roll" if r < 0.9 else "none"))
 	match _evade_plan:
 		"step":
 			if ttc <= 0.3:
@@ -1408,7 +1450,8 @@ func take_damage(amount: float, from := Vector3.INF) -> bool:
 		game.on_hero_down()
 	elif state == "idle":
 		# 피격 클립 앞부분만 제 속도 가까이로 보여 주고 대기로 섞는다(빠르게 욱여넣으면 팔다리가 튄다)
-		_play(_anim("hit"), 1.25, 0.15, true)
+		_play(_anim("hit"), 2.0, 0.06, true)
+		_snap(_anim("hit"), [2.0, 0.08, 0.35, 0.1, 1.0])
 		_react_t = 0.45
 	return true
 
@@ -1425,6 +1468,10 @@ func _animate(delta: float) -> void:
 	var spd := Vector2(_vel.x, _vel.z).length()
 	var moving := spd > 0.5
 	_react_t = maxf(_react_t - delta, 0.0)
+	var es := _env_speed(delta)
+	if es >= 0.0:
+		_speed = es
+		anim.speed_scale = es
 	match state:
 		"idle":
 			if moving:

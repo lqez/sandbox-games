@@ -11,7 +11,8 @@ const SWING_AFTER := 0.16   # 예고가 끝난 뒤 칼이 내려오는 동안 �
 const SOLDIER := "res://assets/soldiers/%s/%s.glb"
 ## 임포트할 때 메시·뼈·애니메이션에 구워 넣은 크기(.glb.import의 nodes/root_scale).
 ## 모델 노드를 키우면 래그돌로 넘어가는 순간 물리 몸체가 크기를 버려 몸이 0.6배로 쪼그라든다
-const BAKED := {"conscript": 1.6, "shieldbearer": 1.75, "boss": 2.3}
+const BAKED := {"conscript": 1.6, "shieldbearer": 1.75, "boss": 2.3, "archer": 1.6}
+const ARCHER_KEEP := Vector2(6.5, 8.5)   # 궁병이 영웅과 두는 거리
 
 ## 종류별 능력치. model은 assets/soldiers의 병사, attacks는 [클립, 접촉 시점(클립 길이 비율, 모션캡처 README의 타격 프레임)]
 ## 체력: 잡병 2~3타, 정예 5~7타, 보스 15~20타(영웅 공격력 42 기준)
@@ -22,6 +23,9 @@ const KINDS := {
 		"attacks": [["attack_2", 0.5]], "tint": Color(0.62, 0.5, 0.55)},
 	"warrior": {"model": "shieldbearer", "blade": ["weapon_sword"], "hp": 280.0, "atk": 18.0, "speed": 2.6, "reach": 1.25, "wind": 1.0, "area": 1.8, "scale": 1.75, "radius": 0.65, "poise": 0.4,
 		"attacks": [["attack_1", 0.536], ["shield_bash", 0.519]], "guard": true, "parry": 0.35, "counter": ["attack_1", 0.536], "tint": Color(0.5, 0.48, 0.7)},
+	# 궁병: 거리를 두고 박자에 맞춰 활을 쏜 뒤 뛰어서 자리를 옮겨 다시 쏜다. 궁병 모델이 없으면 징집병으로 대신한다
+	"archer": {"model": "archer", "fallback": "conscript", "blade": ["weapon_bow"], "hp": 70.0, "atk": 12.0, "speed": 4.4, "reach": 9.0, "wind": 0.9, "area": 0.6, "scale": 1.6, "radius": 0.45, "poise": 1.0,
+		"ranged": true, "attacks": [["shoot", 0.6]], "fallback_attack": ["attack_1", 0.566], "tint": Color(0.55, 0.52, 0.62)},
 	"boss": {"model": "boss", "blade": ["weapon_pendulum"], "hp": 1050.0, "atk": 26.0, "speed": 2.8, "reach": 2.6, "wind": 1.1, "area": 3.2, "scale": 2.3, "radius": 1.0, "poise": 0.1,
 		"attacks": [["attack_2", 0.6]], "slam": ["attack_1", 0.578], "tint": Color(0.55, 0.45, 0.6)},
 }
@@ -74,6 +78,16 @@ var ragdoll: RefCounted
 var _struck := false        # 이번 공격으로 이미 맞혔는지
 var thrusting := false      # 받아친 뒤의 반격 찌르기(내디디며 찔러 평소보다 멀리 닿는다)
 var _counter_wait := -1.0   # 받아친 뒤 반격 찌르기를 시작하기까지 남은 시간
+var model_name := ""        # 실제로 쓰는 병사 모델(궁병 모델이 없으면 대신한 것)
+var _contact := 0.5         # 지금 공격 클립에서 무기가 닿는(시위를 놓는) 위치(클립 초)
+var _env_clip := ""         # 공격 밖 동작(피격·막기·거두기)의 이징을 걸 클립
+var _env_t := 0.0
+var _env: Array = []        # [빠르게 들어가는 속도, 그 시간, 머무는 속도, 그 시간, 나머지 속도]
+var _spot := Vector3.INF    # 궁병이 옮겨 갈 자리
+var _flee_cd := 0.0         # 궁병이 가까이 온 영웅을 피해 물러난 뒤, 다시 물러나기까지(그동안은 그 자리에서 쏜다)
+var _shot := false
+var _aim_line: MeshInstance3D
+var _aim_mat: StandardMaterial3D
 var _current := ""
 
 
@@ -92,12 +106,15 @@ func setup(g: Node, k: String) -> void:
 	shape.shape = cap
 	shape.position.y = stats.scale
 	add_child(shape)
-	var path: String = SOLDIER % [stats.model, stats.model]
+	model_name = stats.model
+	if stats.has("fallback") and not ResourceLoader.exists(SOLDIER % [model_name, model_name]):
+		model_name = stats.fallback
+	var path: String = SOLDIER % [model_name, model_name]
 	if not _root_cache.has(path):
 		_root_cache[path] = Hero.load_root_motion(path)
 	root_motion = _root_cache[path]
 	model = load(path).instantiate()
-	model.scale = Vector3.ONE * stats.scale / BAKED.get(stats.model, 1.0)
+	model.scale = Vector3.ONE * stats.scale / BAKED.get(model_name, 1.0)
 	add_child(model)
 	mats = Fx.toonify(model, 0.002, stats.tint)
 	if kind == "boss":
@@ -128,9 +145,9 @@ func _play(name: String, speed := 1.0, blend := 0.1, restart := false) -> void:
 
 
 func _ready() -> void:
-	weapon = Weapon.attach(model, "RightHand", stats.blade)
+	weapon = Weapon.attach(model, "RightHand", stats.blade if model_name == stats.model else ["weapon_sword"])
 	# 이동 클립을 발이 미끄러지지 않는 속도로 재생하려고 보폭 속도를 잰다(모델마다 한 번)
-	var key: String = SOLDIER % [stats.model, stats.model]
+	var key: String = SOLDIER % [model_name, model_name]
 	if not _stride_cache.has(key):
 		var sk: Skeleton3D = model.find_children("*", "Skeleton3D", true, false)[0]
 		_stride_cache[key] = [Hero.stride_speed(anim, sk, "run", 1.0, 2.5), Hero.stride_speed(anim, sk, "walk", 1.0, 1.0)]
@@ -142,9 +159,9 @@ func _ready() -> void:
 	proc = Procedural.new()
 	var meshy := skel.find_bone("Hips") >= 0
 	proc.setup(Procedural.RIG_MESHY if meshy else Procedural.RIG_KAYKIT, self, game.height_fn())
-	proc.unit = BAKED.get(stats.model, 1.0)
+	proc.unit = BAKED.get(model_name, 1.0)
 	skel.add_child(proc)
-	ragdoll = Ragdoll.build(skel, Ragdoll.BONES_MESHY if meshy else Ragdoll.BONES_KAYKIT, BAKED.get(stats.model, 1.0))
+	ragdoll = Ragdoll.build(skel, Ragdoll.BONES_MESHY if meshy else Ragdoll.BONES_KAYKIT, BAKED.get(model_name, 1.0))
 
 
 ## 머리 뼈의 월드 위치(상대가 쳐다볼 점)
@@ -224,61 +241,72 @@ func _physics_process(delta: float) -> void:
 		# 찌르기: 닿기 직전에 한 걸음 내디딘다
 		velocity += face * 4.5
 	knock = knock.move_toward(Vector3.ZERO, delta * knock_decel)
-	match state:
-		"spawn":
-			if t >= 1.1:
-				state = "chase"
-		"chase":
-			if dist > 0.01:
-				face = to.normalized()
-			_rest = maxf(_rest - delta, 0.0)
-			var ready: bool = _rest <= 0.0 and game.can_attack(self)
-			if hero.state != "dead" and dist <= stats.reach + 0.4 and ready:
-				_start_wind(hero)
-			elif hero.state != "dead" and not ready and dist <= stats.reach + 1.6:
-				# 차례를 기다린다: 칼이 닿지 않는 거리를 지키며 영웅 둘레를 천천히 돈다
-				var side := Vector3(-face.z, 0, face.x) * _orbit
-				var keep := face * clampf(dist - (stats.reach + 1.1), -1.0, 1.0) * 2.0
-				velocity += side * 1.1 + keep + _separation()
-				_play("walk", clampf(1.2 / _walk_nat, 0.5, 1.5), 0.2)
-			elif hero.state != "dead":
-				velocity += face * stats.speed + _separation()
-				# 클립이 원래 나아가는 속도에 맞춰 재생해서 발이 미끄러지지 않게 한다
-				if stats.speed > 3.0:
-					_play("run", clampf(stats.speed / _run_nat, 0.6, 1.8))
+	if stats.has("ranged") and state in ["chase", "wind", "recover"]:
+		_archer(hero, to, dist, delta)
+	else:
+		match state:
+			"spawn":
+				if t >= 1.1:
+					state = "chase"
+			"chase":
+				if dist > 0.01:
+					face = to.normalized()
+				_rest = maxf(_rest - delta, 0.0)
+				var ready: bool = _rest <= 0.0 and game.can_attack(self)
+				if hero.state != "dead" and dist <= stats.reach + 0.4 and ready:
+					_start_wind(hero)
+				elif hero.state != "dead" and not ready and dist <= stats.reach + 1.6:
+					# 차례를 기다린다: 칼이 닿지 않는 거리를 지키며 영웅 둘레를 천천히 돈다
+					var side := Vector3(-face.z, 0, face.x) * _orbit
+					var keep := face * clampf(dist - (stats.reach + 1.1), -1.0, 1.0) * 2.0
+					velocity += side * 1.1 + keep + _separation()
+					_play("walk", clampf(1.2 / _walk_nat, 0.5, 1.5), 0.2)
+				elif hero.state != "dead":
+					velocity += face * stats.speed + _separation()
+					# 클립이 원래 나아가는 속도에 맞춰 재생해서 발이 미끄러지지 않게 한다
+					if stats.speed > 3.0:
+						_play("run", clampf(stats.speed / _run_nat, 0.6, 1.8))
+					else:
+						_play("walk", clampf(stats.speed / _walk_nat, 0.6, 1.8))
 				else:
-					_play("walk", clampf(stats.speed / _walk_nat, 0.6, 1.8))
-			else:
-				_play("idle")
-		"wind":
-			_update_telegraph()
-			# 넓은 내려찍기는 범위로, 나머지는 칼날이 실제로 영웅을 지날 때만 맞는다
-			if strike_area > 4.0 or weapon == null:
-				if t >= wind_time:
-					_strike(true)
-			else:
-				if t >= wind_time - 0.06 and not _struck and weapon.swept_hits(hero.global_position, 0.45, 1.8, 0.1):
-					_struck = true
-					game.enemy_hit(self, stats.atk)
-				if t >= wind_time and telegraph != null:
-					_clear_telegraph()
-					game.shake(0.12)
-					# 내려친 무기의 무게가 몸을 끌어내린다
-					proc.momentum(face * 9.0 + Vector3.DOWN * 4.0, global_position + face, global_position, stats.scale)
-				if t >= wind_time + SWING_AFTER:
-					_strike(false)
-		"recover":
-			if t >= 0.55:
-				state = "chase"
-				_rest = randf_range(0.5, 1.3)
-				_orbit = 1.0 if randf() < 0.5 else -1.0
-			elif not anim.is_playing():
-				_play("block" if stats.has("guard") else "idle", 1.0, 0.15)
-		"stagger":
-			if t >= 1.1:
-				state = "chase"
-			elif not anim.is_playing():
-				_play("idle", 1.0, 0.15)
+					_play("idle")
+			"wind":
+				_update_telegraph()
+				# 넓은 내려찍기는 범위로, 나머지는 칼날이 실제로 영웅을 지날 때만 맞는다
+				if strike_area > 4.0 or weapon == null:
+					if t >= wind_time:
+						_strike(true)
+				else:
+					if t >= wind_time - 0.06 and not _struck and weapon.swept_hits(hero.global_position, 0.45, 1.8, 0.1):
+						_struck = true
+						game.enemy_hit(self, stats.atk)
+					if t >= wind_time and telegraph != null:
+						_clear_telegraph()
+						game.shake(0.12)
+						# 내려친 무기의 무게가 몸을 끌어내린다
+						proc.momentum(face * 9.0 + Vector3.DOWN * 4.0, global_position + face, global_position, stats.scale)
+					if t >= wind_time + SWING_AFTER:
+						_strike(false)
+			"recover":
+				if t >= 0.55:
+					state = "chase"
+					_rest = randf_range(0.5, 1.3)
+					_orbit = 1.0 if randf() < 0.5 else -1.0
+				elif not anim.is_playing():
+					_play("block" if stats.has("guard") else "idle", 1.0, 0.15)
+			"stagger":
+				if t >= 1.1:
+					state = "chase"
+				elif not anim.is_playing():
+					_play("idle", 1.0, 0.15)
+	if state == "wind":
+		_servo_wind(delta)
+	elif not _env.is_empty() and anim.current_animation == _env_clip:
+		_env_t += delta
+		anim.speed_scale = _env[0] if _env_t < _env[1] else (_env[2] if _env_t < _env[1] + _env[3] else _env[4])
+	elif anim.speed_scale == 0.0:
+		# 히트스톱이 풀렸는데 멎은 채로 남지 않게
+		anim.speed_scale = 1.0
 	move_and_slide()
 	position.y = lerpf(position.y, game.height_at(position.x, position.z), 1.0 - exp(-delta * 25.0))
 	proc.look(hero.global_position if state in ["spawn", "chase", "wind"] else null)
@@ -346,9 +374,10 @@ func _start_wind(hero: Node3D) -> void:
 		strike_at = global_position + face * (stats.reach * 0.6)
 	else:
 		strike_at = hero.global_position
-	# 무기가 닿는 순간(접촉 프레임)이 예고 끝과 맞도록 재생 속도를 맞춘다
+	# 무기가 닿는 순간(접촉 프레임)이 예고 끝과 맞도록 재생 위치를 이끈다(_servo_wind)
 	if anim.has_animation(pick[0]):
-		_play(pick[0], anim.get_animation(pick[0]).length * pick[1] / wind_time, 0.1, true)
+		_contact = anim.get_animation(pick[0]).length * pick[1]
+		_play(pick[0], _contact / wind_time, 0.1, true)
 	telegraph = Node3D.new()
 	telegraph.add_child(Fx.disc(strike_area, Color(1, 0.2, 0.15, 0.07)))
 	_tg_edge = Fx.mat(Color(1, 0.25, 0.2, 0.55), 0.0, true)
@@ -359,6 +388,161 @@ func _start_wind(hero: Node3D) -> void:
 	telegraph.add_child(_tg_grow)
 	game.add_child(telegraph)
 	telegraph.global_position = Vector3(strike_at.x, game.height_at(strike_at.x, strike_at.z) + 0.06, strike_at.z)
+
+
+## 공격 밖 동작의 이징: 빠르게 자세로 들어가(fast) 잠깐 머물고(hold) 나머지를 제 속도로(rest)
+func _snap(clip: String, env: Array) -> void:
+	_env_clip = clip
+	_env_t = 0.0
+	_env = env
+
+
+## 예고(예비 동작) 동안 클립 재생 위치를 이끈다: 빠르게 들어 올려 꼭대기로 가라앉고(70%),
+## 그 자세로 멈칫 모았다가(15%), 마지막 15%에 가속하며 내려쳐 박자 위에서 닿는다. 닿은 뒤는 휘둘러 나간다
+func _servo_wind(delta: float) -> void:
+	if t >= wind_time:
+		anim.speed_scale = 1.4
+		return
+	var u := clampf((t + delta) / maxf(wind_time, 0.01), 0.0, 1.0)
+	var c := _contact
+	var strike := minf(0.2, c * 0.45)
+	var s0 := c - strike
+	var p: float
+	if u < 0.7:
+		p = s0 * (1.0 - pow(1.0 - u / 0.7, 3.0))
+	elif u < 0.85:
+		p = s0 + 0.015 * (u - 0.7) / 0.15
+	else:
+		var k := (u - 0.85) / 0.15
+		p = s0 + 0.015 + (c - s0 - 0.015) * k * k
+	anim.speed_scale = clampf((p - anim.current_animation_position) / maxf(delta, 0.001), 0.0, 4.0)
+
+
+## 궁병: 자리를 잡고 서서 조준(바닥에 조준선)하고, 박자에 맞춰 쏜 뒤 뛰어서 다른 자리로 옮긴다.
+## 영웅이 가까이 오면 물러날 자리를 새로 잡는다
+func _archer(hero: Node3D, to: Vector3, dist: float, delta: float) -> void:
+	match state:
+		"chase":
+			_rest = maxf(_rest - delta, 0.0)
+			_flee_cd = maxf(_flee_cd - delta, 0.0)
+			if _spot == Vector3.INF:
+				_spot = _pick_spot(hero)
+			elif dist < 3.2 and _spot.distance_to(hero.global_position) < 4.5 and _flee_cd <= 0.0:
+				_flee_cd = 4.0
+				_spot = _pick_spot(hero)
+			var go := _spot - global_position
+			go.y = 0
+			if go.length() > 0.5:
+				face = go.normalized()
+				velocity += face * stats.speed + _separation()
+				_play("run", clampf(stats.speed / _run_nat, 0.6, 1.8))
+			else:
+				if dist > 0.01:
+					face = to.normalized()
+				velocity += _separation()
+				_play("idle", 1.0, 0.2)
+				if _rest <= 0.0 and hero.state != "dead" and dist < 14.0:
+					_start_aim(hero)
+		"wind":
+			if dist > 0.01:
+				face = to.normalized()
+			_update_aim(hero)
+			if t >= wind_time and not _shot:
+				_shot = true
+				_release(hero)
+			if t >= wind_time + 0.25:
+				state = "recover"
+				t = 0.0
+		"recover":
+			if t >= 0.3:
+				state = "chase"
+				_rest = randf_range(0.6, 1.3)
+				_spot = _pick_spot(hero)
+
+
+## 영웅에게서 ARCHER_KEEP만큼 떨어진, 방 안쪽의 다른 자리(지금 자리에서 2m 넘게, 다른 적과 겹치지 않게)
+func _pick_spot(hero: Node3D) -> Vector3:
+	var hp: Vector3 = hero.global_position
+	var cur := global_position - hp
+	cur.y = 0
+	var base := atan2(cur.z, cur.x) if cur.length() > 0.1 else randf() * TAU
+	var best := global_position
+	var best_score := INF
+	for i in 14:
+		var a := base + randf_range(-1.3, 1.3)
+		var r := randf_range(ARCHER_KEEP.x, ARCHER_KEEP.y)
+		var p := hp + Vector3(cos(a) * r, 0, sin(a) * r)
+		if game.dungeon.sdf(Vector2(p.x, p.z)) > -1.2:
+			continue
+		var moved := p.distance_to(global_position)
+		if moved < 2.0:
+			continue
+		var score := absf(moved - 4.0)
+		for o in game.enemies:
+			if o != self and is_instance_valid(o) and o.global_position.distance_to(p) < 2.0:
+				score += 3.0
+		if score < best_score:
+			best_score = score
+			best = p
+	best.y = game.height_at(best.x, best.z)
+	return best
+
+
+func _start_aim(hero: Node3D) -> void:
+	state = "wind"
+	t = 0.0
+	_shot = false
+	attacks += 1
+	wind_time = game.time_to_beat(stats.wind / game.BEAT)
+	strike_area = stats.area
+	var pick: Array = stats.attacks[0] if anim.has_animation(stats.attacks[0][0]) else stats.fallback_attack
+	_contact = anim.get_animation(pick[0]).length * pick[1]
+	_play(pick[0], _contact / wind_time, 0.1, true)
+	# 조준선: 궁병에서 영웅까지 바닥에 깔리는 가는 띠. 쏘기 직전에는 금색으로 바뀐다
+	_aim_line = MeshInstance3D.new()
+	var q := QuadMesh.new()
+	q.size = Vector2(0.08, 1.0)
+	q.orientation = PlaneMesh.FACE_Y
+	q.center_offset = Vector3(0, 0, 0.5)
+	_aim_line.mesh = q
+	_aim_mat = Fx.mat(Color(1, 0.3, 0.25, 0.4), 0.0, true)
+	_aim_mat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	_aim_line.material_override = _aim_mat
+	_aim_line.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	game.add_child(_aim_line)
+	_update_aim(hero)
+
+
+func _update_aim(hero: Node3D) -> void:
+	if _aim_line == null:
+		return
+	var a := global_position + Vector3(0, 0.08, 0)
+	var b: Vector3 = hero.global_position + Vector3(0, 0.08, 0)
+	var d := b - a
+	d.y = 0
+	_aim_line.global_position = Vector3(a.x, game.height_at(a.x, a.z) + 0.07, a.z)
+	_aim_line.rotation = Vector3(0, atan2(d.x, d.z), 0)
+	var k := clampf(t / maxf(wind_time, 0.01), 0.0, 1.0)
+	_aim_line.scale = Vector3(1.0 + k, 1.0, d.length() * minf(k * 1.6, 1.0))
+	var late := wind_time - t <= COUNTER_WINDOW
+	_aim_mat.albedo_color = Color(1, 0.85, 0.3, 0.8) if late else Color(1, 0.3, 0.25, 0.2 + 0.3 * k)
+
+
+func _clear_aim() -> void:
+	if _aim_line != null:
+		_aim_line.queue_free()
+		_aim_line = null
+
+
+## 시위를 놓는다: 영웅이 움직이는 쪽을 조금 앞질러 노린다
+func _release(hero: Node3D) -> void:
+	_clear_aim()
+	var from := global_position + Vector3(0, 1.3 * stats.scale / 1.6, 0) + face * 0.5
+	var hv: Vector3 = hero.velocity
+	hv.y = 0
+	var aim: Vector3 = hero.global_position + Vector3(0, 1.1, 0) + hv * (from.distance_to(hero.global_position) / 15.0) * 0.6
+	game.spawn_arrow(from, aim, self, stats.atk)
+	game.sfx("whoosh", 0.1, -4.0)
 
 
 ## 받아친 뒤의 반격 찌르기: 짧은 예고(0.5초) 뒤 내디디며 찌른다. 영웅은 피하거나 받아 낼 수 있다
@@ -378,7 +562,8 @@ func _start_counter(hero: Node3D) -> void:
 	var pick: Array = stats.get("counter", stats.attacks[0])
 	var clip: String = "counter" if anim.has_animation("counter") else pick[0]
 	var contact: float = 0.5 if clip == "counter" else pick[1]
-	_play(clip, anim.get_animation(clip).length * contact / wind_time, 0.06, true)
+	_contact = anim.get_animation(clip).length * contact
+	_play(clip, _contact / wind_time, 0.06, true)
 	telegraph = Node3D.new()
 	_tg_edge = Fx.mat(Color(1, 0.85, 0.3, 0.75), 0.0, true)
 	telegraph.add_child(_ring(strike_area * 0.7, _tg_edge))
@@ -398,7 +583,8 @@ func parried(dir: Vector3) -> void:
 	thrusting = false
 	state = "stagger"
 	t = 0.0
-	_play("hit", 0.8, 0.05, true)
+	_play("hit", 2.0, 0.04, true)
+	_snap("hit", [2.0, 0.08, 0.2, 0.25, 0.7])
 	proc.hit(dir, 1.3)
 	knock = dir * 4.0
 	knock_decel = 16.0
@@ -430,6 +616,7 @@ func _update_telegraph() -> void:
 
 
 func _clear_telegraph() -> void:
+	_clear_aim()
 	if telegraph != null:
 		telegraph.queue_free()
 		telegraph = null
@@ -440,8 +627,9 @@ func _strike(area: bool) -> void:
 	thrusting = false
 	state = "recover"
 	t = 0.0
-	# 무게에 끌려간 팔로스루와 복귀는 원래 속도로
-	anim.speed_scale = 1.0
+	# 무게에 끌려간 팔로스루: 빠르게 휘둘러 나갔다가 늦추며 거둔다
+	anim.speed_scale = 1.4
+	_snap(anim.current_animation, [1.4, 0.15, 1.0, 0.2, 0.8])
 	if area:
 		game.enemy_strike(self, strike_at, strike_area, stats.atk * (1.8 if strike_area > 4.0 else 1.0))
 
@@ -457,7 +645,8 @@ func take_hit(dmg: float, dir: Vector3, power: float) -> String:
 		_clear_telegraph()
 		state = "stagger"
 		t = 0.0
-		_play("hit", 0.8, 0.05, true)
+		_play("hit", 1.8, 0.04, true)
+		_snap("hit", [1.8, 0.08, 0.25, 0.12, 0.8])
 	elif stats.has("guard") and state in ["chase", "recover", "spawn"] and power < 9.0 and face.dot(-dir) > 0.3 and _blocks < 2:
 		# 방패병: 정면에서 오는 가벼운 타격은 방패로 받는다. 공격 예고 중이나 무거운 타격, 옆과 뒤는 뚫린다.
 		# 연달아 두 번 막으면 세 번째 타에 방패가 밀려 뚫린다(막힘 → 막힘 → 뚫림)
@@ -469,12 +658,15 @@ func take_hit(dmg: float, dir: Vector3, power: float) -> String:
 		if stats.has("parry") and (_blocks == 2 or randf() < stats.parry):
 			result = "parry"
 			_counter_wait = 0.12
-			_play("parry" if anim.has_animation("parry") else "block_hit", 1.0, 0.05, true)
+			var pc := "parry" if anim.has_animation("parry") else "block_hit"
+			_play(pc, 2.2, 0.04, true)
+			_snap(pc, [2.2, 0.08, 0.2, 0.1, 0.9])
 			proc.hit(dir, 0.15)
 			knock = dir * 0.8
 			knock_decel = 12.0
 			return result
-		_play("block_hit", 1.0, 0.05, true)
+		_play("block_hit", 2.0, 0.04, true)
+		_snap("block_hit", [2.0, 0.08, 0.25, 0.1, 0.8])
 		proc.hit(dir, 0.3)
 		hp = maxf(hp - dmg, 1.0)
 		flash = 0.04
@@ -505,7 +697,8 @@ func take_hit(dmg: float, dir: Vector3, power: float) -> String:
 			_clear_telegraph()
 		state = "stagger"
 		t = 0.75 if stats.poise >= 1.0 else 0.55
-		_play("hit", 1.0, 0.05, true)
+		_play("hit", 1.8, 0.04, true)
+		_snap("hit", [1.8, 0.08, 0.3, 0.1, 0.9])
 	if hp <= 0.0:
 		_die(dir)
 		return "dead"

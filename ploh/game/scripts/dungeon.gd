@@ -33,10 +33,12 @@ const TEX := "res://assets/textures/%s"
 const ROOMS := [
 	{"minion": 3},
 	{"minion": 3, "rogue": 2},
-	{"warrior": 2, "minion": 2},
-	{"rogue": 3, "warrior": 2, "minion": 2},
+	{"warrior": 1, "minion": 2, "archer": 2},
+	{"rogue": 3, "warrior": 2, "minion": 1, "archer": 1},
 	{"boss": 1, "minion": 2},
 ]
+## 넓은 방(방 번호 → 크기 배율). 궁병이 거리를 두고 자리를 옮겨 다닐 만큼 넓게
+const WIDE := {2: 1.5, 3: 1.2}
 ## 부서지는 소품: 모델, 반지름, 높이, 크기 배율, 조각 색
 const PROPS := [
 	["barrel_large", 0.75, 1.9, 0.75, Color(0.42, 0.27, 0.16)],
@@ -92,7 +94,7 @@ func _layout(rng: RandomNumberGenerator) -> void:
 	var last := Vector2.ZERO
 	for i in ROOMS.size():
 		var boss := i == ROOMS.size() - 1
-		var k := 1.35 if boss else 1.0
+		var k: float = 1.35 if boss else WIDE.get(i, 1.0)
 		rooms.append({"center": Vector3(c.x, 0, c.y), "c2": c, "rx": rng.randf_range(5.0, 6.8) * k, "rz": rng.randf_range(5.0, 6.8) * k,
 			"rot": rng.randf() * PI, "spawn": ROOMS[i], "active": false, "cleared": false})
 		route.append(Vector3(c.x, 0, c.y))
@@ -103,7 +105,9 @@ func _layout(rng: RandomNumberGenerator) -> void:
 		if d == last and rng.randf() < 0.6:
 			d = Vector2(-1, 0) if d == Vector2(0, -1) else Vector2(0, -1)
 		last = d
-		var nxt := c + d.rotated(rng.randf_range(-0.4, 0.4)) * rng.randf_range(17.0, 21.0)
+		# 넓은 방은 그만큼 다음 방을 멀리 둔다(방끼리 겹치지 않게)
+		var extra: float = (WIDE.get(i, 1.0) - 1.0 + WIDE.get(i + 1, 1.0) - 1.0) * 7.0
+		var nxt := c + d.rotated(rng.randf_range(-0.4, 0.4)) * (rng.randf_range(17.0, 21.0) + extra)
 		_corridors.append([c, nxt])
 		var mid := (c + nxt) / 2.0
 		route.append(Vector3(mid.x, 0, mid.y))

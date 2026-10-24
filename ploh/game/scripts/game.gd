@@ -11,6 +11,7 @@ const Enemy := preload("res://scripts/enemy.gd")
 const Hud := preload("res://scripts/hud.gd")
 const Dungeon := preload("res://scripts/dungeon.gd")
 const Vfx := preload("res://scripts/vfx.gd")
+const Arrow := preload("res://scripts/arrow.gd")
 
 const KAYKIT := "res://assets/kaykit/heroes/%s.glb"
 const BPM := 120.0           # 전투 박자. 기본 공격 한 타가 한 박, 피니시가 두 박
@@ -238,6 +239,11 @@ func _populate(i: int) -> void:
 			var dist := 0.0 if kind == "boss" else randf_range(0.35, 0.7)
 			var off := Vector2(cos(a) * r.rx, sin(a) * r.rz).rotated(r.rot) * dist
 			var pos: Vector3 = r.center + Vector3(off.x, 0, off.y)
+			if kind == "archer" and i > 0:
+				# 궁병은 들어오는 길 반대편 안쪽에 선다
+				var away: Vector3 = (r.center - dungeon.rooms[i - 1].center).normalized()
+				var side := away.cross(Vector3.UP) * randf_range(-0.5, 0.5)
+				pos = r.center + (away * 0.55 + side) * minf(r.rx, r.rz)
 			if kind == "boss":
 				pos = r.center + Vector3(-1.5, 0, -1.5)
 			pos.y = height_at(pos.x, pos.z)
@@ -557,7 +563,7 @@ func incoming(hero: Node3D, horizon: float) -> Array:
 	var best: Array = []
 	var p: Vector3 = hero.global_position
 	for e in enemies:
-		if not is_instance_valid(e) or e.state != "wind" or e.strike_area > 4.0:
+		if not is_instance_valid(e) or e.state != "wind" or e.strike_area > 4.0 or e.stats.has("ranged"):
 			continue
 		var ttc: float = e.wind_time - e.t
 		if ttc > horizon or ttc < -0.06:
@@ -567,9 +573,8 @@ func incoming(hero: Node3D, horizon: float) -> Array:
 			continue
 		if best.is_empty() or ttc < best[1]:
 			best = [e, ttc]
+	arrows = arrows.filter(func(x): return is_instance_valid(x))
 	for a in arrows:
-		if not is_instance_valid(a):
-			continue
 		var ttc2: float = a.time_to(p)
 		if ttc2 >= 0.0 and ttc2 <= horizon and (best.is_empty() or ttc2 < best[1]):
 			best = [a, ttc2]
@@ -738,7 +743,7 @@ func hit_enemy(e: Node3D, dmg: float, hero: Node3D, just: bool, label: String, w
 func can_attack(e: Node3D) -> bool:
 	var busy := 0
 	for o in enemies:
-		if o != e and is_instance_valid(o) and o.state == "wind":
+		if o != e and is_instance_valid(o) and o.state == "wind" and not o.stats.has("ranged"):
 			busy += 2 if o.kind == "boss" else 1
 	return busy + (2 if e.kind == "boss" else 1) <= 2
 
@@ -802,6 +807,34 @@ func enemy_hit(e: Node3D, dmg: float) -> void:
 	if hurt:
 		combo = 0
 		shake_dir = (player.global_position - e.global_position).normalized()
+
+
+func spawn_arrow(from: Vector3, to: Vector3, who: Node3D, dmg: float) -> void:
+	arrows.append(Arrow.make(self, from, to, who, dmg))
+
+
+## 화살이 영웅을 지났다(구르기·횡대시 중이면 피한 것)
+func arrow_hit(a: Node3D) -> void:
+	if player.state == "dead":
+		return
+	var dodging: bool = player.state in ["dodge", "step"]
+	var hurt: bool = player.take_damage(a.dmg, a.global_position - a.vel.normalized())
+	if not hurt and dodging:
+		player.perfect_dodge()
+	if hurt:
+		combo = 0
+		Vfx.blood(self, a.global_position, a.vel.normalized(), 6, height_at(a.global_position.x, a.global_position.z))
+
+
+## 화살을 받아 쳐 되튕겼다
+func parried_arrow(a: Node3D) -> void:
+	var at: Vector3 = a.global_position
+	Vfx.sparks(self, at, a.vel.normalized(), Vector3.UP, Color(1, 0.9, 0.6), 14)
+	Vfx.cut(self, at, Vector3.UP.cross(a.vel.normalized()), Color(0.75, 0.9, 1.0), 0.4, true)
+	popup(player.global_position + Vector3(0, 2.6, 0), "튕겨 냄!", Color(0.7, 0.92, 1.0), 52)
+	sfx("glint", 0.05, 2.0)
+	vibrate(30)
+	player.freeze(0.04)
 
 
 ## 영웅이 적의 칼(또는 화살)을 받아 냈다: 쇳소리, 불티, 짧은 슬로, 적은 크게 휘청이고 영웅은 반격할 수 있다
