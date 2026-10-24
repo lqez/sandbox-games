@@ -1095,7 +1095,7 @@ func _brake() -> void:
 	trail.emitting = false
 	game.sfx("step", 0.15, -6.0)
 	# 아주 빨리 달리다 서면 가끔 넘어질 뻔한다: 윗몸이 앞으로 쏠리고 두 팔을 벌려 균형을 잡은 뒤 한 걸음 내디뎌 추스른다
-	if spd > 5.2 and randf() < 0.35:
+	if spd > 3.8 and randf() < 0.35:
 		_stumble = 1.0
 		_brake_len *= 1.6
 		_brake_decel = spd / (_brake_len * 0.7)

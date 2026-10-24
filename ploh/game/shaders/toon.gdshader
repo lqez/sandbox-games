@@ -44,5 +44,8 @@ void light() {
 	float shadow = mix(0.0, 1.0, ATTENUATION);
 	float k = lit * shadow;
 	vec3 tint = mix(shade_tint.rgb, vec3(1.0), k);
-	DIFFUSE_LIGHT += ALBEDO * tint * LIGHT_COLOR / PI * 1.0;
+	// 빛을 더하지 않고 가장 밝은 빛 하나만 쓴다(툰: 명암 두 단계). 횃불·화로·연출 조명이 겹치면 몸이 하얗게 날아갔다.
+	// 빛 하나의 세기도 알베도의 1.1배로 묶는다
+	vec3 one = ALBEDO * tint * min(LIGHT_COLOR / PI, vec3(1.1));
+	DIFFUSE_LIGHT = max(DIFFUSE_LIGHT, one);
 }

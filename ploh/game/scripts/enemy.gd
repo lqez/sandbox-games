@@ -20,20 +20,20 @@ const ARCHER_KEEP := Vector2(6.5, 8.5)   # 궁병이 영웅과 두는 거리
 ## 종류별 능력치. model은 assets/soldiers의 병사, attacks는 [클립, 접촉 시점(클립 길이 비율, 모션캡처 README의 타격 프레임)]
 ## 체력: 잡병 2~3타, 정예 5~7타, 보스 15~20타(영웅 공격력 42 기준)
 const KINDS := {
-	"minion": {"model": "conscript", "blade": ["weapon_sword"], "hp": 160.0, "atk": 52.0, "speed": 3.4, "reach": 1.35, "wind": 0.75, "area": 1.4, "scale": 1.6, "radius": 0.5, "poise": 1.0,
+	"minion": {"model": "conscript", "blade": ["weapon_sword"], "hp": 160.0, "atk": 52.0, "speed": 2.7, "reach": 1.35, "wind": 0.75, "area": 1.4, "scale": 1.6, "radius": 0.5, "poise": 1.0,
 		"attacks": [["attack_1", 0.566]], "tint": Color(0.7, 0.68, 0.82)},
-	"rogue": {"model": "conscript", "blade": ["weapon_sword"], "hp": 134.0, "atk": 60.0, "speed": 4.6, "reach": 1.4, "wind": 0.6, "area": 1.3, "scale": 1.6, "radius": 0.45, "poise": 1.0,
+	"rogue": {"model": "conscript", "blade": ["weapon_sword"], "hp": 134.0, "atk": 60.0, "speed": 3.7, "reach": 1.4, "wind": 0.6, "area": 1.3, "scale": 1.6, "radius": 0.45, "poise": 1.0,
 		"attacks": [["attack_2", 0.5]], "tint": Color(0.78, 0.66, 0.7)},
-	"warrior": {"model": "shieldbearer", "blade": ["weapon_sword"], "hp": 470.0, "atk": 100.0, "speed": 2.6, "reach": 1.25, "wind": 1.0, "area": 1.8, "scale": 1.75, "radius": 0.65, "poise": 0.4,
+	"warrior": {"model": "shieldbearer", "blade": ["weapon_sword"], "hp": 470.0, "atk": 100.0, "speed": 2.1, "reach": 1.25, "wind": 1.0, "area": 1.8, "scale": 1.75, "radius": 0.65, "poise": 0.4,
 		"attacks": [["attack_1", 0.536], ["shield_bash", 0.455]], "guard": true, "parry": 0.35, "counter": ["counter", 0.324], "tint": Color(0.7, 0.68, 0.82)},
 	# 방패 사병: 정면의 가벼운 타격을 방패로 막고, 자주 받아쳐 영웅을 휘청이게 한 뒤 찌르기로 반격한다.
 	# 잡병이라 막지 못한 타에는 바로 끊긴다. 방패 사병 모델이 없으면 방패병 모델로 대신한다
-	"guard": {"model": "conscript_shield", "fallback": "shieldbearer", "blade": ["weapon_sword"], "hp": 185.0, "atk": 56.0, "speed": 3.2, "reach": 1.35, "wind": 0.8, "area": 1.4, "scale": 1.6, "radius": 0.55, "poise": 1.0,
+	"guard": {"model": "conscript_shield", "fallback": "shieldbearer", "blade": ["weapon_sword"], "hp": 185.0, "atk": 56.0, "speed": 2.6, "reach": 1.35, "wind": 0.8, "area": 1.4, "scale": 1.6, "radius": 0.55, "poise": 1.0,
 		"attacks": [["attack_1", 0.566]], "guard": true, "parry": 0.45, "counter": ["counter", 0.324], "tint": Color(0.72, 0.7, 0.8)},
 	# 궁병: 거리를 두고 박자에 맞춰 활을 쏜 뒤 뛰어서 자리를 옮겨 다시 쏜다. 궁병 모델이 없으면 징집병으로 대신한다
-	"archer": {"model": "archer", "fallback": "conscript", "blade": [], "hp": 118.0, "atk": 68.0, "speed": 4.4, "reach": 9.0, "wind": 0.9, "area": 0.6, "scale": 1.6, "radius": 0.45, "poise": 1.0,
+	"archer": {"model": "archer", "fallback": "conscript", "blade": [], "hp": 118.0, "atk": 68.0, "speed": 3.5, "reach": 9.0, "wind": 0.9, "area": 0.6, "scale": 1.6, "radius": 0.45, "poise": 1.0,
 		"ranged": true, "attacks": [["shoot", 0.586]], "draw_from": 0.667, "fallback_attack": ["attack_1", 0.566], "tint": Color(0.74, 0.72, 0.8)},
-	"boss": {"model": "boss", "blade": ["weapon_pendulum"], "hp": 2293.0, "atk": 182.0, "speed": 2.8, "reach": 2.6, "wind": 1.1, "area": 3.2, "scale": 2.3, "radius": 1.0, "poise": 0.1,
+	"boss": {"model": "boss", "blade": ["weapon_pendulum"], "hp": 2293.0, "atk": 182.0, "speed": 2.2, "reach": 2.6, "wind": 1.1, "area": 3.2, "scale": 2.3, "radius": 1.0, "poise": 0.1,
 		"attacks": [["attack_2", 0.436]], "slam": ["attack_1", 0.46], "tint": Color(0.72, 0.62, 0.78)},
 }
 const COUNTER_WINDOW := 0.35
@@ -458,7 +458,7 @@ func _locomote(mv: Vector3, still := "idle") -> void:
 	var along := hv.dot(fwd) / maxf(spd, 0.001)
 	if spd < 0.9 or along < 0.7:
 		_play(still, 1.0, 0.2)
-	elif spd > 3.0 or not anim.has_animation("walk"):
+	elif spd > 2.5 or not anim.has_animation("walk"):
 		_play("run", clampf(spd * along / _run_nat, 0.4, 1.8), 0.15)
 	else:
 		_play("walk", clampf(spd * along / _walk_nat, 0.4, 1.8), 0.15)
