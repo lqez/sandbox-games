@@ -54,6 +54,9 @@ func _process(delta: float) -> void:
 		return
 	if g == null:
 		g = boot.game
+		# 전투 시작 연출은 첫 방의 적이 깨기 전에(실제 게임처럼) 튼다
+		if g != null and scenario == "intro":
+			g.play_intro()
 		return
 	if boot.adaptive:
 		boot.adaptive = false
@@ -179,6 +182,10 @@ func _process(delta: float) -> void:
 				_last_beat = b
 				g.tap_down()
 				g.tap_up()
+		"intro":
+			# 전투 시작 연출(테스트 장면에서는 저절로 뜨지 않는다)
+			if _once("intro"):
+				g.play_intro()
 		"guard":
 			# 막기: 누르고(막는 자세) 조금 끌어 게걸음 → 뒷걸음 → 크게 끌어 달리기 → 놓기
 			if _once("g_on") and t > 1.0:

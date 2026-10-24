@@ -14,6 +14,7 @@ const Vfx := preload("res://scripts/vfx.gd")
 const Arrow := preload("res://scripts/arrow.gd")
 const Ragdoll := preload("res://scripts/ragdoll.gd")
 const Item := preload("res://scripts/item.gd")
+const Intro := preload("res://scripts/intro.gd")
 const Bomb := preload("res://scripts/bomb.gd")
 const Cutscene := preload("res://scripts/cutscene.gd")
 const Breakable := preload("res://scripts/breakable.gd")
@@ -79,6 +80,7 @@ var auto_mode := false
 var inventory := {"bomb": 1, "potion": 1}   # 가방(상자에서 주운 폭탄·회복약). 버튼으로 쓴다
 var gold := 0
 var _item_cd := 0.0          # 자동 전투가 아이템을 다시 쓰기까지
+var _intro_done := false     # 전투 시작 연출은 처음 한 번만(다시 하기에서는 건너뛴다)
 var fight_log := {"hit": 0, "parried": 0, "dodged": 0, "whiff": 0, "dmg": 0.0, "countered": 0, "armor": 0, "killed_in_wind": 0}   # 적의 공격 결과(밸런스 측정)
 var elapsed := 0.0
 var combo := 0
@@ -87,7 +89,7 @@ var max_combo := 0
 var just_count := 0
 var swap_cd := 0.0
 var boss: Node3D
-var cutscene: Node           # 보스 등장 연출(cutscene.gd). 도는 동안 state는 "cutscene"
+var cutscene: Node           # 지금 연출(보스 등장 cutscene.gd, 전투 시작 intro.gd). 도는 동안 state는 "cutscene"
 var arrows: Array = []       # 날아가는 화살(arrow.gd)
 
 var camera: Camera3D
@@ -231,6 +233,33 @@ func reset() -> void:
 	boss = null
 	Engine.time_scale = 1.0
 	hud.banner("균열의 지하 미궁")
+	# 처음 시작할 때만 세 영웅이 나서는 전투 시작 연출(테스트 장면에서 띄운 게임은 건너뛴다)
+	if not _intro_done:
+		_maybe_intro.call_deferred()
+
+
+func _maybe_intro() -> void:
+	var main: Node = get_tree().current_scene
+	if main != null and main.scene_file_path == "res://main.tscn":
+		play_intro()
+
+
+## 전투 시작 연출을 튼다(세 영웅, 한마디씩, "전투 개시")
+func play_intro() -> void:
+	if _intro_done or state != "play" or player == null:
+		return
+	_intro_done = true
+	cutscene = Intro.new()
+	cutscene.start(self)
+
+
+## 박자 음악을 시작한다(웹은 첫 터치 뒤에만 소리를 낼 수 있다)
+func start_music() -> void:
+	if not music.playing:
+		music.play()
+		_clock0 = Time.get_ticks_msec()
+		_clock_loops = 0
+		_clock_prev = 0.0
 
 
 func _spawn_player(pos: Vector3) -> void:
