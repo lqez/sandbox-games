@@ -9,6 +9,23 @@ func _ready() -> void:
 	add_child(boot)
 func _process(delta: float) -> void:
 	t += delta
+	# 원인 찾기: -- --noproc(절차적 보정 끔) --nohud(HUD 숨김) --noanim(애니메이션 끔) --nomood(방 분위기 끔)
+	var args := OS.get_cmdline_user_args()
+	if t > 1.0 and boot.game != null:
+		var g = boot.game
+		if "--noproc" in args:
+			for sk in g.find_children("*", "SkeletonModifier3D", true, false):
+				sk.active = false
+		if "--noanim" in args:
+			for ap in g.find_children("*", "AnimationPlayer", true, false):
+				ap.active = false
+		if "--nohud" in args and g.hud != null:
+			g.hud.visible = false
+			g.hud.set_process(false)
+		if "--nomood" in args:
+			for n in g.find_children("*", "Node", true, false):
+				if n.get_script() != null and str(n.get_script().resource_path).ends_with("dungeon.gd") == false and n.has_method("blend_to"):
+					n.set_process(false)
 	if "--lod" in OS.get_cmdline_user_args() and t > 1.0:
 		for mi: MeshInstance3D in boot.game.find_children("*", "MeshInstance3D", true, false):
 			mi.lod_bias = 0.05
@@ -33,5 +50,6 @@ func _process(delta: float) -> void:
 		for s2 in samples:
 			tp += s2[3]
 			tph += s2[4]
-		print("cpu ms: process avg %.2f | physics avg %.2f (데스크톱 기준. 휴대폰 웹은 대략 5~10배)" % [tp / n, tph / n])
+		# TIME_PROCESS는 프레임 대기까지 포함한다(빈 장면도 약 15ms, tests/empty_perf.tscn). fps를 빈 장면과 견준다
+		print("cpu ms: process avg %.2f | physics avg %.2f | fps %.0f (빈 장면과 견줄 것)" % [tp / n, tph / n, Engine.get_frames_per_second()])
 		get_tree().quit()
