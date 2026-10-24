@@ -1,94 +1,49 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ko">
 	<head>
 		<meta charset="utf-8">
-		<meta name="viewport" content="width=device-width, user-scalable=no, initial-scale=1.0">
+		<meta name="viewport" content="width=device-width, user-scalable=no, initial-scale=1.0, viewport-fit=cover">
 		<title>PLOH 액션 전투 시제품</title>
 		<style>
-html, body, #canvas {
-	margin: 0;
-	padding: 0;
-	border: 0;
-}
+html, body, #canvas { margin: 0; padding: 0; border: 0; }
+body { color: #eae6f2; background-color: #0b0a10; overflow: hidden; touch-action: none; font-family: "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif; }
+#canvas { display: block; }
+#canvas:focus { outline: none; }
 
-body {
-	color: white;
-	background-color: black;
-	overflow: hidden;
-	touch-action: none;
-}
+/* ---- 로딩 화면(Live2D식 다층 일러스트) ---- */
+#status { position: fixed; inset: 0; background: #0b0a10; overflow: hidden; visibility: hidden; transition: opacity .55s ease; }
+#status.fade { opacity: 0; pointer-events: none; }
+#status-progress { position: absolute; left: -9999px; width: 1px; height: 1px; opacity: 0; }  /* 엔진이 값을 쓰는 원본, 그림은 아래 바가 그린다 */
+#status-notice { display: none; position: absolute; left: 50%; bottom: 12%; transform: translateX(-50%); max-width: 86vw; padding: 12px 16px; background: rgba(91, 57, 67, .92); border-radius: 8px; font-size: 14px; line-height: 1.5; z-index: 20; }
+#status.notice #status-notice { display: block; }
 
-#canvas {
-	display: block;
-}
+.bg { position: absolute; left: 50%; top: 50%; width: 112vw; height: 112vh; transform: translate(-50%, -50%); background: url(loading/bg.webp) center/cover no-repeat; filter: saturate(.92) brightness(.78); will-change: transform; }
+.shaft { position: absolute; left: 50%; top: -10%; width: 22vw; height: 120vh; transform: translateX(-30%) rotate(14deg); background: linear-gradient(90deg, rgba(200,180,255,0) 0%, rgba(200,180,255,.10) 45%, rgba(200,180,255,0) 100%); filter: blur(10px); mix-blend-mode: screen; pointer-events: none; }
+/* 인물 무대(2:3). 세로 화면에서는 폭에 맞춰(살짝 넘치게) 아래에 붙이고, 가로 화면에서는 높이에 맞춘다 */
+.stage { position: absolute; left: 50%; bottom: 0; width: min(118vw, 66.67vh); aspect-ratio: 2 / 3; transform: translateX(-50%); will-change: transform; }
+.layer { position: absolute; display: block; pointer-events: none; will-change: transform; backface-visibility: hidden; }
+.layer img { display: block; width: 100%; height: auto; }
+.blade { position: absolute; width: 36%; left: 50%; top: 50%; transform-origin: 50% 50%; filter: drop-shadow(0 0 6px rgba(150, 255, 60, .55)); pointer-events: none; will-change: transform; }
+.blade img { display: block; width: 100%; }
+.motes { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+.mote { position: absolute; bottom: -4vh; width: 6px; height: 6px; border-radius: 50%; background: rgba(214, 190, 255, .55); filter: blur(1.5px); animation: rise linear infinite; }
+@keyframes rise { 0% { transform: translate3d(0, 0, 0); opacity: 0; } 10% { opacity: .9; } 90% { opacity: .5; } 100% { transform: translate3d(var(--dx), -115vh, 0); opacity: 0; } }
+.vignette { position: absolute; inset: 0; background: radial-gradient(ellipse at 50% 40%, rgba(0,0,0,0) 45%, rgba(8,6,14,.75) 100%); pointer-events: none; }
 
-#canvas:focus {
-	outline: none;
-}
-
-#status, #status-splash, #status-progress {
-	position: absolute;
-	left: 0;
-	right: 0;
-}
-
-#status, #status-splash {
-	top: 0;
-	bottom: 0;
-}
-
-#status {
-	background-color: #242424;
-	display: flex;
-	flex-direction: column;
-	justify-content: center;
-	align-items: center;
-	visibility: hidden;
-}
-
-#status-splash {
-	max-height: 100%;
-	max-width: 100%;
-	margin: auto;
-}
-
-#status-splash.show-image--false {
-	display: none;
-}
-
-#status-splash.fullsize--true {
-	height: 100%;
-	width: 100%;
-	object-fit: contain;
-}
-
-#status-splash.use-filter--false {
-	image-rendering: pixelated;
-}
-
-#status-progress, #status-notice {
-	display: none;
-}
-
-#status-progress {
-	bottom: 10%;
-	width: 50%;
-	margin: 0 auto;
-}
-
-#status-notice {
-	background-color: #5b3943;
-	border-radius: 0.5rem;
-	border: 1px solid #9b3943;
-	color: #e0e0e0;
-	font-family: 'Noto Sans', 'Droid Sans', Arial, sans-serif;
-	line-height: 1.3;
-	margin: 0 2rem;
-	overflow: hidden;
-	padding: 1rem;
-	text-align: center;
-	z-index: 1;
-}
+.ui { position: absolute; left: 0; right: 0; bottom: 0; padding: 0 max(20px, env(safe-area-inset-left, 0px)) calc(28px + env(safe-area-inset-bottom, 0px)) max(20px, env(safe-area-inset-right, 0px)); z-index: 10; }
+.title { position: absolute; left: max(22px, env(safe-area-inset-left, 0px)); top: calc(22px + env(safe-area-inset-top, 0px)); z-index: 10; text-shadow: 0 2px 12px rgba(0,0,0,.7); }
+.title h1 { margin: 0; font-size: 44px; letter-spacing: .14em; font-weight: 800; color: #fff; line-height: 1; }
+.title p { margin: 6px 0 0 2px; font-size: 13px; letter-spacing: .32em; color: #c9c0e8; }
+.bar { position: relative; height: 4px; background: rgba(255,255,255,.14); border-radius: 2px; overflow: hidden; }
+.bar i { position: absolute; left: 0; top: 0; bottom: 0; width: 0%; background: linear-gradient(90deg, #b56cff, #8cff3c); border-radius: 2px; transition: width .25s ease; box-shadow: 0 0 10px rgba(140, 255, 60, .6); }
+.bar.indet i { width: 30%; animation: slide 1.2s ease-in-out infinite; }
+@keyframes slide { 0% { left: -30%; } 100% { left: 100%; } }
+.row { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px; font-size: 13px; color: #d8d2ea; text-shadow: 0 1px 6px rgba(0,0,0,.8); }
+.row b { font-size: 22px; font-weight: 700; color: #fff; font-variant-numeric: tabular-nums; }
+.tip { margin-top: 14px; min-height: 20px; font-size: 13.5px; color: #e6e0f5; text-shadow: 0 1px 6px rgba(0,0,0,.8); transition: opacity .35s; }
+.tip.hide { opacity: 0; }
+.tip::before { content: "TIP"; display: inline-block; margin-right: 8px; padding: 1px 6px; font-size: 10px; letter-spacing: .1em; font-weight: 700; color: #0b0a10; background: #8cff3c; border-radius: 3px; vertical-align: 1px; }
+@media (prefers-reduced-motion: reduce) { .mote { animation: none; } }
 		</style>
 		<link id="-gd-engine-icon" rel="icon" type="image/png" href="index.icon.png" />
 <link rel="apple-touch-icon" href="index.apple-touch-icon.png"/>
@@ -104,14 +59,30 @@ body {
 		</noscript>
 
 		<div id="status">
-			<img id="status-splash" class="show-image--true fullsize--true use-filter--true" src="index.png" alt="">
+			<div class="bg" id="bg"></div>
+			<div class="shaft"></div>
+			<div class="motes" id="motes"></div>
+			<div class="stage" id="stage">
+				<div id="blades"></div>
+				<div class="layer" id="hair_tail"><img src="loading/hair_tail.webp" alt=""></div>
+				<div class="layer" id="body"><img src="loading/body.webp" alt=""></div>
+				<div class="layer" id="eyes"><img src="loading/eyes_closed.webp" alt=""></div>
+				<div class="layer" id="hair_front"><img src="loading/hair_front.webp" alt=""></div>
+			</div>
+			<div class="vignette"></div>
+			<div class="title"><h1>PLOH</h1><p>FRAU · IOKEIRA</p></div>
+			<div class="ui">
+				<div class="row"><span id="load-text">불러오는 중</span><b id="load-pct">0%</b></div>
+				<div class="bar indet" id="bar"><i id="bar-fill"></i></div>
+				<div class="tip" id="tip"></div>
+			</div>
 			<progress id="status-progress"></progress>
 			<div id="status-notice"></div>
 		</div>
 
 		<script src="index.js"></script>
 		<script>
-const GODOT_CONFIG = {"mainPack":"index.pck?v=aa3529b2324","args":[],"canvasResizePolicy":2,"ensureCrossOriginIsolationHeaders":true,"executable":"index","experimentalVK":false,"fileSizes":{"index.pck":34310976,"index.wasm":43699190},"focusCanvas":true,"gdextensionLibs":[]};
+const GODOT_CONFIG = {"mainPack":"index.pck?v=cff8eca0007","args":[],"canvasResizePolicy":2,"ensureCrossOriginIsolationHeaders":true,"executable":"index","experimentalVK":false,"fileSizes":{"index.pck":34320512,"index.wasm":43699190},"focusCanvas":true,"gdextensionLibs":[]};
 const GODOT_THREADS_ENABLED = false;
 const engine = new Engine(GODOT_CONFIG);
 
@@ -128,13 +99,14 @@ const engine = new Engine(GODOT_CONFIG);
 			return;
 		}
 		if (mode === 'hidden') {
-			statusOverlay.remove();
+			// 엔진이 떴다: 반 박자 뒤 서서히 걷어 낸다
 			initializing = false;
+			statusOverlay.classList.add('fade');
+			setTimeout(() => { Loader.stop(); statusOverlay.remove(); }, 650);
 			return;
 		}
 		statusOverlay.style.visibility = 'visible';
-		statusProgress.style.display = mode === 'progress' ? 'block' : 'none';
-		statusNotice.style.display = mode === 'notice' ? 'block' : 'none';
+		statusOverlay.classList.toggle('notice', mode === 'notice');
 		statusMode = mode;
 	}
 
@@ -174,7 +146,6 @@ const engine = new Engine(GODOT_CONFIG);
 			} catch (err) {
 				serviceWorkerRegistrationPromise = Promise.reject(new Error('Service worker registration failed.'));
 			}
-			// There's a chance that installing the service worker would fix the issue
 			Promise.race([
 				serviceWorkerRegistrationPromise.then((registration) => {
 					if (registration != null) {
@@ -182,18 +153,15 @@ const engine = new Engine(GODOT_CONFIG);
 					}
 					return registration;
 				}).then(() => engine.installServiceWorker()),
-				// For some reason, `getRegistration()` can stall
 				new Promise((resolve) => {
 					setTimeout(() => resolve(), 2000);
 				}),
 			]).then(() => {
-				// Reload if there was no error.
 				window.location.reload();
 			}).catch((err) => {
 				console.error('Error while registering service worker:', err);
 			});
 		} else {
-			// Display the message as usual
 			const missingMsg = 'Error\nThe following features required to run Godot projects on the Web are missing:\n';
 			displayFailureNotice(missingMsg + missing.join('\n'));
 		}
@@ -204,15 +172,178 @@ const engine = new Engine(GODOT_CONFIG);
 				if (current > 0 && total > 0) {
 					statusProgress.value = current;
 					statusProgress.max = total;
+					Loader.progress(current, total);
 				} else {
 					statusProgress.removeAttribute('value');
 					statusProgress.removeAttribute('max');
+					Loader.progress(0, 0);
 				}
 			},
 		}).then(() => {
 			setStatusMode('hidden');
 		}, displayFailureNotice);
 	}
+}());
+
+/* ---- Live2D식 로딩 연출: 숨쉬기·머리카락 흔들림·깜빡임·떠다니는 칼·시차 ---- */
+const Loader = (function () {
+	// layers.py가 자른 조각의 자리(1024x1536 캔버스 기준). 바뀌면 loading/layers.json과 함께 갱신
+	const L = {
+		canvas: [1024, 1536],
+		body: { at: [0, 89], w: 1024 },
+		hair_front: { at: [237, 0], w: 542 },
+		hair_tail: { at: [741, 9], w: 283 },
+		eyes: { at: [330, 450], w: 340 },
+	};
+	const stage = document.getElementById('stage');
+	const els = {};
+	for (const k of ['body', 'hair_front', 'hair_tail', 'eyes']) {
+		const e = document.getElementById(k);
+		e.style.left = (L[k].at[0] / L.canvas[0] * 100) + '%';
+		e.style.top = (L[k].at[1] / L.canvas[1] * 100) + '%';
+		e.style.width = (L[k].w / L.canvas[0] * 100) + '%';
+		els[k] = e;
+	}
+	els.body.style.transformOrigin = '50% 100%';
+	els.hair_front.style.transformOrigin = '50% 6%';
+	els.hair_tail.style.transformOrigin = '12% 4%';
+	els.eyes.style.opacity = '0';
+
+	// 떠다니는 칼 여섯 자루: 몸 뒤 부채꼴
+	const bladeHost = document.getElementById('blades');
+	const BLADES = [
+		{ x: 18, y: 30, r: -62, s: 0.9, ph: 0.0 }, { x: 84, y: 26, r: 58, s: 0.95, ph: 1.1 },
+		{ x: 8, y: 52, r: -28, s: 1.0, ph: 2.3 }, { x: 94, y: 48, r: 24, s: 1.0, ph: 3.4 },
+		{ x: 14, y: 76, r: 14, s: 0.85, ph: 4.2 }, { x: 90, y: 72, r: -16, s: 0.85, ph: 5.3 },
+	];
+	const blades = BLADES.map((b) => {
+		const d = document.createElement('div');
+		d.className = 'blade';
+		d.innerHTML = '<img src="loading/blade.webp" alt="">';
+		d.style.left = b.x + '%';
+		d.style.top = b.y + '%';
+		bladeHost.appendChild(d);
+		return Object.assign({ el: d }, b);
+	});
+
+	// 먼지
+	const motes = document.getElementById('motes');
+	for (let i = 0; i < 26; i++) {
+		const m = document.createElement('i');
+		m.className = 'mote';
+		const sz = 3 + Math.random() * 5;
+		m.style.width = m.style.height = sz + 'px';
+		m.style.left = (Math.random() * 100) + '%';
+		m.style.setProperty('--dx', (Math.random() * 16 - 8) + 'vw');
+		m.style.animationDuration = (9 + Math.random() * 10) + 's';
+		m.style.animationDelay = (-Math.random() * 18) + 's';
+		m.style.opacity = String(0.3 + Math.random() * 0.5);
+		motes.appendChild(m);
+	}
+
+	// 시차: 포인터·기울기
+	let px = 0, py = 0, tx = 0, ty = 0;
+	window.addEventListener('pointermove', (e) => {
+		tx = (e.clientX / window.innerWidth) * 2 - 1;
+		ty = (e.clientY / window.innerHeight) * 2 - 1;
+	}, { passive: true });
+	window.addEventListener('deviceorientation', (e) => {
+		if (e.gamma == null) return;
+		tx = Math.max(-1, Math.min(1, e.gamma / 25));
+		ty = Math.max(-1, Math.min(1, (e.beta - 45) / 25));
+	}, { passive: true });
+
+	const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+	// 깜빡임 일정
+	let nextBlink = 1.6, blinkEnd = -1, doubleBlink = false;
+	let t0 = performance.now(), raf = 0, running = true;
+	const bg = document.getElementById('bg');
+
+	function frame(now) {
+		if (!running) return;
+		const t = (now - t0) / 1000;
+		const k = 1 - Math.exp(-0.016 * 6);
+		px += (tx - px) * k; py += (ty - py) * k;
+		const amp = reduce ? 0 : 1;
+		// 숨쉬기(3.6초), 몸 전체의 아주 느린 흔들림(7초)
+		const br = Math.sin(t * Math.PI * 2 / 3.6);
+		const sway = Math.sin(t * Math.PI * 2 / 7.0);
+		const bodyX = px * 10 + sway * 3 * amp;
+		els.body.style.transform = `translate3d(${bodyX}px, ${py * 4}px, 0) scale(1, ${1 + 0.011 * br * amp})`;
+		// 눈은 몸(머리)과 함께. 숨쉬기로 머리가 살짝 오르내리는 만큼
+		const headLift = -0.011 * br * amp * (L.canvas[1] - 540) * (stage.clientHeight / L.canvas[1]);
+		els.eyes.style.transform = `translate3d(${bodyX}px, ${py * 4 + headLift}px, 0)`;
+		// 머리카락: 숨쉬기를 조금 늦게 따라가고, 바람에 작게 흔들린다
+		const hb = Math.sin((t - 0.18) * Math.PI * 2 / 3.6);
+		const wind = Math.sin(t * Math.PI * 2 / 2.3) * 0.5 + Math.sin(t * Math.PI * 2 / 1.37 + 1.0) * 0.5;
+		els.hair_front.style.transform = `translate3d(${bodyX + px * 5 + wind * 2.2 * amp}px, ${py * 4 - 0.011 * hb * amp * 400 * (stage.clientHeight / L.canvas[1])}px, 0) rotate(${(wind * 0.55 + px * 0.6) * amp}deg)`;
+		const tw = Math.sin((t - 0.3) * Math.PI * 2 / 2.3) * 0.5 + Math.sin((t - 0.3) * Math.PI * 2 / 1.37 + 1.0) * 0.5;
+		els.hair_tail.style.transform = `translate3d(${bodyX + px * 7 + tw * 3 * amp}px, ${py * 4 - 0.011 * hb * amp * 420 * (stage.clientHeight / L.canvas[1])}px, 0) rotate(${(tw * 2.4 + px * 1.5) * amp}deg)`;
+		// 깜빡임
+		if (blinkEnd < 0 && t >= nextBlink) {
+			blinkEnd = t + 0.13;
+			if (!doubleBlink) doubleBlink = Math.random() < 0.22;
+			else doubleBlink = false;   // 두 번째 깜빡임
+		}
+		if (blinkEnd >= 0) {
+			els.eyes.style.opacity = '1';
+			if (t >= blinkEnd) {
+				els.eyes.style.opacity = '0';
+				blinkEnd = -1;
+				nextBlink = t + (doubleBlink ? 0.14 : 2.6 + Math.random() * 3.2);
+			}
+		}
+		// 칼: 저마다 다른 박자로 떠오르내리고 살짝 돈다. 시차는 가장 크게(몸 뒤에 떠 있다)
+		for (const b of blades) {
+			const bob = Math.sin(t * 1.3 + b.ph) * 9 * amp;
+			const rot = b.r + Math.sin(t * 0.7 + b.ph * 1.7) * 4 * amp;
+			b.el.style.transform = `translate3d(${-50 + 0}%, -50%, 0) translate3d(${px * 26 * (0.6 + 0.4 * Math.sin(b.ph))}px, ${bob + py * 10}px, 0) rotate(${rot}deg) scale(${b.s})`;
+		}
+		bg.style.transform = `translate(-50%, -50%) translate3d(${-px * 14}px, ${-py * 9}px, 0)`;
+		raf = requestAnimationFrame(frame);
+	}
+	raf = requestAnimationFrame(frame);
+
+	// 진행
+	const fill = document.getElementById('bar-fill');
+	const bar = document.getElementById('bar');
+	const pct = document.getElementById('load-pct');
+	const text = document.getElementById('load-text');
+	function progress(cur, total) {
+		if (cur > 0 && total > 0) {
+			bar.classList.remove('indet');
+			const p = Math.min(cur / total, 1);
+			fill.style.width = (p * 100).toFixed(1) + '%';
+			pct.textContent = Math.round(p * 100) + '%';
+			text.textContent = `받는 중 ${(cur / 1048576).toFixed(1)} / ${(total / 1048576).toFixed(1)} MB`;
+		} else {
+			bar.classList.add('indet');
+			pct.textContent = '';
+			text.textContent = '준비하는 중';
+		}
+	}
+
+	// 팁
+	const TIPS = [
+		'누르고 있으면 방어, 공격 직전에 맞추면 패링',
+		'방어한 채 살짝 끌면 게걸음과 뒷걸음',
+		'크게 끌면 달린다. 멈출 때는 미끄러지며 선다',
+		'콤보가 쌓일수록 칼의 기운이 짙어진다',
+		'상자와 통을 부수면 폭탄이 나온다',
+		'프라우의 칼 여섯 자루는 손짓을 따라 날아간다',
+		'보스의 큰 공격 직전에는 시간이 느려진다. 그때 패링',
+	];
+	const tip = document.getElementById('tip');
+	let ti = Math.floor(Math.random() * TIPS.length);
+	tip.textContent = TIPS[ti];
+	const tipTimer = setInterval(() => {
+		tip.classList.add('hide');
+		setTimeout(() => { ti = (ti + 1) % TIPS.length; tip.textContent = TIPS[ti]; tip.classList.remove('hide'); }, 380);
+	}, 4200);
+
+	function stop() { running = false; cancelAnimationFrame(raf); clearInterval(tipTimer); }
+	return { progress, stop };
 }());
 		</script>
 	</body>
