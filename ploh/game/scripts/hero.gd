@@ -245,7 +245,10 @@ func _analyze(name: String) -> Dictionary:
 	var dt := length / n
 	var speeds: Array = []
 	var reach_at: Array = []            # 몸 중심에서 칼날(손잡이 쪽 30%, 칼끝 쪽 70%)까지의 수평 거리
+	var spin_at: Array = []             # 칼끝이 몸을 축으로 도는 빠르기(위에서 볼 때 반시계 = 캐릭터 왼쪽으로 쓸기가 +)
+	var down_at: Array = []             # 칼끝이 내려가는 빠르기
 	var root := global_position
+	var to_body := model.global_transform.basis.inverse()
 	anim.play(name)
 	weapon.reset()
 	for i in n + 1:
@@ -256,6 +259,10 @@ func _analyze(name: String) -> Dictionary:
 		var hd := Vector2(weapon.hilt.x - root.x, weapon.hilt.z - root.z).length()
 		var td := Vector2(weapon.tip.x - root.x, weapon.tip.z - root.z).length()
 		reach_at.append(lerpf(hd, td, 0.7))
+		var lp: Vector3 = to_body * (weapon.tip - root)
+		var lv: Vector3 = to_body * weapon.tip_vel
+		spin_at.append(lp.z * lv.x - lp.x * lv.z)
+		down_at.append(-lv.y)
 	anim.stop()
 	var peak := 0
 	for i in speeds.size():
@@ -267,7 +274,17 @@ func _analyze(name: String) -> Dictionary:
 	var w25 := _window(speeds, peak, 0.25, dt, length)
 	# 칼이 가장 빠를 때 칼날이 몸에서 떨어진 거리(실제로 닿는 사거리)
 	var reach: float = reach_at[peak]
-	return {"len": length, "start": w50.x, "end": w50.y, "sweep_start": w25.x, "sweep_end": w25.y, "reach": reach}
+	# 베는 방향: 가로로 쓸면 몸통이 그쪽으로 돌고(spin, -1~1), 내려베면 상체가 앞으로 숙는다(down, 0~1)
+	var spin := 0.0
+	var down := 0.0
+	var tot := 0.0
+	for i in range(int(w50.x / dt), mini(int(w50.y / dt) + 1, speeds.size())):
+		spin += spin_at[i]
+		down += down_at[i]
+		tot += speeds[i]
+	var sw := clampf(spin / maxf(tot * maxf(reach, 0.3), 0.001), -1.0, 1.0)
+	var dn := clampf(down / maxf(tot, 0.001), 0.0, 1.0)
+	return {"len": length, "start": w50.x, "end": w50.y, "sweep_start": w25.x, "sweep_end": w25.y, "reach": reach, "spin": sw, "down": dn}
 
 
 ## 정점 둘레에서 속도가 frac 이상인 구간(초). 너무 짧으면 정점 둘레로 넓힌다
@@ -906,7 +923,7 @@ func _anim(key: String) -> String:
 
 ## 새 소절: 고리의 첫 타부터. 첫 타도 박자에 맞춰 누르면 JUST
 func _begin_chain(auto := false) -> void:
-	target = game.nearest_enemy(global_position, 14.0)
+	target = _pick_target()
 	chain_i = 0
 	_phrase_hits = 0
 	_due = -1.0
@@ -952,7 +969,7 @@ func _start_chain_hit(grade: String, extra := false) -> void:
 ## 한 박 쉬고 누른 패턴 기술
 func _pause_move(grade: String) -> void:
 	var kind: String = PAUSE_MOVES[mini(_phrase_hits, 3)]
-	target = game.nearest_enemy(global_position, 14.0)
+	target = _pick_target()
 	if target != null:
 		var to: Vector3 = target.global_position - global_position
 		to.y = 0
@@ -1003,7 +1020,7 @@ func _start_hit() -> void:
 	_lunge = 0.0
 	trail.emitting = false
 	if target == null or not is_instance_valid(target) or target.state == "dead":
-		target = game.nearest_enemy(global_position, 14.0)
+		target = _pick_target()
 	var motion: String = h.get("motion", "")
 	if target != null and motion != "back":
 		var to: Vector3 = target.global_position - global_position
@@ -1153,6 +1170,25 @@ static func natural_speed(rm: Dictionary, ap: AnimationPlayer, clip: String, sca
 
 ## 제자리 이동 클립의 보폭 속도(m/s): 디딘 발(가장 낮을 때)이 몸 기준으로 뒤로 밀리는 속도.
 ## 이 속도로 재생하면 발이 바닥에서 미끄러지지 않는다
+## 칠 상대: 가까운 적을 고르되 등 뒤의 적은 4m 더 먼 것으로 친다(뒤로 휙 돌아서는 일을 줄인다)
+func _pick_target() -> Node3D:
+	var best: Node3D = null
+	var best_s := INF
+	for e in game.enemies:
+		if not is_instance_valid(e) or e.state == "dead":
+			continue
+		var to: Vector3 = e.global_position - global_position
+		to.y = 0
+		var d := to.length()
+		if d > 14.0:
+			continue
+		var s := d + 2.0 * (1.0 - face.dot(to / maxf(d, 0.01)))
+		if s < best_s:
+			best_s = s
+			best = e
+	return best
+
+
 ## 머리 뼈의 월드 위치(상대가 쳐다볼 점)
 func head_pos() -> Vector3:
 	if _head_skel == null:
@@ -1460,12 +1496,60 @@ func take_damage(amount: float, from := Vector3.INF) -> bool:
 
 # 애니메이션 -------------------------------------------------------------
 
+## 몸통 자세(procedural.gd의 stance·swing_*): 전투 중에는 낮고 넓게 서고, 베기마다
+## 예비 동작에서 베는 반대쪽으로 감았다가 베는 순간 칼 쪽으로 돌며 상체를 숙이고, 뻗은 자세를 붙잡았다가 거둔다.
+## 내려베기(down)일수록 깊이 숙이고, 가로베기(spin)일수록 크게 돈다. 무거운 무기와 무거운 일격은 더 크게.
+## 공격 중에는 머리를 상대에게 붙잡지 않고 몸통을 따르게 한다(붙잡으면 목이 제자리에 굳어 보였다)
+func _posture() -> void:
+	var spd := Vector2(_vel.x, _vel.z).length()
+	var near: bool = game.nearest_enemy(global_position, 7.0) != null
+	proc.stance = 1.0 if (near and spd < 2.5 and state in ["idle", "attack", "parry", "brake", "recoil", "charge"]) else 0.0
+	proc.gaze_strength = 0.85
+	proc.swing_twist = 0.0
+	proc.swing_bend = 0.0
+	proc.swing_rate = 9.0
+	match state:
+		"attack":
+			proc.gaze_strength = 0.15
+			if phase != "swing":
+				return
+			var cl: Dictionary = clips.get(_clip, {})
+			var spin: float = cl.get("spin", 0.0)
+			var down: float = cl.get("down", 0.3)
+			var m := 1.0 + 0.35 * (clampf(data.get("weapon_mass", 1.0), 1.0, 2.0) - 1.0)
+			var heavy := 1.0 + _move_weight * 0.4
+			var c := _swing()
+			if _end_t < 0.0 and _clip_pos() < cl.get("start", 0.3):
+				# 예비: 베는 반대쪽으로 몸통을 감고 상체를 조금 일으킨다(힘을 모은다)
+				proc.swing_twist = -spin * 0.4 * m
+				proc.swing_bend = -0.05 - 0.08 * down
+				proc.swing_rate = 16.0
+			elif t < c.hold_end:
+				# 베기와 뻗은 자세: 골반부터 칼 쪽으로 돌고 상체가 칼을 따라 숙는다. 빠르게 들어가 붙잡는다
+				proc.swing_twist = spin * 0.5 * m
+				proc.swing_bend = (0.16 + 0.3 * down) * m * heavy
+				proc.swing_rate = 30.0
+			else:
+				# 거두기: 천천히 일어선다
+				proc.swing_bend = 0.04
+				proc.swing_rate = 7.0
+		"parry":
+			proc.gaze_strength = 0.5
+			proc.swing_bend = 0.1
+			proc.swing_rate = 28.0
+		"step":
+			proc.gaze_strength = 0.5
+		"dodge", "skill":
+			proc.gaze_strength = 0.1
+
+
 func _animate(delta: float) -> void:
 	if face.length() > 0.01:
 		# 모델은 +Z를 바라본다. 빠르게 따라가되 각속도에 상한을 둔다
 		var diff := angle_difference(model.rotation.y, atan2(face.x, face.z))
 		# 공격을 시작할 때는 상대 쪽으로 더 빨리 돈다(칼이 엉뚱한 쪽으로 나가지 않게)
-		var cap := (TURN_MAX * 2.2 if state == "attack" else TURN_MAX) * delta
+		# 공격할 때는 조금 더 빨리 돈다(1.4배). 더 빠르면 뒤쪽 적에게 휙 돌아 다리가 꼬여 보인다
+		var cap := (TURN_MAX * 1.4 if state == "attack" else TURN_MAX) * delta
 		model.rotation.y += clampf(diff * (1.0 - exp(-delta * 14.0)), -cap, cap)
 	var spd := Vector2(_vel.x, _vel.z).length()
 	var moving := spd > 0.5
@@ -1474,6 +1558,7 @@ func _animate(delta: float) -> void:
 	if es >= 0.0:
 		_speed = es
 		anim.speed_scale = es
+	_posture()
 	match state:
 		"idle":
 			if moving:

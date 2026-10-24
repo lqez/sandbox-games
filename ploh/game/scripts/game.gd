@@ -771,13 +771,57 @@ func hit_enemy(e: Node3D, dmg: float, hero: Node3D, just: bool, label: String, w
 			slowmo(0.45, 0.3)
 
 
-## 동시에 공격하는 적은 둘까지(보스는 혼자 둘 몫). 나머지는 둘레를 돌며 차례를 기다린다
+## 공격 감독(attack token): 근접 공격은 한 번에 하나, 공격을 시작하는 사이는 0.45초 넘게 둔다.
+## 준비된 적들 가운데 점수가 가장 높은 하나에게만 공격권을 준다: 오래 기다렸을수록, 영웅 등 뒤에 있을수록,
+## 영웅이 다른 적을 치느라 빈틈을 보일수록 높다. 두 번째 공격권은 첫 공격자와 120° 넘게 벌어진 협공일 때만 가끔 준다.
+## 보스는 혼자 둘 몫. 궁병은 따로 쏜다(공격권을 쓰지 않는다)
+var _tokens: Array = []           # [적, 받은 시각(초)]
+var _last_grant := -10.0
+
 func can_attack(e: Node3D) -> bool:
-	var busy := 0
+	var now := Time.get_ticks_msec() / 1000.0
+	_tokens = _tokens.filter(func(tk): return is_instance_valid(tk[0]) and tk[0].state != "dead" and tk[0].state != "stagger" and now - tk[1] < 3.0 and tk[0].state in ["chase", "wind"])
+	for tk in _tokens:
+		if tk[0] == e:
+			return true
+	var used := 0
+	for tk in _tokens:
+		used += 2 if tk[0].kind == "boss" else 1
+	var need := 2 if e.kind == "boss" else 1
+	if now - _last_grant < 0.45 or used + need > 2:
+		return false
+	if used == 1:
+		# 협공: 첫 공격자와 영웅을 사이에 두고 120° 넘게 벌어져 있을 때만, 가끔
+		var first: Node3D = _tokens[0][0]
+		var a1: Vector3 = first.global_position - player.global_position
+		var a2: Vector3 = e.global_position - player.global_position
+		a1.y = 0
+		a2.y = 0
+		if a1.angle_to(a2) < deg_to_rad(120.0) or randf() > 0.004:
+			return false
+	# 준비된 다른 적보다 점수가 높아야 받는다
+	var mine := attack_score(e)
 	for o in enemies:
-		if o != e and is_instance_valid(o) and o.state == "wind" and not o.stats.has("ranged"):
-			busy += 2 if o.kind == "boss" else 1
-	return busy + (2 if e.kind == "boss" else 1) <= 2
+		if o != e and is_instance_valid(o) and o.state == "chase" and o.get("ready_to_attack") and attack_score(o) > mine:
+			return false
+	_tokens.append([e, now])
+	_last_grant = now
+	return true
+
+
+func release_token(e: Node3D) -> void:
+	_tokens = _tokens.filter(func(tk): return tk[0] != e)
+
+
+func attack_score(e: Node3D) -> float:
+	var p := player.global_position
+	var to: Vector3 = e.global_position - p
+	to.y = 0
+	var d := to.length()
+	var behind: float = -player.face.dot(to / maxf(d, 0.01))     # 1 = 바로 등 뒤
+	var busy := 1.0 if player.state in ["attack", "recoil", "skill"] else 0.0
+	var waited: float = e.get("waited")
+	return waited + maxf(behind, 0.0) * 1.5 + busy * maxf(behind + 0.3, 0.0) - d * 0.15
 
 
 func enemy_strike(e: Node3D, at: Vector3, area: float, dmg: float) -> void:

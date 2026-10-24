@@ -6,6 +6,8 @@ extends SkeletonModifier3D
 ## - 웅크림: crouch만큼 골반을 내린다. 발은 IK로 바닥에 붙어 있어 무릎이 굽는다(급정지, 착지)
 ## - 상체 비틀기: 목표 쪽으로 척추와 머리를 먼저 돌린다
 ## - 시선: 목과 머리를 돌려 상대의 머리를 쳐다본다(몸통 기준 좌우 70°, 위아래 35°까지). 피격 반동은 그 위에 얹는다
+## - 휘두르는 자세: 전투 중에는 낮고 넓게 서고(stance), 예비 동작에서 몸통을 베는 반대쪽으로 감았다가
+##   베는 순간 골반이 먼저, 가슴이 뒤따라 돌며 상체가 칼 쪽으로 숙는다(swing_twist, swing_bend). 무게는 팔이 아니라 몸통에서 나온다
 ## - 무기의 무게: 칼이 지나간 뒤 그 운동량이 윗몸을 칼끝이 가던 쪽으로 끌고 비틀며, 골반이 한 번 처진다
 ## - 발 IK: 애니메이션의 발 높이는 그대로 두고, 몸 아래 바닥과 발 아래 바닥의 높이 차만큼만 옮긴다(평지에서는 손대지 않는다).
 ##   디딘 발일수록 지형을 따르고, 공중에 뜬 발은 애니메이션 그대로 둔다. 내리막 쪽 발이 닿도록 골반을 내린다.
@@ -25,14 +27,17 @@ const RIG_KAYKIT := {
 
 ## 피격 스프링: 맞는 순간 바로 꺾이고(이징 없음), 조금 덜 감쇠해 한 번 되튄 뒤 돌아온다
 const HIT_STIFF := 260.0
-const HIT_DAMP := 16.0
+const HIT_DAMP := 22.0                # 감쇠비 약 0.7: 한 번만 살짝 되튄다(덜 감쇠하면 흐느적거린다)
+## 전투 자세: 골반을 내리는 깊이와 발을 벌리는 폭(m, 모델 크기 1 기준)
+const STANCE_DROP := 0.06
+const STANCE_WIDE := 0.06
 ## 시선 한계(몸통 기준, 라디안)와 목이 맡는 몫(나머지는 머리)
 const GAZE_YAW := 1.2
 const GAZE_PITCH := 0.6
 const GAZE_NECK := 0.4
-## 기울기 스프링: 약간 덜 감쇠해서 급정지 뒤 몸이 한 번 앞으로 쏠렸다 선다
+## 기울기 스프링: 임계 감쇠(넘치거나 출렁이지 않는다)
 const LEAN_STIFF := 110.0
-const LEAN_DAMP := 13.0
+const LEAN_DAMP := 21.0
 
 var height_fn: Callable            # Vector2(x, z) → 지형 높이
 var body: Node3D                   # 캐릭터 루트(관성·높이 기준)
@@ -44,6 +49,10 @@ var unit := 1.0                    # 스켈레톤에 구워 넣은 모델 크기
 var lock_feet := false             # 디딘 발을 지금 자리에 붙잡는다
 var twist_limit := 0.35            # 상체 비틀기 한계(라디안)
 var extra_lean := Vector3.ZERO     # 주인이 더하는 기울기(월드 회전 벡터). 헛디뎌 쏠린 자세 등
+var stance := 0.0                  # 전투 자세(0~1): 낮고 넓게 선다
+var swing_twist := 0.0             # 몸통 비틀기 목표(라디안, +는 캐릭터 왼쪽으로)
+var swing_bend := 0.0              # 상체 숙임 목표(라디안, +는 앞으로)
+var swing_rate := 10.0             # 자세 스프링의 빠르기(ω). 베기는 빠르게(약 30), 거두기는 느리게
 
 var _hips := -1
 var _spine: Array = []             # 뼈 번호들
@@ -76,6 +85,14 @@ var _gaze_goal := Vector3.ZERO     # 쳐다볼 점(월드)
 var _gaze := Vector3.ZERO          # 실제로 보고 있는 점(목표를 부드럽게 따라간다)
 var _gaze_w := 0.0                 # 시선 세기(켜고 끌 때 0.25초에 걸쳐 바뀐다)
 var gaze_strength := 0.85          # 애니메이션의 머리 움직임을 얼마나 덮을지
+var _stance := 0.0
+var _stance_v := 0.0
+var _hip_tw := 0.0                 # 골반 비틀기(가슴보다 빠른 스프링: 골반이 먼저 돈다)
+var _hip_tw_v := 0.0
+var _chest_tw := 0.0
+var _chest_tw_v := 0.0
+var _bend := 0.0
+var _bend_v := 0.0
 
 
 ## 클립에 박힌 수평 루트 이동(골반이 앞으로 굴러가는 등)을 지운다. 몸은 게임 코드가 움직인다.
@@ -149,22 +166,16 @@ func hold(sec: float, shiver := 0.0) -> void:
 
 
 ## 무기의 운동량: v는 칼끝 속도(월드), tip은 칼끝, pivot은 몸 중심, mass는 무기 무게(1 = 한손검)
-func momentum(v: Vector3, tip: Vector3, pivot: Vector3, mass: float) -> void:
+func momentum(v: Vector3, _tip: Vector3, _pivot: Vector3, mass: float) -> void:
 	var hv := Vector3(v.x, 0, v.z)
 	var spd := hv.length()
 	if spd < 0.5:
 		return
 	# 모션캡처 클립에 체중 이동이 이미 들어 있으므로 반동은 살짝만 덧입힌다
 	var k := clampf(spd / 14.0, 0.25, 1.0) * minf(mass, 2.0)
-	# 칼끝이 가던 쪽으로 윗몸이 끌려간다
-	_lean_v += Vector3.UP.cross(hv / spd) * 1.1 * k
-	# 휘두른 방향으로 몸통이 더 돌아간다(가로 베기일수록 크다)
-	var arm := tip - pivot
-	arm.y = 0
-	if arm.length() > 0.05:
-		_twist_v += signf(arm.cross(hv).y) * 2.0 * k * absf(arm.normalized().cross(hv / spd).y)
-	# 무게를 받아 골반이 한 번 처진다
-	_crouch_v += 0.3 * k
+	# 몸통의 돌기·숙임은 휘두르는 자세(swing_*)가 맡는다. 여기서는 무게를 받아 골반이 한 번 처지기만 한다
+	# (칼끝 쪽으로 윗몸을 끌고 비트는 반동을 따로 더하면 휘두른 뒤 몸이 출렁여 흐느적거려 보였다)
+	_crouch_v += 0.25 * k
 
 
 ## 상체가 바라볼 목표(월드). null이면 정면으로 되돌린다
@@ -279,6 +290,14 @@ func _process_modification() -> void:
 			# 월드 회전을 스켈레톤 공간으로 옮겨 뼈의 전역 자세에 곱한다
 			var axis_sk := (sk_global.basis.inverse() * rot_world).normalized()
 			basis = Basis(axis_sk, rot_world.length()) * basis
+		# 휘두르는 자세: 골반이 돌고 엉덩이부터 숙이며(hip hinge), 가슴이 나머지를 돌고 숙인다. 머리는 몸통을 따른다
+		var fwd_axis := Basis(Vector3.UP, _chest_tw) * Vector3.RIGHT
+		if b == _hips:
+			basis = Basis(Basis(Vector3.UP, _hip_tw) * Vector3.RIGHT, _bend * 0.2) * Basis(Vector3.UP, _hip_tw) * basis
+		elif b in _spine and n > 0:
+			basis = Basis(fwd_axis, _bend * 0.65 / n) * Basis(Vector3.UP, (_chest_tw - _hip_tw) / n) * basis
+		elif b == _head:
+			basis = Basis(fwd_axis, _bend * 0.1) * basis
 		if b in _spine and n > 0:
 			basis = Basis(Vector3.UP, _twist / float(n + 1)) * basis
 		if b == _head:
@@ -319,10 +338,21 @@ func _step(dt: float) -> void:
 		lean_target = lean_target.normalized() * 0.18
 	_lean_v += ((lean_target - _lean) * LEAN_STIFF - _lean_v * LEAN_DAMP) * dt
 	_lean += _lean_v * dt
-	_crouch_v += ((crouch - _crouch) * 160.0 - _crouch_v * 18.0) * dt
+	_crouch_v += ((crouch - _crouch) * 160.0 - _crouch_v * 25.0) * dt
 	_crouch += _crouch_v * dt
-	_twist_v += ((_twist_target - _twist) * 140.0 - _twist_v * 16.0) * dt
+	_twist_v += ((_twist_target - _twist) * 140.0 - _twist_v * 23.0) * dt
 	_twist = clampf(_twist + _twist_v * dt, -0.9, 0.9)
+	# 휘두르는 자세: 임계 감쇠 스프링. 골반은 1.4배 빠르게 따라가 가슴보다 먼저 돈다
+	var w := swing_rate
+	var wh := w * 1.4
+	_hip_tw_v += ((swing_twist * 0.45 - _hip_tw) * wh * wh - _hip_tw_v * 2.0 * wh) * dt
+	_hip_tw += _hip_tw_v * dt
+	_chest_tw_v += ((swing_twist - _chest_tw) * w * w - _chest_tw_v * 2.0 * w) * dt
+	_chest_tw += _chest_tw_v * dt
+	_bend_v += ((swing_bend - _bend) * w * w - _bend_v * 2.0 * w) * dt
+	_bend += _bend_v * dt
+	_stance_v += ((stance - _stance) * 60.0 - _stance_v * 15.5) * dt
+	_stance += _stance_v * dt
 
 
 ## 발 목표: 애니메이션의 발을 몸 아래 바닥과 발 아래 바닥의 높이 차만큼 옮긴다. 디딘 발일수록 강하게
@@ -344,6 +374,10 @@ func _plan_feet(sk: Skeleton3D, dt: float) -> void:
 		var lift: float = fw.y - root.y
 		var w := 1.0 - smoothstep(rest + 0.04, rest + 0.3, lift)
 		var t := Vector3(fw.x, fw.y + (h - ground0) * w, fw.z)
+		# 전투 자세: 디딘 발을 바깥으로 벌린다(왼발은 캐릭터 왼쪽 +X, 오른발은 -X)
+		if _stance > 0.01:
+			var side := sk_global.basis.x.normalized() * (1.0 if i == 0 else -1.0)
+			t += side * STANCE_WIDE * unit * sy * _stance * w
 		if lock_feet:
 			if _locked.size() <= i:
 				_locked.append(t)
@@ -372,7 +406,7 @@ func _feet(sk: Skeleton3D, dt: float) -> void:
 	for tg in _targets:
 		drop = minf(drop, tg[0].y - tg[1].y)
 	_hip_drop = lerpf(_hip_drop, drop, 1.0 - exp(-dt * 14.0))
-	var total := _hip_drop - maxf(_crouch, 0.0) * sk_global.basis.get_scale().y * unit
+	var total := _hip_drop - (maxf(_crouch, 0.0) + STANCE_DROP * _stance) * sk_global.basis.get_scale().y * unit
 	if _hips >= 0 and absf(total) > 0.001:
 		var hp := sk.get_bone_global_pose(_hips)
 		var shift := sk_global.basis.inverse() * Vector3(0, total, 0)

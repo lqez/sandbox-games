@@ -86,6 +86,23 @@ func _rebuild() -> void:
 func _release_qi() -> void:
 	if _stroke.size() < 3:
 		return
+	# 칼끝이 가장 빠른 구간(최고 속도의 50% 이상)만 검기로 그린다. 느린 앞뒤까지 그리면 고리처럼 겹쳐 몸을 덮는다
+	var spd: Array = [0.0]
+	var peak := 0
+	for i in range(1, _stroke.size()):
+		var dt: float = maxf(_stroke[i].t - _stroke[i - 1].t, 0.001)
+		spd.append((_stroke[i].tip as Vector3).distance_to(_stroke[i - 1].tip) / dt)
+		if spd[i] > spd[peak]:
+			peak = i
+	var lo := peak
+	var hi := peak
+	while lo > 1 and spd[lo - 1] >= spd[peak] * 0.5:
+		lo -= 1
+	while hi < spd.size() - 1 and spd[hi + 1] >= spd[peak] * 0.5:
+		hi += 1
+	_stroke = _stroke.slice(maxi(lo - 1, 0), hi + 1)
+	if _stroke.size() < 3:
+		return
 	var heavy := qi_weight >= 0.9
 	_spawn_qi(_stroke.duplicate(), 1.3 if heavy else 1.0, 1.5 if heavy else 1.0, 0.0)
 	if heavy:

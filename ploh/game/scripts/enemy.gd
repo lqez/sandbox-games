@@ -47,6 +47,9 @@ var dormant := false      # 방에 미리 서 있는 보초(영웅이 들어오�
 var _wake_check := 0.0
 var _rest := 0.0           # 공격한 뒤 다시 공격하기까지 숨 고르는 시간
 var _orbit := 1.0          # 차례를 기다리며 도는 방향
+var ready_to_attack := false   # 쉬는 시간이 끝나 공격권을 기다리는 중(감독이 점수를 비교한다)
+var waited := 0.0          # 공격권을 기다린 시간
+var _slot_ang := INF       # 기다리는 자리(영웅 정면 기준 각도, 라디안)
 var _blocks := 0           # 방패로 연달아 막은 수(두 번 막으면 세 번째에 뚫린다)
 var _block_t := 0.0
 var root_motion := {}     # 클립에서 지운 수평 루트 이동(공격 런지를 몸 이동으로 되살린다)
@@ -261,22 +264,34 @@ func _physics_process(delta: float) -> void:
 				if dist > 0.01:
 					face = to.normalized()
 				_rest = maxf(_rest - delta, 0.0)
-				var ready: bool = _rest <= 0.0 and game.can_attack(self)
-				if hero.state != "dead" and dist <= stats.reach + 0.4 and ready:
-					_start_wind(hero)
-				elif hero.state != "dead" and not ready and dist <= stats.reach + 1.6:
-					# 차례를 기다린다: 칼이 닿지 않는 거리를 지키며 영웅 둘레를 천천히 돈다
-					var side := Vector3(-face.z, 0, face.x) * _orbit
-					var keep := face * clampf(dist - (stats.reach + 1.1), -1.0, 1.0) * 2.0
-					velocity += side * 1.1 + keep + _separation()
-					_play("walk", clampf(1.2 / _walk_nat, 0.5, 1.5), 0.2)
-				elif hero.state != "dead":
-					velocity += face * stats.speed + _separation()
-					# 클립이 원래 나아가는 속도에 맞춰 재생해서 발이 미끄러지지 않게 한다
-					if stats.speed > 3.0:
-						_play("run", clampf(stats.speed / _run_nat, 0.6, 1.8))
+				ready_to_attack = _rest <= 0.0 and hero.state != "dead"
+				var ready: bool = ready_to_attack and game.can_attack(self)
+				if ready_to_attack:
+					waited += delta
+				if hero.state != "dead" and ready:
+					# 공격권을 받았다: 붙어서 친다
+					if dist <= stats.reach + 0.4:
+						ready_to_attack = false
+						waited = 0.0
+						_start_wind(hero)
 					else:
-						_play("walk", clampf(stats.speed / _walk_nat, 0.6, 1.8))
+						velocity += face * stats.speed + _separation()
+						_play("run" if stats.speed > 3.0 else "walk", clampf(stats.speed / (_run_nat if stats.speed > 3.0 else _walk_nat), 0.6, 1.8))
+				elif hero.state != "dead":
+					# 차례를 기다린다: 역할에 맞는 자리(방패는 정면 벽, 칼병은 옆·뒤)로 가서 영웅을 본 채 버틴다
+					var slot := _slot(hero, delta)
+					var go := slot - global_position
+					go.y = 0
+					var gd := go.length()
+					if gd > 2.5:
+						velocity += go / gd * stats.speed + _separation()
+						_play("run" if stats.speed > 3.0 else "walk", clampf(stats.speed / (_run_nat if stats.speed > 3.0 else _walk_nat), 0.6, 1.8))
+					elif gd > 0.35:
+						velocity += go / gd * minf(1.6, gd * 2.0) + _separation()
+						_play("walk", clampf(1.4 / _walk_nat, 0.5, 1.5), 0.2)
+					else:
+						velocity += _separation()
+						_play("block" if stats.has("guard") and anim.has_animation("block") else "idle", 1.0, 0.2)
 				else:
 					_play("idle")
 			"wind":
@@ -320,6 +335,7 @@ func _physics_process(delta: float) -> void:
 	position.y = lerpf(position.y, game.height_at(position.x, position.z), 1.0 - exp(-delta * 25.0))
 	proc.look(hero.global_position if state in ["spawn", "chase", "wind"] else null)
 	proc.gaze(hero.head_pos() if state != "dead" and global_position.distance_to(hero.global_position) < 12.0 else null)
+	_posture(dist)
 	if face.length() > 0.01 and state != "spawn":
 		var diff := angle_difference(model.rotation.y, atan2(face.x, face.z))
 		var cap := 8.0 * delta
@@ -398,6 +414,28 @@ func _start_wind(hero: Node3D) -> void:
 	telegraph.add_child(_tg_grow)
 	game.add_child(telegraph)
 	telegraph.global_position = Vector3(strike_at.x, game.height_at(strike_at.x, strike_at.z) + 0.06, strike_at.z)
+
+
+## 몸통 자세(영웅과 같은 원칙): 붙어 싸울 때는 낮게 서고, 예고 동안 상체를 일으켜 모았다가
+## 내려치는 순간 상체를 칼 쪽으로 숙이고, 거둘 때 천천히 일어선다. 공격하는 동안 머리는 몸통을 따른다
+func _posture(dist: float) -> void:
+	var p: Variant = proc
+	p.stance = 1.0 if (state in ["wind", "recover", "stagger"] or (state == "chase" and dist < stats.reach + 2.0)) and not stats.has("ranged") else 0.0
+	p.gaze_strength = 0.85
+	p.swing_bend = 0.0
+	p.swing_rate = 9.0
+	if state == "wind" and not stats.has("ranged"):
+		p.gaze_strength = 0.25
+		var u := t / maxf(wind_time, 0.01)
+		if u < 0.85:
+			p.swing_bend = -0.08
+			p.swing_rate = 10.0
+		else:
+			p.swing_bend = 0.3 if stats.scale < 2.0 else 0.22
+			p.swing_rate = 30.0
+	elif state == "recover" and t < 0.25:
+		p.swing_bend = 0.25
+		p.swing_rate = 30.0
 
 
 ## 공격 밖 동작의 이징: 빠르게 자세로 들어가(fast) 잠깐 머물고(hold) 나머지를 제 속도로(rest)
@@ -600,6 +638,40 @@ func _release(hero: Node3D) -> void:
 	game.sfx("whoosh", 0.1, -4.0)
 
 
+## 공격권을 기다리는 자리. 방패를 든 적은 영웅 정면(±30°) 2.8m에 벽처럼, 칼병은 옆·뒤(90~150°) 4m로 돌아 들어간다.
+## 다른 기다리는 적과는 각도로 40° 넘게 벌린다. 체력이 30% 아래인 잡병은 5.5m로 물러나 숨을 고른다
+func _slot(hero: Node3D, delta: float) -> Vector3:
+	var hp: Vector3 = hero.global_position
+	var rel := global_position - hp
+	rel.y = 0
+	var front := atan2(hero.face.x, hero.face.z)
+	var cur := angle_difference(front, atan2(rel.x, rel.z))
+	if _slot_ang == INF:
+		_slot_ang = cur
+	var wall := stats.has("guard")
+	var want := clampf(cur, -0.5, 0.5) if wall else signf(cur if absf(cur) > 0.05 else _orbit) * clampf(absf(cur), 1.6, 2.6)
+	# 다른 기다리는 적과 겹치지 않게 각도를 벌린다
+	for o in game.enemies:
+		if o == self or not is_instance_valid(o) or o.state != "chase" or o.stats.has("ranged"):
+			continue
+		var orel: Vector3 = o.global_position - hp
+		var oa := angle_difference(front, atan2(orel.x, orel.z))
+		var dd := angle_difference(oa, want)
+		if absf(dd) < 0.7:
+			want += signf(dd if absf(dd) > 0.01 else _orbit) * (0.7 - absf(dd))
+	# 자리는 천천히 옮긴다(영웅이 돌 때마다 우르르 돌지 않게)
+	_slot_ang = rotate_toward(_slot_ang, want, delta * 1.2)
+	var r := 2.8 if wall else 4.0
+	if hp_ratio() < 0.3 and kind != "boss":
+		r = 5.5
+	r = maxf(r, stats.reach + radius + 0.9)
+	return hp + Vector3(sin(front + _slot_ang), 0, cos(front + _slot_ang)) * r
+
+
+func hp_ratio() -> float:
+	return hp / maxf(max_hp, 1.0)
+
+
 ## 받아친 뒤의 반격 찌르기: 짧은 예고(0.5초) 뒤 내디디며 찌른다. 영웅은 피하거나 받아 낼 수 있다
 func _start_counter(hero: Node3D) -> void:
 	state = "wind"
@@ -700,6 +772,7 @@ func _clear_telegraph() -> void:
 
 func _strike(area: bool) -> void:
 	_clear_telegraph()
+	game.release_token(self)
 	thrusting = false
 	state = "recover"
 	t = 0.0
@@ -784,6 +857,8 @@ func take_hit(dmg: float, dir: Vector3, power: float) -> String:
 
 func _die(dir: Vector3) -> void:
 	state = "dead"
+	ready_to_attack = false
+	game.release_token(self)
 	_clear_telegraph()
 	collision_layer = 0
 	collision_mask = 0
