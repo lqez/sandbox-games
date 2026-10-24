@@ -15,3 +15,6 @@ s = s.replace('const GODOT_CONFIG = {', 'const GODOT_CONFIG = {"mainPack":"index
 open(p, "w").write(s)
 print("mainPack version", v)
 PY
+# 로딩 화면 레이어(web/loading/*.webp)를 빌드 옆에 둔다(셸 web/shell.html이 loading/… 상대 경로로 읽는다)
+mkdir -p ../play/loading
+cp ../web/loading/*.webp ../play/loading/
