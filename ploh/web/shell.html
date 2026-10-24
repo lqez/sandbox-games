@@ -20,7 +20,7 @@ body { color: #eae6f2; background-color: #0b0a10; overflow: hidden; touch-action
 .bg { position: absolute; left: 50%; top: 50%; width: 112vw; height: 112vh; transform: translate(-50%, -50%); background: url(loading/bg.webp) center/cover no-repeat; filter: saturate(.92) brightness(.78); will-change: transform; }
 .shaft { position: absolute; left: 50%; top: -10%; width: 22vw; height: 120vh; transform: translateX(-30%) rotate(14deg); background: linear-gradient(90deg, rgba(200,180,255,0) 0%, rgba(200,180,255,.10) 45%, rgba(200,180,255,0) 100%); filter: blur(10px); mix-blend-mode: screen; pointer-events: none; }
 /* 인물 무대(2:3). 세로 화면에서는 폭에 맞춰(살짝 넘치게) 아래에 붙이고, 가로 화면에서는 높이에 맞춘다 */
-.stage { position: absolute; left: 50%; bottom: 0; width: min(118vw, 66.67vh); aspect-ratio: 2 / 3; transform: translateX(-50%); will-change: transform; }
+.stage { position: absolute; left: 50%; bottom: 0; width: min(108vw, 66.67vh); aspect-ratio: 2 / 3; transform: translateX(-50%); will-change: transform; }
 .layer { position: absolute; display: block; pointer-events: none; will-change: transform; backface-visibility: hidden; }
 .layer img { display: block; width: 100%; height: auto; }
 .blade { position: absolute; width: 36%; left: 50%; top: 50%; transform-origin: 50% 50%; filter: drop-shadow(0 0 6px rgba(150, 255, 60, .55)); pointer-events: none; will-change: transform; }
