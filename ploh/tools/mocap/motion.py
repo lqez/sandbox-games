@@ -458,8 +458,10 @@ def hold_first(c, k):
     return concat({"n": k, "bones": {b: {kk: np.repeat(v[kk][:1], k, 0) for kk in v} for b, v in c["bones"].items()}}, c)
 
 
-def seq(lib, parts):
-    """concatenate clip segments [(src, a, b), ...]; the Hips X/Z of each segment is shifted to continue the previous one."""
+def seq(lib, parts, xfade=0):
+    """concatenate clip segments [(src, a, b), ...]; the Hips X/Z of each segment is shifted to continue the previous one.
+    xfade > 0: the first xfade frames of each later segment are eased from the previous segment's last pose (segments from
+    different takes that do not meet)."""
     out = None
     for src, a, b in parts:
         s = sub(lib[src], a, b)
@@ -468,6 +470,8 @@ def seq(lib, parts):
             d = T[0, [0, 2]] - out["bones"]["Hips"]["T"][-1, [0, 2]]
             T[:, 0] -= d[0]; T[:, 2] -= d[1]
             s = sub(s, 1, -1) if np.allclose(frame_pose(s, 0)["Hips"]["R"], out["bones"]["Hips"]["R"][-1], atol=1e-4) else s
+            if xfade:
+                blend_pose(s, frame_pose(out, nframes(out) - 1), xfade, "start")
         out = s if out is None else concat(out, s)
     return out
 
@@ -507,3 +511,431 @@ def sidestep(rig, pose, side, dist=0.5, n=14, lift=0.06, dip=0.035, lean=9.0):
         tgt[:, 1] += lift * np.sin(np.pi * np.clip((u - u0) / (u1 - u0), 0, 1))
         c = chain_ik(rig, c, ft + "UpLeg", ft + "Leg", ft + "Foot", tgt, np.ones(n))
     return c
+
+
+# ------------------------------------------------------------------ foot plants for clips that travel (stumble, get-up)
+def plant_segments(rig, c, root=None, h_tol=0.03, v_tol=0.4, min_len=3, gap=2):
+    """frames where each foot is planted: low (min of ankle/toe height within h_tol of that foot's lowest point in the clip)
+    and slow (ankle or toe horizontal speed under v_tol m/s, so a heel/toe roll still counts), with the stripped root
+    re-applied. Gaps up to `gap` frames are closed, segments shorter than min_len dropped. returns {side: [(a, b), ...]}"""
+    n = nframes(c)
+    off = np.zeros((n, 3))
+    if root is not None:
+        off[:, 0] = root[:, 0]; off[:, 2] = root[:, 1]
+    g = globals_(rig, c)
+    out = {}
+    for s in ("Left", "Right"):
+        ank = g[s + "Foot"][0] + off; toe = g[s + "ToeBase"][0] + off
+        y = np.minimum(ank[:, 1], toe[:, 1])
+        sp = lambda P: np.r_[0, np.linalg.norm(np.diff(P[:, [0, 2]], axis=0), axis=1)] * 30
+        pl = (y < y.min() + h_tol) & (np.minimum(sp(ank), sp(toe)) < v_tol)
+        seg, f = [], 0
+        while f < n:
+            if pl[f]:
+                e = f
+                while e + 1 < n and pl[e + 1]:
+                    e += 1
+                seg.append([f, e]); f = e + 1
+            else:
+                f += 1
+        merged = []
+        for a, b in seg:
+            if merged and a - merged[-1][1] - 1 <= gap:
+                merged[-1][1] = b
+            else:
+                merged.append([a, b])
+        out[s] = [tuple(x) for x in merged if x[1] - x[0] + 1 >= min_len]
+    return out
+
+
+def replant(rig, c, root, segs, start_pose=None, end_pose=None, min_lift=0.04, win=(0, 0), far=0.06):
+    """re-plant the feet of a travelling clip so every plant is a fixed spot on the ground (no slip) and the first/last
+    plants land exactly on the stance of the poses it blends from/into (so no extra shuffle is needed at the blends).
+    segs: plant_segments() of the clip before the edge blends (same frame numbering; frames appended later by tail()
+    extend the last plant). root: (n,2) stripped X/Z. A plant that starts on frame 0 is moved to start_pose's foot, one
+    that reaches the source end goes to end_pose's foot (plus the root travel); the others stay where the mocap put them
+    (mean position, mid-plant foot rotation). win = (blend-in, blend-out) frames: a first/last plant that reaches beyond
+    its blend window and whose blend pose spot is more than `far` from the mocap spot keeps the mocap spot and the foot steps
+    onto/off the blend pose's spot inside the window instead (a long crouch-to-stand plant cannot hold the idle stance spot).
+    Between plants the foot follows its mocap swing, offset smoothly from the
+    old to the new end points, lifted at least min_lift (sine arc). Before the first plant (if it does not start on frame
+    0) the foot keeps the clip's own path, eased into the first plant. Legs: two-bone IK, then the foot's global rotation.
+    returns (clip, max IK miss in metres per side, {side: [(first, last) frame of each locked plant]})"""
+    n = nframes(c)
+    root = np.asarray(root, float)
+    if len(root) < n:
+        root = np.concatenate([root, np.repeat(root[-1:], n - len(root), 0)])
+    off = np.zeros((n, 3)); off[:, 0] = root[:n, 0]; off[:, 2] = root[:n, 1]
+
+    def pose_g(p):
+        return globals_(rig, {"n": 1, "bones": {b: {k: np.asarray(v[k])[None] for k in ("T", "R", "S")} for b, v in p.items()}})
+    gs = pose_g(start_pose) if start_pose is not None else None
+    ge = pose_g(end_pose) if end_pose is not None else None
+    g = globals_(rig, c)
+    miss, locked = {}, {}
+    for s in ("Left", "Right"):
+        P = g[s + "Foot"][0] + off                       # world ankle path of the clip as it is now
+        Rq = fk.m2q(g[s + "Foot"][1])
+        sg = [list(x) for x in segs.get(s, [])]
+        if not sg:
+            continue
+        n_src = max(b for _, b in sg) + 1
+        tgt = P.copy(); rq = Rq.copy()
+        keys = []                                          # (a, b, world pos, rot quat)
+        pre, post = [], []
+        for k, (a, b) in enumerate(sg):
+            mid = (a + b) // 2
+            pos = P[a:b + 1].mean(0); rot = Rq[mid]
+            if k == 0 and a == 0 and gs is not None:
+                ps, rs = gs[s + "Foot"][0][0].copy(), fk.m2q(gs[s + "Foot"][1])[0]
+                if b > win[0] + 2 and np.linalg.norm((ps - pos)[[0, 2]]) > far:
+                    pre = [[0, 0, ps, rs]]; a = max(win[0], 1)      # step off the start stance inside the blend-in
+                else:
+                    pos, rot = ps, rs
+            if k == len(sg) - 1 and ge is not None:
+                if b < n - 1 and b >= n_src - 1:
+                    b = n - 1                              # tail frames: keep standing on it
+                if b == n - 1:
+                    pe, re_ = ge[s + "Foot"][0][0] + off[n - 1], fk.m2q(ge[s + "Foot"][1])[0]
+                    if a < n - 1 - win[1] - 2 and np.linalg.norm((pe - pos)[[0, 2]]) > far:
+                        post = [[n - 1, n - 1, pe, re_]]; b = min(b, n - 2 - win[1])   # step onto the end stance
+                    else:
+                        pos, rot = pe, re_
+            keys.append([a, b, pos, rot])
+        keys = pre + keys + post
+        if ge is not None and keys[-1][1] < n - 1:      # still moving at the end: one more step onto the end stance
+            keys.append([n - 1, n - 1, ge[s + "Foot"][0][0] + off[n - 1], fk.m2q(ge[s + "Foot"][1])[0]])
+        locked[s] = [(int(a_), int(b_)) for a_, b_, _, _ in keys]
+        floor = min(k_[2][1] for k_ in keys)
+        for a, b, pos, rot in keys:
+            tgt[a:b + 1] = pos; rq[a:b + 1] = rot
+        for (a0, b0, p0, r0), (a1, b1, p1, r1) in zip(keys[:-1], keys[1:]):
+            fr = np.arange(b0 + 1, a1)
+            if not len(fr):
+                continue
+            u = smooth((fr - b0) / (a1 - b0))
+            d0 = p0 - P[b0]; d1 = p1 - P[a1]
+            tgt[fr] = P[fr] + d0[None] * (1 - u)[:, None] + d1[None] * u[:, None]
+            arc = np.sin(np.pi * (fr - b0) / (a1 - b0))
+            lift = tgt[fr, 1] - floor
+            need = max(0.0, min_lift - float(lift.max())) if np.linalg.norm((p1 - p0)[[0, 2]]) > 0.03 else 0.0
+            tgt[fr, 1] = np.maximum(tgt[fr, 1], floor) + need * arc
+            q0 = fk.qmul(r0, fk.qinv(Rq[b0])); q1 = fk.qmul(r1, fk.qinv(Rq[a1]))
+            dq = G.slerp(np.repeat(q0[None], len(fr), 0), np.repeat(q1[None], len(fr), 0), u)
+            rq[fr] = fk.qmul(dq, Rq[fr])
+        a0, _, p0, r0 = keys[0]
+        wik = np.ones(n)
+        if a0 > 0:                                         # before the first plant: own path eased into it
+            fr = np.arange(0, a0)
+            u = smooth(fr / a0)
+            tgt[fr] = P[fr] + (p0 - P[a0])[None] * u[:, None]
+            wik[fr] = u                                    # (frame 0 untouched: a straight leg would get re-bent by the IK)
+            q0 = fk.qmul(r0, fk.qinv(Rq[a0]))
+            dq = G.slerp(np.repeat(np.array([[0, 0, 0, 1.0]]), len(fr), 0), np.repeat(q0[None], len(fr), 0), u)
+            rq[fr] = fk.qmul(dq, Rq[fr])
+        _, b9, p9, r9 = keys[-1]
+        if b9 < n - 1:                                     # after the last plant (no end pose): eased back onto its own path
+            fr = np.arange(b9 + 1, n)
+            u = 1.0 - smooth((fr - b9) / (n - 1 - b9))
+            tgt[fr] = P[fr] + (p9 - P[b9])[None] * u[:, None]
+            q9 = fk.qmul(r9, fk.qinv(Rq[b9]))
+            dq = G.slerp(np.repeat(np.array([[0, 0, 0, 1.0]]), len(fr), 0), np.repeat(q9[None], len(fr), 0), u)
+            rq[fr] = fk.qmul(dq, Rq[fr])
+            wik[fr] = np.maximum(wik[fr], u)
+        local = tgt - off
+        c = chain_ik(rig, c, s + "UpLeg", s + "Leg", s + "Foot", local, wik)
+        g = globals_(rig, c)
+        qcur = fk.m2q(g[s + "Foot"][1])
+        set_local_from_global(rig, c, g, s + "Foot", fk.q2m(G.slerp(qcur, G.qnorm(rq), wik)))
+        g = globals_(rig, c)
+        miss[s] = float(np.linalg.norm(g[s + "Foot"][0] - local, axis=1).max())
+    return c, miss, locked
+
+
+# ------------------------------------------------------------------ shield held out, heavy attacks (v3)
+def place_hand(rig, c, side, at, w, ref=None, keep_motion=True, frame0=0):
+    """move a hand with IK (hand rotation kept) to a point given in the character frame (glTF axes, +Z forward) relative to
+    the same side's shoulder joint (<side>Arm), e.g. at=(-0.05, -0.04, 0.30) = held out in front of the shoulder, a little
+    toward the middle. keep_motion: the clip's own hand motion relative to the shoulder is kept on top (a knock-back or a
+    punch still shows), measured from frame0. w: (n,) weights."""
+    g = globals_(rig, c)
+    hd = side + "Hand"; sh = g[ref or side + "Arm"][0]
+    tgt = sh + np.asarray(at, float)[None]
+    if keep_motion:
+        rel = g[hd][0] - sh
+        tgt = tgt + (rel - rel[frame0])
+    tgt = g[hd][0] + (tgt - g[hd][0]) * np.asarray(w, float)[:, None]
+    return two_bone_ik(rig, c, side, tgt, None, g[hd][1])[0]
+
+
+def lean(rig, c, deg, w, bones=(("Spine02", 0.4), ("Spine01", 0.35), ("Spine", 0.25)), axis=(1.0, 0, 0)):
+    """add a rotation of deg*w (n,) about a character-frame axis, spread over the spine bones (global, applied from the
+    root up). axis (1,0,0) with deg < 0 leans the torso back (counterbalance), > 0 forward."""
+    ax = np.asarray(axis, float); ax /= np.linalg.norm(ax)
+    for bn, k in bones:
+        a = np.radians(deg * k) * np.asarray(w, float)
+        q = np.concatenate([np.sin(a / 2)[:, None] * ax[None], np.cos(a / 2)[:, None]], 1)
+        g = globals_(rig, c)
+        set_local_from_global(rig, c, g, bn, fk.q2m(q) @ g[bn][1])
+    return c
+
+
+# ------------------------------------------------------------------ flat lying pose (start of the get-ups, end of the knockdown)
+def lying_pose(rig, ref_pose, body, face="up", arm_out=20.0, elbow=15.0, weapons=None, shield_axes=None, clear=0.004,
+               neck_max=25.0):
+    """a clean flat lying pose built from the rest pose: body straight, legs as in the rest pose, arms relaxed (on the back:
+    beside the body, arm_out degrees from the torso, elbows bent `elbow` degrees; on the front: elbows out, hands on the floor
+    beside the head), then the whole body turned onto its back
+    (face='up': head toward -Z, as after falling backward) or front ('down': head toward +Z, as after falling forward), the
+    hips lowered until the skinned body (clipcheck.Body) touches the floor (lowest vertex at `clear`), and the head/neck
+    tilted (at most neck_max degrees) so the head rests on the floor as well. weapons: {weapon node: direction} in the
+    character frame for hand-held props laid flat beside the body (e.g. a blade pointing out to the side); a shield
+    (shield_axes given) lies flat, face up, its top toward the head. returns a pose dict like frame_pose()."""
+    pose = {b: {"T": np.asarray(rig.rest[b][0], float).copy(), "R": np.asarray(rig.rest[b][1], float).copy(),
+                "S": np.ones(3)} for b in ref_pose}
+    c = {"n": 1, "bones": {b: {k: v[k][None].copy() for k in v} for b, v in pose.items()}}
+    # arms. on the back: upper arm down and slightly out in the frontal plane, forearm bent toward the front (hands by the
+    # hips). on the front: elbows out to the sides, forearms toward the head, hands on the floor beside the head (the relaxed
+    # prone pose, close to a push-up start, so get-ups do not swing the elbows through the floor)
+    for side, sx in (("Left", 1.0), ("Right", -1.0)):
+        g = globals_(rig, c)
+        up, lo, hd = side + "Arm", side + "ForeArm", side + "Hand"
+        if face == "up":
+            a = np.radians(arm_out)
+            tgt = np.array([[sx * np.sin(a), -np.cos(a), 0.0]])
+        else:
+            tgt = np.array([[sx * 0.94, -0.34, 0.0]])
+        set_local_from_global(rig, c, g, up, rot_between(g[lo][0] - g[up][0], tgt) @ g[up][1])
+        g = globals_(rig, c)
+        d = (g[hd][0] - g[lo][0])[0]; d /= np.linalg.norm(d)
+        if face == "up":
+            e = np.radians(elbow)
+            fw = np.array([0, 0, 1.0]); fw = fw - d * d.dot(fw); fw /= np.linalg.norm(fw)
+            nd = np.cos(e) * d + np.sin(e) * fw
+        else:
+            nd = np.array([sx * 0.15, 0.93, 0.33]); nd /= np.linalg.norm(nd)
+        set_local_from_global(rig, c, g, lo, rot_between((g[hd][0] - g[lo][0]), nd[None]) @ g[lo][1])
+    if face == "down":                                    # pointed feet (instep on the floor), not toes dug into it
+        for side in ("Left", "Right"):
+            g = globals_(rig, c)
+            t = np.radians(70.0)
+            Rf = np.array([[1, 0, 0], [0, np.cos(t), -np.sin(t)], [0, np.sin(t), np.cos(t)]])
+            set_local_from_global(rig, c, g, side + "Foot", Rf[None] @ g[side + "Foot"][1])
+    # lay the body down: rotate the root (Hips) about +X
+    th = np.radians(-90.0 if face == "up" else 90.0)
+    Rx = np.array([[1, 0, 0], [0, np.cos(th), -np.sin(th)], [0, np.sin(th), np.cos(th)]])
+    c["bones"]["Hips"]["R"] = fk.m2q(Rx[None] @ fk.q2m(c["bones"]["Hips"]["R"]))
+    feet_dir = np.array([0, 0, 1.0 if face == "up" else -1.0])
+    for wn, dvec in (weapons or {}).items():
+        if wn in rig.weapons:                             # laid flat: axis along dvec, edge (node +X) horizontal
+            dv = np.asarray(dvec, float); dv = dv / np.linalg.norm(dv)
+            Rn = fk.q2m(np.asarray(rig.rest[wn][1], float)); fl = Rn.T @ rig.weapons[wn]["axis"]
+            ul = np.array([1.0, 0, 0]); ul = ul - fl * fl.dot(ul); ul /= np.linalg.norm(ul)
+            hz = np.cross([0, 1.0, 0], dv); hz /= np.linalg.norm(hz)
+            c = orient_prop(rig, c, wn, fl, ul, dv, hz, np.ones(1))
+    if shield_axes is not None and "weapon_shield" in rig.weapons:
+        c = orient_prop(rig, c, "weapon_shield", shield_axes["face"], shield_axes["up"], [0, 1, 0], list(-feet_dir), np.ones(1))
+    dom = body.b["dom"]
+    head = np.isin(dom, ["Head", "neck", "head_end", "headfront"])
+    arms = np.array([d.endswith(("Arm", "ForeArm", "Hand", "Shoulder")) for d in dom])
+    # the body rests on the back/chest, shoulders and legs; Hips-skinned cloth (capes, coat tails, skirts: rigid with the
+    # pelvis, e.g. fram's cape flares 26 cm behind the hips) may sink into the floor instead of propping the body up
+    trunk = np.isin(dom, ["Spine02", "Spine01", "Spine", "LeftShoulder", "RightShoulder", "LeftUpLeg", "RightUpLeg",
+                          "LeftLeg", "RightLeg", "LeftFoot", "RightFoot", "LeftToeBase", "RightToeBase"])
+    trunk_all = ~head & ~arms
+    spine = np.isin(dom, ["Spine02", "Spine01", "Spine"])
+    limbs = trunk & ~spine
+
+    def low(cc):
+        v = body.skin(globals_(rig, cc), 0)
+        ts, tl = v[spine, 1].min(), v[limbs, 1].min()
+        cloth = tl - ts > 0.05                            # spine-skinned cape reaching far past the back (fram): let it sink
+        t = tl if cloth else min(ts, tl)
+        keep = ~(trunk_all & ~trunk) & ~(spine if cloth else np.zeros(len(dom), bool))
+        return t, v[head, 1].min(), v[keep, 1].min()
+    t0, h0, _ = low(c)
+    c["bones"]["Hips"]["T"][0, 1] += clear - t0          # trunk (torso, legs) on the floor
+    # head: bend the neck (about the body's left-right axis, half in neck, half in Head) by the smallest angle that brings
+    # the head onto the floor without sinking it (the big head of these characters reaches the floor before the back)
+    g = globals_(rig, c)
+    ax = (g["LeftArm"][0] - g["RightArm"][0])[0]; ax /= np.linalg.norm(ax)
+    base = {bn: c["bones"][bn]["R"].copy() for bn in ("neck", "Head")}
+
+    def bend(phi):
+        for bn in ("neck", "Head"):
+            c["bones"][bn]["R"] = base[bn].copy()
+        for bn in ("neck", "Head"):
+            q = np.r_[np.sin(phi / 4) * ax, np.cos(phi / 4)]
+            gg = globals_(rig, c)
+            set_local_from_global(rig, c, gg, bn, fk.q2m(q)[None] @ gg[bn][1])
+        return low(c)[1]
+    best = (abs(bend(0.0) - clear), 0.0)
+    for phi in np.radians(np.arange(-neck_max, neck_max + 0.1, 2.5)):
+        h = bend(phi)
+        if h >= clear - 0.002 and (abs(h - clear), abs(phi)) < (best[0] + 1e-9, abs(best[1])) or best[0] > 0.004 and abs(h - clear) < best[0]:
+            best = (abs(h - clear), phi)
+    bend(best[1])
+    # hands (with their props) rest on the floor: move each hand joint straight down/up with arm IK, hand rotation kept
+    for side in ("Left", "Right"):
+        hm = dom == side + "Hand"
+        v = body.skin(globals_(rig, c), 0)
+        g = globals_(rig, c)
+        tgt = g[side + "Hand"][0].copy(); tgt[0, 1] += clear + 0.002 - v[hm, 1].min()
+        c = two_bone_ik(rig, c, side, tgt, None, g[side + "Hand"][1])[0]
+    t0, h0, a0 = low(c)
+    if a0 < 0:                                            # an arm (or the head) still below the floor: raise everything
+        c["bones"]["Hips"]["T"][0, 1] += clear - a0
+    return frame_pose(c, 0)
+
+
+def load_hips(rig, c, lean_deg, dip, w):
+    """heavy wind-up: lean the torso (lean_deg about the character's X axis, < 0 = back) and sink the hips by dip metres,
+    both scaled by w (n,); the feet are put back where they were with leg IK (ankle position and rotation kept)."""
+    g0 = globals_(rig, c)
+    feet = {s: (g0[s + "Foot"][0].copy(), g0[s + "Foot"][1].copy()) for s in ("Left", "Right")}
+    c = lean(rig, c, lean_deg, w)
+    c["bones"]["Hips"]["T"][:, 1] -= dip * np.asarray(w, float)
+    for s in ("Left", "Right"):
+        c = chain_ik(rig, c, s + "UpLeg", s + "Leg", s + "Foot", feet[s][0], np.ones(nframes(c)))
+        g = globals_(rig, c)
+        set_local_from_global(rig, c, g, s + "Foot", feet[s][1])
+    return c
+
+
+def hands_above_floor(rig, c, body, clear=0.004, sigma=1.5, keep=(False, False)):
+    """lift each hand whose skinned mesh (clipcheck.Body) dips below the floor (y = clear) straight up with arm IK, hand
+    rotation kept; the lift is smoothed over time (gaussian, sigma frames) and never lowers a hand. For blends between lying
+    and crouching poses, which can swing an arm through the floor. keep=(first, last) leaves the clip's end frames as they
+    are (eased over 4 frames), for clips that start/end exactly on a flat lying pose. returns (clip, max lift per side)."""
+    from scipy.ndimage import gaussian_filter1d
+    n = nframes(c)
+    dom = body.b["dom"]
+    out = {}
+    for s in ("Left", "Right"):
+        hm = dom == s + "Hand"
+        g = globals_(rig, c)
+        lo = np.array([body.skin(g, f)[hm, 1].min() for f in range(n)])
+        need = np.maximum(clear - lo, 0)
+        if need.max() <= 0:
+            out[s] = 0.0
+            continue
+        lift = np.maximum(gaussian_filter1d(need, sigma, mode="nearest"), need)
+        env = np.ones(n)                                  # keep=(first, last): leave pose-locked ends (flat poses) untouched
+        if keep[0]:
+            env = np.minimum(env, smooth(np.arange(n) / 4.0))
+        if keep[1]:
+            env = np.minimum(env, smooth((n - 1 - np.arange(n)) / 4.0))
+        lift = lift * env
+        tgt = g[s + "Hand"][0].copy(); tgt[:, 1] += lift
+        w = (lift > 1e-5).astype(float)
+        c = two_bone_ik(rig, c, s, tgt, w, g[s + "Hand"][1])[0]
+        out[s] = float(lift.max())
+    return c, out
+
+
+def settle_arms(rig, c, f0, f1, weapons=(), sides=("Left", "Right"), bulge=0.06, lift=0.05):
+    """lying body: move each hand from its spot at f0 to its spot at f1 along an arc around its shoulder on the OUTSIDE of
+    the body (the hand never passes over the torso or face), a little away from the shoulder and off the floor mid-way,
+    with arm IK; hand-held props in `weapons` point radially away from the shoulder (laid down outward) on the way, turning
+    in over 9 frames. The hand edits fade in over the first 3 frames and out on f1, so frame f1 (e.g. the flat pose of a knockdown's tail) is unchanged."""
+    n = nframes(c)
+    fr = np.arange(f0, f1 + 1)
+    u = smooth((fr - f0) / max(f1 - f0, 1))
+    w = np.zeros(n); w[fr] = np.minimum(smooth((fr - f0) / 3.0), 1.0) * np.minimum(1.0, (f1 - fr) / 2.0)
+    w[f1] = 0.0
+    wa = np.zeros(n); wa[fr] = smooth((fr - f0) / 9.0) * smooth((f1 - fr) / 3.0)   # props turn in more slowly
+    for s in sides:
+        sx = 1.0 if s == "Left" else -1.0
+        g = globals_(rig, c)
+        S = g[s + "Arm"][0]; H = g[s + "Hand"][0]
+        rel0, rel1 = H[f0] - S[f0], H[f1] - S[f1]
+        a0, a1 = np.arctan2(rel0[0], rel0[2]), np.arctan2(rel1[0], rel1[2])
+        da = (a1 - a0 + np.pi) % (2 * np.pi) - np.pi
+        if np.sign(np.sin(a0 + da / 2)) != sx:          # the short way crosses the body: go round the outside
+            da = da - np.sign(da) * 2 * np.pi
+        r0, r1 = np.hypot(rel0[0], rel0[2]), np.hypot(rel1[0], rel1[2])
+        a = a0 + da * u; r = r0 + (r1 - r0) * u + bulge * np.sin(np.pi * u)
+        tgt = H.copy()
+        tgt[fr, 0] = S[fr, 0] + r * np.sin(a); tgt[fr, 2] = S[fr, 2] + r * np.cos(a)
+        tgt[fr, 1] = H[f0, 1] + (H[f1, 1] - H[f0, 1]) * u + lift * np.sin(np.pi * u)
+        c = two_bone_ik(rig, c, s, tgt, w, g[s + "Hand"][1])[0]
+        for wn in weapons:
+            if wn in rig.weapons and rig.weapons[wn]["bone"] == s + "Hand":
+                g = globals_(rig, c)
+                rad = g[s + "Hand"][0] - g[s + "Arm"][0]; rad[:, 1] = 0
+                rad /= np.maximum(np.linalg.norm(rad, axis=1, keepdims=True), 1e-6)
+                c = aim_weapon(rig, c, wn, rad, wa)
+    return c
+
+
+def plant_weapon(rig, c, wname, f0, f1, ease=3, clear=0.004):
+    """hold a weapon on the floor (frames f0..f1, eased in/out over `ease` frames): the weapon hand moves straight down/up
+    with arm IK (hand rotation kept) so the weapon's lowest vertex sits at y = clear. For a heavy strike whose head should
+    stay bitten into the ground after the weapon-through-floor fix lifted it. Where the arm cannot reach (fully planted
+    frames only), the weapon is tipped down at the wrist (at most ~15 deg). returns (clip, max hand move in metres)."""
+    n = nframes(c)
+    W = rig.weapons[wname]; hb = W["bone"]; side = hb[:-4]
+    g = globals_(rig, c)
+    P, R = g[hb]
+    lo = (np.einsum("nij,kj->nki", R, W["verts"]) + P[:, None])[:, :, 1].min(1)
+    f = np.arange(n, dtype=float)
+    w = np.minimum(smooth((f - (f0 - ease)) / ease), smooth(((f1 + ease) - f) / ease))
+    tgt = P.copy(); tgt[:, 1] -= (lo - clear) * w
+    c = two_bone_ik(rig, c, side, tgt, (w > 0).astype(float), R)[0]
+    for _ in range(3):                                    # what the arm cannot reach: tip the weapon down at the wrist
+        g = globals_(rig, c); P, R = g[hb]
+        V = np.einsum("nij,kj->nki", R, W["verts"]) + P[:, None]
+        k = V[:, :, 1].argmin(1); low = V[np.arange(n), k]; rest_ = (low[:, 1] - clear) * (w > 0.999)   # planted frames only
+        arm = low - P; hz = np.linalg.norm(arm[:, [0, 2]], axis=1)
+        ang = np.arcsin(np.clip(rest_ / np.maximum(np.linalg.norm(arm, axis=1), 1e-6), -0.09, 0.09))
+        ax = np.cross(arm, [0, 1.0, 0]); ax /= np.maximum(np.linalg.norm(ax, axis=1, keepdims=True), 1e-9)
+        q = np.concatenate([ax * np.sin(-ang / 2)[:, None], np.cos(-ang / 2)[:, None]], 1)
+        q[hz < 1e-4] = [0, 0, 0, 1.0]
+        set_local_from_global(rig, c, g, hb, fk.q2m(q) @ R)
+    return c, float(np.abs((lo - clear) * w).max())
+
+
+def root_from_feet(rig, c, axis=None, smooth_k=5):
+    """in-place locomotion loop (library clip without travel): rebuild the travel from the supporting foot. Each frame the
+    lower foot is taken as planted; the body moves opposite to its horizontal velocity. The per-frame velocity is smoothed,
+    replaced by its mean over the loop (constant speed), optionally projected on `axis` (character frame), and added to the
+    Hips X/Z, so strip_root moves it into the root json. returns (clip, speed m/s)."""
+    from scipy.ndimage import uniform_filter1d
+    n = nframes(c)
+    g = globals_(rig, c)
+    y = {s: np.minimum(g[s + "Foot"][0][:, 1], g[s + "ToeBase"][0][:, 1]) for s in ("Left", "Right")}
+    P = {s: (g[s + "Foot"][0] + g[s + "ToeBase"][0]) / 2 for s in ("Left", "Right")}
+    v = np.zeros((n, 3))
+    for f in range(1, n):
+        s = "Left" if y["Left"][f] < y["Right"][f] else "Right"
+        v[f] = -(P[s][f] - P[s][f - 1])
+    v[:, 1] = 0
+    v[0] = v[1]
+    v = uniform_filter1d(v, smooth_k, axis=0, mode="wrap")
+    m = v.mean(0)
+    if axis is not None:
+        a = np.asarray(axis, float); a /= np.linalg.norm(a); m = a * max(float(m @ a), 0.0)
+    c["bones"]["Hips"]["T"][:, 0] += m[0] * np.arange(n)
+    c["bones"]["Hips"]["T"][:, 2] += m[2] * np.arange(n)
+    return c, float(np.linalg.norm(m) * 30)
+
+
+def chest_yaw(rig, c):
+    """facing of the chest per frame (degrees about +Y, 0 = +Z), from the shoulder line"""
+    g = globals_(rig, c)
+    f = np.cross(g["LeftArm"][0] - g["RightArm"][0], [0, 1.0, 0])
+    return np.degrees(np.arctan2(f[:, 0], f[:, 2]))
+
+
+def face_yaw(rig, c, target_deg, bones=(("Spine02", 0.4), ("Spine01", 0.35), ("Spine", 0.25))):
+    """turn the torso about the vertical (spread over the spine) by one constant angle so that its mean chest facing
+    becomes target_deg (e.g. a side-stepping walk whose torso is turned away, made to face forward). returns (clip, turn)."""
+    cur = chest_yaw(rig, c)
+    d = (target_deg - np.degrees(np.arctan2(np.sin(np.radians(cur)).mean(), np.cos(np.radians(cur)).mean())) + 180) % 360 - 180
+    n = nframes(c)
+    for bn, k in bones:
+        a = np.radians(d * k)
+        q = np.tile([0, np.sin(a / 2), 0, np.cos(a / 2)], (n, 1))
+        g = globals_(rig, c)
+        set_local_from_global(rig, c, g, bn, fk.q2m(q) @ g[bn][1])
+    return c, float(d)

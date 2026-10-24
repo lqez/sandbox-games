@@ -146,6 +146,14 @@ def body_from(glb_path, base_j):
     out["JOINTS_0"] = remap[out["JOINTS_0"].astype(int)]
     out["ibm"] = acc(j, binc, j["skins"][0]["inverseBindMatrices"]).reshape(-1, 4, 4)
     out["ibm_joints"] = src_joints
+    # a re-textured body (rebake_body.py) carries its own base colour image: write_glb swaps it in for the body material's
+    tex = (j.get("materials") or [{}])[pr["material"]].get("pbrMetallicRoughness", {}).get("baseColorTexture") \
+        if "material" in pr else None
+    if tex is not None:
+        im = j["images"][j["textures"][tex["index"]]["source"]]
+        bv = j["bufferViews"][im["bufferView"]]
+        out["image"] = {"bytes": bytes(binc[bv.get("byteOffset", 0): bv.get("byteOffset", 0) + bv["byteLength"]]),
+                        "mimeType": im.get("mimeType", "image/jpeg")}
     return out
 
 
@@ -175,6 +183,28 @@ def write_glb(base_path, out_path, clips, fps=30, order=None, body=None, node_ov
                 used_acc.update(tg.values())
     for s in j.get("skins", []):
         if "inverseBindMatrices" in s: used_acc.add(s["inverseBindMatrices"])
+    rep_img = None
+    if body is not None and body.get("image"):
+        # the body's base colour image is replaced (re-textured body). The image keeps its name (Godot extracts it to the
+        # same file); if another material uses the same texture/image, a new image + texture is added for the body instead
+        pr0 = j["meshes"][body_mesh]["primitives"][0]
+        bmat = j["materials"][pr0["material"]]
+        bct = bmat["pbrMetallicRoughness"]["baseColorTexture"]
+        img_i = j["textures"][bct["index"]]["source"]
+        users = []
+        for mi, m in enumerate(j["materials"]):
+            t_ = m.get("pbrMetallicRoughness", {}).get("baseColorTexture")
+            if mi != pr0["material"] and t_ is not None and j["textures"][t_["index"]]["source"] == img_i:
+                users.append(mi)
+        if users:
+            j["images"].append({"name": j["images"][img_i].get("name", "body") + "_baked"})
+            j["textures"].append(dict(j["textures"][bct["index"]], source=len(j["images"]) - 1))
+            bct["index"] = len(j["textures"]) - 1
+            rep_img = len(j["images"]) - 1
+        else:
+            rep_img = img_i
+            j["images"][img_i].pop("bufferView", None)      # old atlas bytes are dropped from the buffer
+        bct.pop("texCoord", None)
     keep_acc = sorted(used_acc)
     used_bv = set(j["accessors"][i]["bufferView"] for i in keep_acc if "bufferView" in j["accessors"][i])
     for im in j.get("images", []):
@@ -248,6 +278,14 @@ def write_glb(base_path, out_path, clips, fps=30, order=None, body=None, node_ov
         pr["indices"] = add_typed(idx.reshape(-1, 1), "SCALAR", 5125 if idx.max() > 65535 else 5123)
         for a in ("targets",):
             pr.pop(a, None)
+        if rep_img is not None:
+            data = body["image"]["bytes"]
+            while len(out) % 4: out.append(0)
+            new_bv.append({"buffer": 0, "byteOffset": len(out), "byteLength": len(data)})
+            out.extend(data)
+            j["images"][rep_img]["bufferView"] = len(new_bv) - 1
+            j["images"][rep_img]["mimeType"] = body["image"]["mimeType"]
+            j["images"][rep_img].pop("uri", None)
 
     anims = []
     for cname in (order or sorted(clips)):
