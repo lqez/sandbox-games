@@ -7,8 +7,8 @@ func _ready() -> void:
 	var cam := Camera3D.new()
 	cam.fov = 30.0
 	add_child(cam)
-	cam.position = Vector3(0, 1.75, 1.9)
-	cam.look_at(Vector3(0, 1.62, 0))
+	cam.position = Vector3(0, 1.4, 4.0)
+	cam.look_at(Vector3(0, 1.1, 0))
 	var sun := DirectionalLight3D.new()
 	sun.rotation = Vector3(-0.6, 0.4, 0)
 	sun.light_energy = 1.0
@@ -27,17 +27,12 @@ func _ready() -> void:
 		var m: Node3D = load(path).instantiate()
 		m.scale = Vector3.ONE * 1.6
 		add_child(m)
-		m.position = Vector3((k - 1) * 0.62, 0, 0)
-		m.rotation.y = 0.35
+		m.position = Vector3((k - 1) * 1.3, 0, 0)
+		m.rotation.y = 0.35 + k * 2.1
 		var mats := Fx.toonify(m, 0.0022)
 		# 0: 외곽선 그대로, 1: 외곽선 두께 0(같은 자리에 그린다), 2: 외곽선 끔
 		for mt in mats:
-			if k == 1 and mt.next_pass != null:
-				var o: ShaderMaterial = mt.next_pass.duplicate()
-				o.set_shader_parameter("width", 0.0)
-				mt.next_pass = o
-			elif k == 2:
-				mt.next_pass = null
+			mt.next_pass = null
 		var ap: AnimationPlayer = m.find_children("*", "AnimationPlayer", true, false)[0]
 		ap.play("idle")
 		models.append(m)

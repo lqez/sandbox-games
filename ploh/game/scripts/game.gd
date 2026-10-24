@@ -128,8 +128,15 @@ var _players: Array = []
 func _ready() -> void:
 	randomize()
 	_build_env()
-	for name in ["whoosh", "whoosh_heavy", "hit", "heavy", "glint", "just", "counter", "dodge", "kill", "step"]:
-		_sfx[name] = load("res://assets/sfx/%s.wav" % name)
+	# 효과음(ElevenLabs, assets/sfx/README.md). 변주(_1, _2…)가 있으면 재생할 때마다 하나를 고른다
+	for name in ["whoosh", "whoosh_heavy", "hit", "heavy", "glint", "just", "counter", "dodge", "kill", "step",
+			"block", "parry", "bomb", "break", "pickup", "knockdown", "getup", "stumble", "arrow_shoot", "arrow_hit"]:
+		var variants: Array = []
+		for k in range(1, 5):
+			var vp := "res://assets/sfx/%s_%d.wav" % [name, k]
+			if ResourceLoader.exists(vp):
+				variants.append(load(vp))
+		_sfx[name] = variants if variants.size() > 1 else [load("res://assets/sfx/%s.wav" % name)]
 	for i in 12:
 		var ap := AudioStreamPlayer.new()
 		add_child(ap)
@@ -146,6 +153,8 @@ func _ready() -> void:
 	camera = Camera3D.new()
 	camera.fov = 42.0
 	add_child(camera)
+	_hand_noise.noise_type = FastNoiseLite.TYPE_SIMPLEX_SMOOTH
+	_hand_noise.frequency = 0.02
 	# UI는 3D와 달리 화면 원래 해상도로 그리도록 루트 창에 붙인다
 	var layer := CanvasLayer.new()
 	if boot != null:
@@ -502,13 +511,29 @@ func _update_camera(delta: float) -> void:
 	_focus = target + (x + tmp) * exp(-omega * real)
 	cam_dist = lerpf(cam_dist, want, 1.0 - exp(-real * (6.0 if (_punch > 0.0 or uw > 0.0) else 1.8)))
 	cam_kick = cam_kick * exp(-real / 0.03)
-	var pos := _focus + dir * cam_dist + cam_kick
-	var look := _focus + cam_kick
+	# 핸드헬드: 느린 떠다님(위치·시선 함께)과 잔떨림(시선만), 살짝 기울기. 연출 중에는 그대로 둔다
+	_hand_t += real
+	var hs := (1.0 if fighting else 0.6) * (0.4 if uw > 0.0 or cine_t > 0.0 else 1.0)
+	var width := 2.0 * cam_dist * tan(deg_to_rad(camera.fov) / 2.0)
+	var right_w := Vector3(1, 0, 0).rotated(Vector3.UP, deg_to_rad(cam_yaw))
+	var n1 := Vector2(_hand_noise.get_noise_2d(_hand_t * 18.0, 0.0), _hand_noise.get_noise_2d(0.0, _hand_t * 18.0 + 37.0))
+	var n2 := Vector2(_hand_noise.get_noise_2d(_hand_t * 190.0, 91.0), _hand_noise.get_noise_2d(53.0, _hand_t * 190.0))
+	var drift := (right_w * n1.x + Vector3.UP * n1.y * 0.6) * width * HAND_SLOW * hs
+	var jit := (right_w * n2.x + Vector3.UP * n2.y) * width * HAND_FAST * hs
+	var pos := _focus + dir * cam_dist + cam_kick + drift
+	var look := _focus + cam_kick + drift + jit
 	camera.global_position = pos
 	camera.look_at(look, Vector3.UP)
+	camera.rotate_object_local(Vector3.FORWARD, deg_to_rad(HAND_ROLL * _hand_noise.get_noise_2d(_hand_t * 12.0, 200.0) * hs))
 
 
 const ULT_CAM := 1.25
+## 핸드헬드(짐벌에 얹은 느낌): 0.3Hz 안팎의 느린 떠다님과 아주 작은 3Hz 떨림. 싸울 때 조금 더, 걸을 때 덜
+const HAND_SLOW := 0.0075            # 느린 떠다님의 세기(화면 너비 비율)
+const HAND_FAST := 0.0012            # 잔떨림의 세기
+const HAND_ROLL := 0.35              # 기울기(도)
+var _hand_noise := FastNoiseLite.new()
+var _hand_t := 0.0
 
 
 ## 카메라가 등 뒤에서 바라볼 방향: 가까운 적들의 무게중심(가까울수록 무겁게), 없으면 다음 길목
@@ -789,8 +814,7 @@ func hit_enemy(e: Node3D, dmg: float, hero: Node3D, just: bool, label: String, w
 		e.freeze(0.04)
 		hero.recoil(e.global_position)
 		kick(-dir, 0.012)
-		sfx("glint", 0.05)
-		sfx("counter", 0.1, -6.0)
+		sfx("parry", 0.05)
 		vibrate(40)
 		combo = 0
 		return
@@ -1001,7 +1025,7 @@ func enemy_hit(e: Node3D, dmg: float) -> void:
 		Vfx.sparks(self, at4, to_e.normalized(), Vector3.UP, Color(0.87, 0.92, 1.0), 14)
 		Vfx.clash(self, at4, Vector3.UP, Color(0.85, 0.9, 1.0))
 		popup(player.global_position + Vector3(0, 2.4, 0), "막음", Color(0.8, 0.85, 0.95), 34)
-		sfx("glint", 0.1, -2.0)
+		sfx("block", 0.08, -2.0)
 		player.freeze(0.04)
 		e.freeze(0.05)
 		e.knock = -to_e.normalized() * 1.5
@@ -1037,6 +1061,7 @@ func arrow_hit(a: Node3D) -> void:
 		player.perfect_dodge()
 	if hurt:
 		combo = 0
+		sfx("arrow_hit", 0.1, -2.0)
 		Vfx.blood(self, a.global_position, a.vel.normalized(), 6, height_at(a.global_position.x, a.global_position.z))
 
 
@@ -1064,8 +1089,7 @@ func parried(e: Node3D) -> void:
 	# 아주 짧은 청백 화면 섬광(70ms): 패링은 플레이어의 순간이라 화면 전체로 알린다
 	hud.flash(Color(0.85, 0.93, 1.0), 0.07)
 	popup(hp + Vector3(0, 2.6, 0), "패링!", Color(0.7, 0.92, 1.0), 60)
-	sfx("glint", 0.05, 2.0)
-	sfx("counter", 0.05, -2.0)
+	sfx("parry", 0.05, 1.0)
 	vibrate(50)
 	kick(dir, 0.012)
 	slowmo(0.3, 0.22)
@@ -1080,7 +1104,11 @@ func parried(e: Node3D) -> void:
 func ultimate_burst(hero: Node3D) -> void:
 	ult_camera(hero)
 	popup(hero.global_position + Vector3(0, 3.2, 0), "궁극기!", Color(1, 0.9, 0.5), 84)
-	slowmo(0.4, 0.5)
+	# 깊은 슬로(0.2배, 실제 0.7초)로 들어가 서서히 풀리고, 화면 전체에 영웅 색 집중선·테두리
+	slowmo(0.2, 0.7)
+	hud.ult_fx(hero.data.color, 1.4)
+	hud.flash(Color(hero.data.color.lightened(0.6), 1.0), 0.14)
+	vibrate(90)
 	shake(0.8)
 	ring(hero.global_position, 6.0, hero.data.color.lightened(0.4))
 	for e in enemies_in(hero.global_position, hero.face, 6.0, 360.0):
@@ -1347,11 +1375,11 @@ func add_item(k: String) -> void:
 	if k == "gold":
 		gold += 10
 		popup(at, "+10", Color(1, 0.85, 0.3), 28)
-		sfx("glint", 0.2, -10.0)
+		sfx("pickup", 0.15, -8.0)
 		return
 	inventory[k] = int(inventory.get(k, 0)) + 1
 	popup(at, "+" + str(Item.KINDS[k].name), Color(0.85, 0.95, 1.0), 32)
-	sfx("glint", 0.1, -4.0)
+	sfx("pickup", 0.1, -3.0)
 
 
 ## 가방의 아이템을 쓴다(왼쪽 아래 버튼, 자동 전투)
@@ -1464,7 +1492,8 @@ func just_cue(hero: Node3D) -> void:
 func sfx(name: String, pitch_var := 0.1, volume_db := 0.0) -> void:
 	for ap: AudioStreamPlayer in _players:
 		if not ap.playing:
-			ap.stream = _sfx[name]
+			var pool: Array = _sfx[name]
+			ap.stream = pool[randi() % pool.size()]
 			ap.pitch_scale = randf_range(1.0 - pitch_var, 1.0 + pitch_var)
 			ap.volume_db = volume_db
 			ap.play()

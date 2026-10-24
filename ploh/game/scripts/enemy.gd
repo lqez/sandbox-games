@@ -114,6 +114,7 @@ var whiff_t := 0.0           # 헛친 뒤 빈틈(이 동안 맞으면 더 아프
 var _feint := false
 var _hover := randf() * TAU  # 기다리며 거리를 재는 들락날락의 위상
 var _punish := false         # 영웅이 헛친 틈: 바로 공격권을 받아 친다
+var _slowed := false         # 이번 공격에 슬로모션을 걸었는지(보스)
 var disarmed := false        # 칼을 놓쳤다(주우러 간다)
 var _dropped: RigidBody3D    # 떨어진 칼(물리)
 var _blade_mesh: MeshInstance3D
@@ -362,6 +363,12 @@ func _physics_process(delta: float) -> void:
 					_play("idle")
 			"wind":
 				_update_telegraph()
+				if kind == "boss" and not _slowed and wind_time - t <= COUNTER_WINDOW and hero.state != "dead" and dist < stats.reach + strike_area + 2.0:
+					# 보스의 강한 공격: 카운터 구간이 열리는 순간 느려져 받아 내거나 피할 틈을 준다(실제 0.9초 동안 0.4배)
+					_slowed = true
+					game.slowmo(0.4, 0.9)
+					game.hud.flash(Color(1.0, 0.85, 0.3, 1.0), 0.1)
+					game.sfx("glint", 0.0, -4.0)
 				if _feint and t >= wind_time * 0.45:
 					_do_feint()
 					return
@@ -509,6 +516,7 @@ func _start_wind(hero: Node3D) -> void:
 	else:
 		strike_at = hero.global_position
 	_feint = not _punish and randf() < FEINT.get(kind, 0.0) and strike_area < 4.0
+	_slowed = false
 	_punish = false
 	# 무기가 닿는 순간(접촉 프레임)이 예고 끝과 맞도록 재생 위치를 이끈다(_servo_wind)
 	if anim.has_animation(pick[0]):
@@ -748,6 +756,7 @@ func _clear_aim() -> void:
 
 ## 시위를 놓는다: 영웅이 움직이는 쪽을 조금 앞질러 노린다
 func _release(hero: Node3D) -> void:
+	game.sfx("arrow_shoot", 0.1, -4.0)
 	_clear_aim()
 	var from := global_position + Vector3(0, 1.3 * stats.scale / 1.6, 0) + face * 0.5
 	var sk: Skeleton3D = model.find_children("*", "Skeleton3D", true, false)[0]
@@ -945,7 +954,7 @@ func take_hit(dmg: float, dir: Vector3, power: float, at := Vector3.INF, blade :
 		_trail_wait = 0.35
 		if state == "down" and ragdoll.sim.active:
 			for pb in ragdoll.bodies:
-				pb.apply_central_impulse(dir * 0.6 * stats.scale)
+				pb.apply_central_impulse(dir * 0.6 * pb.mass)
 		if hp <= 0.0:
 			_die(dir)
 			return "dead"
@@ -1043,6 +1052,7 @@ func take_hit(dmg: float, dir: Vector3, power: float, at := Vector3.INF, blade :
 			knock *= 0.3
 			_play("stumble", 1.15, 0.05, true)
 			_snap("stumble", [1.5, 0.12, 1.0, 0.3, 1.15])
+			game.sfx("stumble", 0.1, -6.0)
 		else:
 			t = 0.75 if stats.poise >= 1.0 else 0.55
 			_play("hit", 1.8, 0.04, true)
@@ -1194,7 +1204,7 @@ func _do_feint() -> void:
 func _wall_slam(n: Vector3, spd: float) -> void:
 	game.shake(0.12)
 	game.sfx("heavy", 0.15, -8.0)
-	var k: float = clampf(spd / 4.0, 0.8, 1.6) * stats.scale
+	var k: float = clampf(spd / 4.0, 0.8, 1.6)
 	_knockdown()
 	ragdoll.topple(n * 2.6 * k + Vector3.DOWN * 0.6 * k, -n * 0.9 * k)
 
@@ -1203,7 +1213,7 @@ func _wall_slam(n: Vector3, spd: float) -> void:
 func _blown(dir: Vector3, power: float) -> void:
 	_knockdown()
 	# 윗몸은 뒤로, 다리는 앞으로 쓸려 올라가 몸이 뒤로 젖혀진 채 등으로 떨어진다(그냥 밀면 무릎부터 주저앉는다)
-	var k: float = (1.0 + (power - 11.0) * 0.1) * stats.scale
+	var k: float = 1.0 + (power - 11.0) * 0.1
 	ragdoll.topple((dir * 3.2 + Vector3.UP * 1.4) * k, (-dir * 1.0 + Vector3.UP * 2.4) * k)
 
 
@@ -1211,12 +1221,12 @@ func _blown(dir: Vector3, power: float) -> void:
 func _swept(dir: Vector3, blade: Vector3) -> void:
 	var b := Vector3(blade.x, 0.0, blade.z).normalized() if Vector3(blade.x, 0.0, blade.z).length() > 0.1 else dir
 	_knockdown()
-	var k: float = stats.scale
-	ragdoll.topple((-b * 0.8 + dir * 0.6 + Vector3.DOWN * 0.4) * k, (b * 2.6 + Vector3.UP * 1.6) * k)
+	ragdoll.topple(-b * 0.8 + dir * 0.6 + Vector3.DOWN * 0.4, b * 2.6 + Vector3.UP * 1.6)
 
 
 ## 쓰러짐: 애니메이션과 절차적 보정을 끄고 물리 뼈대로 넘긴다. 멎으면 일어난다(_down_tick)
 func _knockdown() -> void:
+	game.sfx("knockdown", 0.08, -2.0)
 	state = "down"
 	t = 0.0
 	ready_to_attack = false
@@ -1292,6 +1302,7 @@ func _get_up() -> void:
 	proc.plant = false
 	proc.blend_from(pose, 0.35)
 	_play(clip, 0.9, 0.0, true)
+	game.sfx("getup", 0.1, -8.0)
 
 
 func _die(dir: Vector3) -> void:
@@ -1310,7 +1321,7 @@ func _die(dir: Vector3) -> void:
 	anim.stop()
 	proc.active = false
 	if ragdoll != null and not ragdoll.bodies.is_empty():
-		ragdoll.start(dir * (1.5 if ragdoll.sim.active else 4.5) * stats.scale)
+		ragdoll.start(dir * (1.2 if ragdoll.sim.active else 3.2))
 	else:
 		_play("death", 1.2, 0.05, true)
 	var tw := create_tween()

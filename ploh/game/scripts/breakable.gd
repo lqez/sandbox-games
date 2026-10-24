@@ -134,7 +134,7 @@ func smash(dir: Vector3) -> void:
 	if broken:
 		return
 	broken = true
-	game.sfx("heavy", 0.2, -6.0)
+	game.sfx("break", 0.1, -3.0)
 	game.spark(global_position + Vector3(0, height * 0.5, 0), Color(1, 0.85, 0.6), dir, 8)
 	# 조각: 몇 개의 나뭇조각이 튀어 바닥에 흩어진다(소품·벽·바닥과 부딪힌다)
 	var mat := Fx.mat(color)

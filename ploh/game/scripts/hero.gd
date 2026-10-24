@@ -47,7 +47,7 @@ const TURN_MAX := 11.0              # 몸을 돌리는 최대 각속도(rad/s). 
 ## 공격 클립의 시간 재배치(기본 속도 배율). 예비 동작과 베기 안에서는 다시 가감속을 준다
 const WIND_RATE := 0.85
 const STRIKE_RATE := 1.8
-const HOLD := 0.1
+const HOLD := 0.07                   # 뻗은 자세를 붙잡는 시간(멈추는 게 아니라 천천히 흘러간다)
 ## 동작의 이징(절도): 예비 동작은 빠르게 들어 올려 꼭대기에서 멈칫 모으고(2.0 → 0.3),
 ## 베기는 그 멈춤에서 터지듯 나가 가속하며 지나간다(0.9 → 1.5). 뻗은 자세에서 딱 멎고, 거둘 때는 천천히 시작해 가속했다가 내려놓는다.
 ## 속도는 클립 재생 위치의 함수이므로, 그만큼 늘어나는 시간(K)을 미리 곱해 전체 길이를 지킨다
@@ -711,6 +711,7 @@ func stagger_back(from: Vector3) -> void:
 	_back_decel = 2.0
 	_play("stumble", 1.2, 0.05, true)
 	_snap("stumble", [1.5, 0.1, 1.0, 0.3, 1.2])
+	game.sfx("stumble", 0.1, -5.0)
 
 
 ## 나가떨어진다(보스의 내려찍기 등): 날아가 등으로 떨어졌다가 일어선다. 그동안은 맞지 않는다
@@ -733,6 +734,7 @@ func knockdown(from: Vector3) -> void:
 	proc.plant = false
 	_down_len = anim.get_animation("knockdown").length / 1.5
 	_play("knockdown", 1.5, 0.05, true)
+	game.sfx("knockdown", 0.05, 0.0)
 
 
 ## 막는 중에 적의 칼을 받았다: 피해를 크게 줄이고, 충격에 반걸음 밀리며 버틴다
@@ -1355,7 +1357,8 @@ func _clip_speed(c: Dictionary) -> float:
 	if _end_t < 0.0:
 		return _strike_spd * lerpf(STRIKE_EASE.x, STRIKE_EASE.y, clampf((pos - cl.start) / maxf(cl.end - cl.start, 0.001), 0.0, 1.0))
 	if t < c.hold_end:
-		return 0.02 if t < c.end + 0.1 else 0.15
+		# 뻗은 자세: 멎지 않고 천천히 흘러간다(느림-빠름-느림의 '느림'이지 정지가 아니다)
+		return 0.2
 	var s := clampf((pos - cl.end) / maxf(cl.len - cl.end, 0.001), 0.0, 1.0)
 	return _rec_speed() * (0.45 + 1.1 * sin(PI * s)) * REC_K
 
@@ -1790,14 +1793,15 @@ func _posture() -> void:
 			var c := _swing()
 			if _end_t < 0.0 and _clip_pos() < cl.get("start", 0.3):
 				# 예비: 베는 반대쪽으로 몸통을 감고 상체를 조금 일으킨다(힘을 모은다)
-				proc.swing_twist = -spin * 0.4 * m
-				proc.swing_bend = -0.05 - 0.08 * down
-				proc.swing_rate = 16.0
+				# 예비: 베는 반대쪽으로 크게 감고 윗몸을 일으킨다(활시위를 당기듯). 빠르게 들어가 끝에서 가라앉는다
+				proc.swing_twist = -spin * 0.6 * m
+				proc.swing_bend = -0.1 - 0.1 * down
+				proc.swing_rate = 14.0
 			elif t < c.hold_end:
 				# 베기와 뻗은 자세: 골반부터 칼 쪽으로 돌고 상체가 칼을 따라 숙는다. 빠르게 들어가 붙잡는다
-				proc.swing_twist = spin * 0.5 * m
+				proc.swing_twist = spin * 0.55 * m
 				proc.swing_bend = (0.16 + 0.3 * down) * m * heavy
-				proc.swing_rate = 30.0
+				proc.swing_rate = 36.0
 			else:
 				# 거두기: 천천히 일어선다
 				proc.swing_bend = 0.04

@@ -7,24 +7,26 @@ extends RefCounted
 
 const WALL_LAYER := 16
 
-## [뼈, 다음 뼈(길이 방향), 굵기(m, 모델 크기 1 기준), 관절 원뿔 각도]
+## [뼈, 다음 뼈(길이 방향), 굵기(m, 모델 크기 1 기준), 관절 원뿔 각도, 무게(kg, 사람 크기 기준)]
+## 관절은 사람 관절처럼 좁게 둔다(팔꿈치·무릎은 한 방향으로만 굽고, 목은 조금만). 넓으면 종이 인형처럼 흐느적거린다
 const BONES_MESHY := [
-	["Hips", "Spine01", 0.13, 20.0], ["Spine01", "neck", 0.14, 25.0], ["Head", "head_end", 0.11, 35.0],
-	["LeftArm", "LeftForeArm", 0.05, 70.0], ["LeftForeArm", "LeftHand", 0.045, 60.0],
-	["RightArm", "RightForeArm", 0.05, 70.0], ["RightForeArm", "RightHand", 0.045, 60.0],
-	["LeftUpLeg", "LeftLeg", 0.07, 45.0], ["LeftLeg", "LeftFoot", 0.06, 50.0],
-	["RightUpLeg", "RightLeg", 0.07, 45.0], ["RightLeg", "RightFoot", 0.06, 50.0],
+	["Hips", "Spine01", 0.13, 12.0, 14.0], ["Spine01", "neck", 0.14, 14.0, 16.0], ["Head", "head_end", 0.11, 22.0, 5.0],
+	["LeftArm", "LeftForeArm", 0.05, 55.0, 2.6], ["LeftForeArm", "LeftHand", 0.045, 28.0, 1.6],
+	["RightArm", "RightForeArm", 0.05, 55.0, 2.6], ["RightForeArm", "RightHand", 0.045, 28.0, 1.6],
+	["LeftUpLeg", "LeftLeg", 0.07, 32.0, 8.0], ["LeftLeg", "LeftFoot", 0.06, 24.0, 4.0],
+	["RightUpLeg", "RightLeg", 0.07, 32.0, 8.0], ["RightLeg", "RightFoot", 0.06, 24.0, 4.0],
 ]
 const BONES_KAYKIT := [
-	["hips", "spine", 0.2, 20.0], ["chest", "head", 0.22, 25.0], ["head", "", 0.22, 35.0],
-	["upperarm.l", "lowerarm.l", 0.07, 70.0], ["lowerarm.l", "wrist.l", 0.06, 60.0],
-	["upperarm.r", "lowerarm.r", 0.07, 70.0], ["lowerarm.r", "wrist.r", 0.06, 60.0],
-	["upperleg.l", "lowerleg.l", 0.09, 45.0], ["lowerleg.l", "foot.l", 0.08, 50.0],
-	["upperleg.r", "lowerleg.r", 0.09, 45.0], ["lowerleg.r", "foot.r", 0.08, 50.0],
+	["hips", "spine", 0.2, 12.0, 14.0], ["chest", "head", 0.22, 14.0, 16.0], ["head", "", 0.22, 22.0, 5.0],
+	["upperarm.l", "lowerarm.l", 0.07, 55.0, 2.6], ["lowerarm.l", "wrist.l", 0.06, 28.0, 1.6],
+	["upperarm.r", "lowerarm.r", 0.07, 55.0, 2.6], ["lowerarm.r", "wrist.r", 0.06, 28.0, 1.6],
+	["upperleg.l", "lowerleg.l", 0.09, 32.0, 8.0], ["lowerleg.l", "foot.l", 0.08, 24.0, 4.0],
+	["upperleg.r", "lowerleg.r", 0.09, 32.0, 8.0], ["lowerleg.r", "foot.r", 0.08, 24.0, 4.0],
 ]
 
 var sim: PhysicalBoneSimulator3D
 var bodies: Array = []
+var total_mass := 0.0
 
 
 ## unit: 스켈레톤에 구워 넣은 모델 크기(굵기 표를 그만큼 키운다)
@@ -38,10 +40,15 @@ static func build(skel: Skeleton3D, table: Array, unit := 1.0) -> RefCounted:
 			continue
 		var pb := PhysicalBone3D.new()
 		pb.bone_name = row[0]
-		pb.mass = 1.5
-		pb.linear_damp = 0.6
-		pb.angular_damp = 2.5
-		pb.friction = 0.9
+		# 무게는 몸 크기의 세제곱으로(2.3배 보스는 약 12배 무겁다). 몸통이 무겁고 팔다리가 가벼워야 몸통이 먼저 떨어지고 팔다리가 따라온다
+		pb.mass = row[4] * unit * unit * unit
+		r.total_mass += pb.mass
+		# 관절이 흔들린 뒤 바로 멎게 각운동을 세게 감쇠한다(살과 근육의 저항). 떨어지는 속도는 거의 감쇠하지 않는다(무게감)
+		pb.linear_damp = 0.15
+		pb.angular_damp = 9.0
+		pb.friction = 1.0
+		pb.bounce = 0.0
+		pb.gravity_scale = 1.35
 		pb.collision_layer = 8
 		# 바닥(2)과 벽 상자(16)에 부딪힌다. 벽 메시 충돌체(오목한 삼각형 면)에 끼면 관절이 터져 메시가 늘어나므로 그것과는 부딪히지 않는다
 		pb.collision_mask = 2 | WALL_LAYER | 32
@@ -86,27 +93,33 @@ func spread() -> float:
 	return far
 
 
-## 래그돌 시작: impulse는 월드 충격(방향 × 세기)
+## 래그돌 시작: impulse는 몸 전체에 주는 속도(m/s, 방향 × 세기). 뼈마다 무게에 비례해 나눠 주어 몸이 한 덩어리로 날아가고,
+## 윗몸에 조금 더 실어 뒤로 젖혀진다
 func start(impulse: Vector3) -> void:
 	sim.active = true
 	sim.influence = 1.0
 	sim.physical_bones_start_simulation()
 	for pb: PhysicalBone3D in bodies:
-		var k := 1.0 if pb.bone_name in ["Spine01", "chest", "Head", "head"] else 0.45
-		pb.apply_central_impulse(impulse * k + Vector3(0, impulse.length() * 0.25 * k, 0))
+		var k := 1.25 if pb.bone_name in ["Spine01", "chest", "Head", "head"] else 0.85
+		pb.linear_velocity = Vector3.ZERO
+		pb.angular_velocity = Vector3.ZERO
+		pb.apply_central_impulse((impulse * k + Vector3(0, impulse.length() * 0.2 * k, 0)) * pb.mass)
 
 
 ## 고꾸라짐: 윗몸(upper)과 다리(lower)에 따로 충격을 준다. 윗몸을 앞으로, 다리를 뒤로 밀면 앞으로 엎어진다
+## upper·lower는 속도(m/s)
 func topple(upper: Vector3, lower: Vector3) -> void:
 	sim.active = true
 	sim.influence = 1.0
 	sim.physical_bones_start_simulation()
 	for pb: PhysicalBone3D in bodies:
 		var n := String(pb.bone_name)
+		pb.linear_velocity = Vector3.ZERO
+		pb.angular_velocity = Vector3.ZERO
 		if n in ["Spine01", "chest", "Head", "head", "Hips", "hips"] or n.contains("Arm") or n.contains("arm"):
-			pb.apply_central_impulse(upper * (1.0 if n in ["Spine01", "chest", "Head", "head"] else 0.6))
+			pb.apply_central_impulse(upper * (1.0 if n in ["Spine01", "chest", "Head", "head"] else 0.6) * pb.mass)
 		else:
-			pb.apply_central_impulse(lower)
+			pb.apply_central_impulse(lower * pb.mass)
 
 
 func stop() -> void:

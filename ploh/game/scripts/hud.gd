@@ -70,6 +70,9 @@ var _combo_drop := 0.0        # 콤보가 끊긴 뒤 떨어지는 연출 진행(
 var _combo_heat := 0.0        # 무거운 타격일수록 커지는 흔들림
 var _milestone := 0.0         # 10·25·50 콤보 축하 연출
 var _milestone_text := ""
+var _ult_fx_t := 0.0          # 궁극기 화면 효과 남은 시간(실제 초)
+var _ult_fx_len := 1.0
+var _ult_fx_color := Color.WHITE
 var _flash_color := Color.WHITE
 var _flash_t := 0.0
 var _flash_dur := 0.1
@@ -128,6 +131,7 @@ func _process(delta: float) -> void:
 	_combo_heat = maxf(_combo_heat - rd * 3.0, 0.0)
 	_milestone = maxf(_milestone - rd, 0.0)
 	_flash_t = maxf(_flash_t - rd, 0.0)
+	_ult_fx_t = maxf(_ult_fx_t - rd, 0.0)
 	_title_t = maxf(_title_t - rd, 0.0)
 	if game != null and game.combo >= 3:
 		_combo_shown = game.combo
@@ -215,6 +219,49 @@ func title(text: String, sub: String) -> void:
 	_title = text
 	_subtitle = sub
 	_title_t = 2.2
+
+
+## 궁극기 화면 효과: 영웅 쪽에서 뻗는 집중선과 영웅 색 테두리가 터졌다가 사그라든다
+func ult_fx(color: Color, dur: float) -> void:
+	_ult_fx_color = color
+	_ult_fx_t = dur
+	_ult_fx_len = dur
+
+
+func _draw_ult_fx() -> void:
+	if _ult_fx_t <= 0.0 or game.player == null or not is_instance_valid(game.player):
+		return
+	var k := _ult_fx_t / _ult_fx_len          # 1 → 0
+	var s := size
+	var c: Vector2 = game.to_hud(game.player.global_position + Vector3(0, 1.0, 0))
+	if game.camera.is_position_behind(game.player.global_position):
+		c = s * 0.5
+	var col := _ult_fx_color
+	# 테두리: 영웅 색이 바깥에서 안으로 번졌다가 걷힌다
+	var edge := smoothstep(0.0, 0.3, k) * 0.55
+	var inset := s.x * (0.08 + 0.2 * (1.0 - k))
+	for i in 3:
+		var w := inset * (1.0 - i / 3.0)
+		var a := edge * (0.28 - 0.08 * i)
+		draw_rect(Rect2(Vector2.ZERO, Vector2(s.x, w)), Color(col, a))
+		draw_rect(Rect2(Vector2(0, s.y - w), Vector2(s.x, w)), Color(col, a))
+		draw_rect(Rect2(Vector2.ZERO, Vector2(w, s.y)), Color(col, a))
+		draw_rect(Rect2(Vector2(s.x - w, 0), Vector2(w, s.y)), Color(col, a))
+	# 집중선: 영웅에서 가장자리로 뻗는 가는 삼각형들(처음 0.5초에 가장 짙다)
+	var lines := 56
+	var reach := s.length()
+	var alpha := smoothstep(0.0, 0.45, k) * 0.9
+	var seed_i := 7
+	for i in lines:
+		seed_i = (seed_i * 1103515245 + 12345) & 0x7fffffff
+		var ang := TAU * i / lines + (seed_i % 1000) / 1000.0 * 0.08
+		seed_i = (seed_i * 1103515245 + 12345) & 0x7fffffff
+		var inner := reach * (0.12 + 0.1 * (seed_i % 1000) / 1000.0 + 0.25 * (1.0 - k))
+		var d := Vector2(cos(ang), sin(ang))
+		var perp := Vector2(-d.y, d.x) * (2.0 + 3.0 * ((seed_i >> 10) % 1000) / 1000.0)
+		var p0: Vector2 = c + d * inner
+		var p1: Vector2 = c + d * reach
+		draw_colored_polygon(PackedVector2Array([p0, p1 + perp, p1 - perp]), Color(col.lightened(0.3), alpha * (0.35 + 0.4 * ((seed_i >> 5) % 1000) / 1000.0)))
 
 
 func flash(color: Color, dur: float) -> void:
@@ -383,6 +430,7 @@ func _draw() -> void:
 		return   # 보스 등장 연출 중에는 전투 UI를 감춘다(연출 화면은 cutscene.gd·comic.gd가 그린다)
 	var s := size
 	var portrait := s.y >= s.x
+	_draw_ult_fx()
 	if _flash_t > 0.0:
 		draw_rect(Rect2(Vector2.ZERO, s), Color(_flash_color, 0.45 * _flash_t / _flash_dur))
 	_draw_danger(s)

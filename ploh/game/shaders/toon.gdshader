@@ -1,7 +1,8 @@
 // 카툰 렌더링: 두 단계 명암, 부드러운 경계, 림라이트, 피격·강조 플래시.
 // 원작(카툰 렌더링 3D)의 인상에 맞춘다. 외곽선은 outline.gdshader를 next_pass로 붙인다.
 shader_type spatial;
-render_mode diffuse_toon, specular_toon;
+// 양면: 메시를 줄이며 뒤집힌 삼각형이 구멍으로 보이지 않게 뒷면도 그리고, 뒷면은 법선을 뒤집어 빛을 받게 한다
+render_mode diffuse_toon, specular_toon, cull_disabled;
 
 uniform sampler2D albedo_tex : source_color, filter_linear_mipmap;
 uniform bool use_tex = true;
@@ -19,6 +20,9 @@ uniform vec4 aura_color : source_color = vec4(1.0, 0.8, 0.4, 1.0);
 uniform float aura : hint_range(0.0, 1.0) = 0.0;                     // 궁극기로 몸이 강화된 동안 윤곽이 빛난다
 
 void fragment() {
+	if (!FRONT_FACING) {
+		NORMAL = -NORMAL;
+	}
 	vec4 c = use_tex ? texture(albedo_tex, UV) * albedo : albedo;
 	c.rgb = mix(vec3(dot(c.rgb, vec3(0.299, 0.587, 0.114))), c.rgb, saturation);
 	// 피격 섬광: 몸 전체를 하양으로 80%까지 덮는다(ART_TARGET 2.2)

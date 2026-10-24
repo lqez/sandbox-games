@@ -61,8 +61,7 @@ func _explode() -> void:
 	var ground: float = game.height_at(at.x, at.z)
 	game.shake(0.45)
 	game.kick(Vector3.UP, 0.015)
-	game.sfx("heavy", 0.05, 2.0)
-	game.sfx("counter", 0.1, -4.0)
+	game.sfx("bomb", 0.05, 1.0)
 	game.vibrate(80)
 	# 폭발 효과(vfx.gd에 explosion이 있으면 그것을, 없으면 불티와 먼지로)
 	var vs: Object = load("res://scripts/vfx.gd")
@@ -104,7 +103,7 @@ func _explode() -> void:
 				if o is RigidBody3D:
 					(o as RigidBody3D).apply_central_impulse(imp * minf((o as RigidBody3D).mass, 20.0) * 0.5)
 				else:
-					(o as PhysicalBone3D).apply_central_impulse(imp * 1.5)
+					(o as PhysicalBone3D).apply_central_impulse(imp * (o as PhysicalBone3D).mass * 0.6)
 	var hero: Node3D = game.player
 	if hero != null and hero.global_position.distance_to(at) < RADIUS * 0.6:
 		hero.take_damage(DAMAGE * 0.25, at)

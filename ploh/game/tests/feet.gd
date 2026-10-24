@@ -17,6 +17,8 @@ var _watch := {}             # 인스턴스 id → {sk, who, prev: [..], rest: [
 var _stats := {}             # 분류 → [디딘 틱, 미끄러진 틱, 미끄러진 거리, 디딘 시간]
 var _worst: Array = []       # [속도, 시각, 분류]
 var _multi := 0              # 한 틱에 두 번 이상 온 뼈대 갱신 신호 수
+var _air: Array = []         # 떠 있는 발의 속도 분포(휙 넘어가는 발을 찾는다): [속도, 시각, 분류, 발, 모드]
+var _cross := 0              # 다리가 꼬인 틱(왼발이 오른발보다 몸 오른쪽에)
 
 
 func _ready() -> void:
@@ -39,6 +41,28 @@ func _process(delta: float) -> void:
 		g.auto_mode = true
 		g.tap_down()
 		g.tap_up()
+	if scenario == "guard":
+		# 막고 걷기: 누른 채 조금 끌어 게걸음·뒷걸음·앞걸음을 번갈아, 사이사이 크게 끌어 달린다(발이 미끄러지는지 본다)
+		g.auto_mode = false
+		if not _done.has("g_on") and t > 1.0:
+			_done["g_on"] = true
+			g.guard(true)
+		var cyc := fmod(t, 8.0)
+		if t > 1.2:
+			if cyc < 2.0:
+				g.set_move(Vector2(1, 0) * 0.35)
+			elif cyc < 4.0:
+				g.set_move(Vector2(0, 1) * 0.35)
+			elif cyc < 5.5:
+				g.set_move(Vector2(-0.7, -0.7) * 0.35)
+			elif cyc < 7.0:
+				g.set_move(Vector2(-1, 0) * 0.9)
+			else:
+				g.set_move(Vector2.ZERO)
+		for e in g.enemies:
+			if is_instance_valid(e):
+				e.queue_free()
+		g.enemies.clear()
 	if scenario in ["room2", "room3"] and not _done.has("room"):
 		_done["room"] = true
 		var ri := 2 if scenario == "room2" else 3
@@ -122,6 +146,15 @@ func _measure(w: Dictionary, feet: Array, cat: String) -> void:
 		var ground: float = g.height_at(fp.x, fp.z)
 		var down: bool = fp.y - ground < float(w.rest[i]) + 0.035 * float(w.leg)
 		var prev: Variant = w.prev[i]
+		var prev_any: Variant = w.get("prev_any", [null, null])[i]
+		if not down and prev_any != null:
+			var va := Vector2(fp.x - prev_any.x, fp.z - prev_any.z).length() / maxf(dt, 0.0001)
+			if va > 2.5:
+				var pr2: Variant = who.proc
+				var md := "?"
+				if pr2 != null and "_ft" in pr2 and pr2._ft.size() > i:
+					md = ["free", "plant", "step"][pr2._ft[i].mode] + ("/slide" if pr2.slide else "")
+				_air.append([va, t, cat, FEET[i], md + " clip=" + str(who.anim.current_animation)])
 		if down and prev != null:
 			var d := Vector2(fp.x - prev.x, fp.z - prev.z).length()
 			var v := d / maxf(dt, 0.0001)
@@ -140,6 +173,17 @@ func _measure(w: Dictionary, feet: Array, cat: String) -> void:
 				_worst.append([v, t, cat + " " + FEET[i] + " " + mode + " clip=" + str(who.anim.current_animation)])
 			_stats[cat] = s
 		w.prev[i] = fp if down else null
+		if not w.has("prev_any"):
+			w.prev_any = [null, null]
+		w.prev_any[i] = fp
+	# 다리 꼬임: 몸 기준 옆축에서 왼발(0)이 오른발(1)보다 오른쪽(-X)에 있으면 꼬인 것
+	if feet.size() == 2:
+		var side: Vector3 = who.model.global_transform.basis.x.normalized()
+		if (feet[0] - feet[1]).dot(side) < -0.02:
+			_cross += 1
+			if not _stats.has(cat + " 꼬임"):
+				_stats[cat + " 꼬임"] = [0, 0, 0.0, 0.0]
+			_stats[cat + " 꼬임"][0] += 1
 
 
 func _report() -> void:
@@ -155,6 +199,11 @@ func _report() -> void:
 		print("  %-28s 디딘 %5d틱  미끄러짐 %5.1f%%  %.3f m/s(디딘 시간당)" % [k, s[0], 100.0 * s[1] / maxf(s[0], 1), s[2] / maxf(s[3], 0.001)])
 	print("  %-28s 디딘 %5d틱  미끄러짐 %5.1f%%  %.3f m/s(디딘 시간당)" % ["합계(의도 제외)", tot[0], 100.0 * tot[1] / maxf(tot[0], 1), tot[2] / maxf(tot[3], 0.001)])
 	_worst.sort_custom(func(a, b): return a[0] > b[0])
+	_air = _air.filter(func(x): return not str(x[2]).begins_with("~"))
+	_air.sort_custom(func(a, b): return a[0] > b[0])
+	print("  떠 있는 발 2.5m/s 넘는 틱: %d, 다리 꼬인 틱: %d" % [_air.size(), _cross])
+	for i in mini(10, _air.size()):
+		print("  air %.2f m/s at %.2f %s %s %s" % [_air[i][0], _air[i][1], _air[i][2], _air[i][3], _air[i][4]])
 	_worst = _worst.filter(func(x): return not str(x[2]).begins_with("~"))
 	for i in mini(16, _worst.size()):
 		print("  worst %.2f m/s at %.2f %s" % [_worst[i][0], _worst[i][1], _worst[i][2]])
