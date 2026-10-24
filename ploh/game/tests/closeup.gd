@@ -23,6 +23,9 @@ var _prev_root := Vector3.INF
 var _prev_yaw := INF
 var _log: Array = []
 var _skel: Skeleton3D
+## 뼈 자세는 절차적 보정(IK·시선·피격 반동)이 들어간 뒤의 것으로 잰다.
+## Godot 4.4는 보정을 화면에 그린 뒤 원래 애니메이션 자세로 되돌리므로 skeleton_updated에서 읽어 둔다
+var _post := {}
 
 
 func _ready() -> void:
@@ -142,6 +145,10 @@ func _watch(p: Node3D, delta: float) -> void:
 	if _skel == null or not is_instance_valid(_skel):
 		_skel = p.model.find_children("*", "Skeleton3D", true, false)[0]
 		_prev.clear()
+		_post.clear()
+		_skel.skeleton_updated.connect(_on_skel.bind(_skel))
+	if _post.is_empty():
+		return
 	var root := p.global_position
 	var line := "%.3f %s/%s clip=%s pos=%.2f" % [t, p.state, p.phase, p._current, p.anim.current_animation_position if p.anim.current_animation != "" else 0.0]
 	if _prev_root != Vector3.INF:
@@ -159,7 +166,7 @@ func _watch(p: Node3D, delta: float) -> void:
 		if b < 0:
 			continue
 		# 몸 기준(루트 이동을 뺀) 뼈 위치 변화: 자세가 튀는 것만 본다
-		var w: Vector3 = (_skel.global_transform * _skel.get_bone_global_pose(b).origin - root).rotated(Vector3.UP, -yaw)
+		var w: Vector3 = ((_post[bn] as Transform3D).origin - root).rotated(Vector3.UP, -yaw)
 		if _prev.has(bn):
 			var v: float = (w - _prev[bn]).length() / maxf(delta, 0.001)
 			if v > worst_v:
@@ -167,4 +174,18 @@ func _watch(p: Node3D, delta: float) -> void:
 				worst = bn
 		_prev[bn] = w
 	line += " pose_v=%.1f(%s)" % [worst_v, worst]
+	# 시선 오차: 머리가 보는 방향과 상대 머리 쪽 방향의 각(도)
+	var hb := _skel.find_bone("Head")
+	var e: Node3D = p.target if (p.target != null and is_instance_valid(p.target)) else g.nearest_enemy(p.global_position, 7.0)
+	if hb >= 0 and e != null:
+		var hg: Transform3D = _post["Head"]
+		var fwd := (hg.basis * _skel.get_bone_global_rest(hb).basis.inverse() * Vector3(0, 0, 1)).normalized()
+		line += " gaze_err=%.0f" % rad_to_deg(fwd.angle_to((e.head_pos() - hg.origin).normalized()))
 	_log.append(line)
+
+
+func _on_skel(sk: Skeleton3D) -> void:
+	for bn in WATCH:
+		var b := sk.find_bone(bn)
+		if b >= 0:
+			_post[bn] = sk.global_transform * sk.get_bone_global_pose(b)

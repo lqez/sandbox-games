@@ -14,7 +14,9 @@ uniform float rim_amount : hint_range(0.0, 1.0) = 0.16;
 uniform float flash : hint_range(0.0, 1.0) = 0.0;                    // 피격 하양
 uniform vec4 glow_color : source_color = vec4(1.0, 0.85, 0.4, 1.0);
 uniform float glow : hint_range(0.0, 1.0) = 0.0;
-uniform float saturation : hint_range(0.0, 1.0) = 1.0;               // 배경 소품은 낮춰서 차분하게                     // JUST 순간 몸이 달아오르는 빛
+uniform float saturation : hint_range(0.0, 1.0) = 1.0;               // 배경 소품은 낮춰서 차분하게
+uniform vec4 aura_color : source_color = vec4(1.0, 0.8, 0.4, 1.0);
+uniform float aura : hint_range(0.0, 1.0) = 0.0;                     // 궁극기로 몸이 강화된 동안 윤곽이 빛난다
 
 void fragment() {
 	vec4 c = use_tex ? texture(albedo_tex, UV) * albedo : albedo;
@@ -22,7 +24,9 @@ void fragment() {
 	ALBEDO = c.rgb;
 	float rim = pow(1.0 - clamp(dot(NORMAL, VIEW), 0.0, 1.0), 3.0);
 	// 글로우는 몸 전체가 아니라 윤곽(림)에만 실어 실루엣이 달아오르게 한다
-	EMISSION = rim_color.rgb * rim * rim_amount + glow_color.rgb * glow * rim * 2.5 + vec3(flash) * 0.6;
+	float rim2 = pow(1.0 - clamp(dot(NORMAL, VIEW), 0.0, 1.0), 2.0);
+	EMISSION = rim_color.rgb * rim * rim_amount + glow_color.rgb * glow * rim * 2.5 + vec3(flash) * 0.6
+		+ aura_color.rgb * (rim2 * 2.4 + 0.08) * aura;
 	ROUGHNESS = 1.0;
 	SPECULAR = 0.15;
 }

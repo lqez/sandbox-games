@@ -27,6 +27,8 @@ extends CharacterBody3D
 const Fx := preload("res://scripts/fx.gd")
 const Weapon := preload("res://scripts/weapon.gd")
 const Trail := preload("res://scripts/trail.gd")
+const Vfx := preload("res://scripts/vfx.gd")
+const AWAKEN_TIME := 8.0
 const Procedural := preload("res://scripts/procedural.gd")
 
 ## 박자 판정(음악 시계 기준, 초)
@@ -57,6 +59,8 @@ const PAUSE_MOVES := {1: "dash_thrust", 2: "whirl", 3: "flurry"}
 
 static var _clip_cache := {}         # 모델 경로 → 클립 분석 결과
 static var _root_cache := {}         # 모델 경로 → 클립별 루트 이동 기록({클립: PackedVector2Array}, 30fps, 몸 기준 +Z 앞)
+var _head_skel: Skeleton3D
+var _head_bone := -1
 static var _stride_cache := {}       # 모델 경로 → 달리기 클립의 보폭 속도
 
 var game: Node
@@ -75,6 +79,8 @@ var t := 0.0
 var queued := false                  # 급정지나 특수 동작이 끝나면 칠 입력
 var just := false
 var empowered := 0.0
+var awakened := 0.0           # 궁극기 뒤 강화 상태(남은 초). 공격력 1.25배, 몸에 오라
+var aura: Node3D
 var holding := false
 var hold_t := 0.0
 var invuln := 0.0
@@ -165,9 +171,11 @@ func setup(g: Node, d: Dictionary) -> void:
 			anim.get_animation(loop_name).loop_mode = Animation.LOOP_LINEAR
 	add_child(Fx.disc(0.6, Color(0, 0, 0, 0.4)))
 	mats = Fx.toonify(model, 0.0022)
+	Fx.set_param(mats, "aura_color", d.color.lightened(0.15))
 	trail = Trail.new()
 	trail.color = d.color.lightened(0.3)
 	add_child(trail)
+	aura = Vfx.aura(self, d.color, 2.5, 0.75)
 	var skel: Skeleton3D = model.find_children("*", "Skeleton3D", true, false)[0]
 	skel.modifier_callback_mode_process = Skeleton3D.MODIFIER_CALLBACK_MODE_PROCESS_PHYSICS
 	proc = Procedural.new()
@@ -477,6 +485,7 @@ func ultimate() -> void:
 		return
 	data.ult = 0.0
 	invuln = 1.2
+	awakened = AWAKEN_TIME
 	state = "skill"
 	t = 0.0
 	queued = false
@@ -596,6 +605,8 @@ func _physics_process(delta: float) -> void:
 	var look_at_t: Node3D = target if (state == "attack" and target != null and is_instance_valid(target)) else game.nearest_enemy(global_position, 7.0)
 	var running := _vel.length() > 1.5
 	proc.look(look_at_t.global_position if (look_at_t != null and not running) else null)
+	# 목과 머리는 달릴 때도 상대의 머리를 쳐다본다
+	proc.gaze(look_at_t.head_pos() if look_at_t != null else null)
 	if weapon != null:
 		weapon.update(delta)
 		trail.push(weapon.hilt, weapon.tip, delta)
@@ -935,6 +946,16 @@ static func natural_speed(rm: Dictionary, ap: AnimationPlayer, clip: String, sca
 
 ## 제자리 이동 클립의 보폭 속도(m/s): 디딘 발(가장 낮을 때)이 몸 기준으로 뒤로 밀리는 속도.
 ## 이 속도로 재생하면 발이 바닥에서 미끄러지지 않는다
+## 머리 뼈의 월드 위치(상대가 쳐다볼 점)
+func head_pos() -> Vector3:
+	if _head_skel == null:
+		_head_skel = model.find_children("*", "Skeleton3D", true, false)[0]
+		_head_bone = _head_skel.find_bone("Head")
+	if _head_bone < 0:
+		return global_position + Vector3(0, 1.7, 0)
+	return _head_skel.global_transform * _head_skel.get_bone_global_pose(_head_bone).origin
+
+
 static func stride_speed(ap: AnimationPlayer, skel: Skeleton3D, clip: String, scale: float, fallback: float) -> float:
 	var foot := skel.find_bone("LeftFoot")
 	if foot < 0 or not ap.has_animation(clip):
@@ -1124,7 +1145,7 @@ func _sweep(pad: float) -> void:
 			continue
 		if weapon.swept_hits(e.global_position, e.radius, 2.0 * e.stats.scale, pad):
 			_hit_set[e] = true
-			game.hit_enemy(e, data.atk * _move_dmg * (1.6 if just else 1.0), self, just, label, _move_weight)
+			game.hit_enemy(e, data.atk * _move_dmg * (1.6 if just else 1.0) * (1.25 if awakened > 0.0 else 1.0), self, just, label, _move_weight)
 
 
 func _shoot() -> void:
@@ -1212,6 +1233,14 @@ func _animate(delta: float) -> void:
 	if state == "idle" and not moving and _current != _anim("idle") and not anim.is_playing():
 		_play(_anim("idle"))
 	_glow = maxf(_glow - delta, 0.0)
+	# 궁극기 오라: 발동하는 동안 가장 밝고, 강화 상태 동안 옅게 숨 쉬듯 일렁이다가 끝에 사그라든다
+	awakened = maxf(awakened - delta, 0.0)
+	var aw := 0.0
+	if awakened > 0.0:
+		aw = 1.0 if awakened > AWAKEN_TIME - 1.4 else 0.45 + 0.12 * sin(Time.get_ticks_msec() / 160.0)
+		aw *= minf(awakened / 0.6, 1.0)
+	aura.set_strength(aw)
+	Fx.set_param(mats, "aura", aw * 0.8)
 	var charging := state in ["charge", "aim"]
 	var g := maxf(_glow / 0.22, (0.5 + 0.5 * sin(Time.get_ticks_msec() / 70.0)) * 0.6 if charging else 0.0)
 	Fx.set_param(mats, "glow", g)

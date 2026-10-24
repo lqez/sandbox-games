@@ -10,12 +10,18 @@ const Hero := preload("res://scripts/hero.gd")
 const Enemy := preload("res://scripts/enemy.gd")
 const Hud := preload("res://scripts/hud.gd")
 const Dungeon := preload("res://scripts/dungeon.gd")
+const Vfx := preload("res://scripts/vfx.gd")
 
 const KAYKIT := "res://assets/kaykit/heroes/%s.glb"
 const BPM := 120.0           # 전투 박자. 기본 공격 한 타가 한 박, 피니시가 두 박
 const BEAT := 60.0 / BPM
-const CAM_YAW := 45.0        # 디아블로식 고정 방향
-const CAM_PITCH := 50.0      # 레퍼런스(약 55~60도)에 가깝게 올려 벽 가림을 줄이고, 캐릭터는 가까이 잡는다
+const CAM_YAW := 45.0        # 기본 방향. 싸우는 쪽 뒤로 YAW_MIN~YAW_MAX 안에서 돈다
+const YAW_MIN := 0.0         # 던전은 카메라 쪽(+X·+Z) 벽을 낮게 깎아 두었으므로 이 범위 밖으로는 돌지 않는다
+const YAW_MAX := 90.0
+const CAM_PITCH := 38.0      # 영웅 뒤에서 조금 낮게 내려다본다(갓 오브 워처럼 가깝게, 그래도 둘레의 적은 보이게)
+const CAM_DIST := 5.4
+const EXPLORE_PITCH := 44.0  # 적이 없을 때는 조금 높고 멀리
+const EXPLORE_DIST := 6.4
 ## 영웅 정의. 모든 캐릭터는 프라우 B와 같은 약 4.5등신으로 통일한다(사용자 결정)
 const HEROES := [
 	{"name": "프라우", "model": "res://assets/astrid/B_mid/astrid.glb", "scale": 1.6, "color": Color(0.95, 0.8, 0.45),
@@ -64,7 +70,15 @@ var swap_cd := 0.0
 var boss: Node3D
 
 var camera: Camera3D
-var cam_dist := 6.6
+var cam_dist := CAM_DIST
+var cam_yaw := CAM_YAW       # 지금 카메라 방향(도). 조작 방향도 이것을 따른다
+var cam_pitch := CAM_PITCH
+var _yaw_goal := CAM_YAW
+var _yaw_v := 0.0
+var _enter_t := 0.0          # 방에 들어선 직후 한 발 물러나 방 전체를 보여 주는 연출(남은 실제 초)
+var _punch := 0.0            # 강타·JUST에 카메라가 순간 다가서는 연출(남은 실제 초)
+var _ult_t := 0.0            # 궁극기 연출: 영웅 앞쪽 낮은 각도에서 돌며 비춘다(남은 실제 초)
+var _ult_hero: Node3D
 var hud: Control
 var _slow_until := 0
 var _hitstop_until := 0
@@ -182,6 +196,9 @@ func reset() -> void:
 	room = -1
 	route_i = 0
 	_cam_ready = false
+	cam_yaw = CAM_YAW
+	_yaw_goal = CAM_YAW
+	_yaw_v = 0.0
 	state = "play"
 	elapsed = 0.0
 	combo = 0
@@ -244,6 +261,7 @@ func _enter_room(i: int) -> void:
 	dormant.erase(i)
 	_populate(i + 1)
 	var last := i == dungeon.rooms.size() - 1
+	_enter_t = 1.1
 	hud.banner("보스 · 균열의 군주" if last else "방 %d / %d" % [i + 1, dungeon.rooms.size()])
 
 
@@ -305,25 +323,50 @@ func _process(delta: float) -> void:
 
 func _update_camera(delta: float) -> void:
 	## 카메라는 출렁이지 않게 잡는다.
-	## - 바라보는 점(초점)을 임계 감쇠 스프링으로 부드럽게 옮기고, 카메라는 그 초점에서 고정된 방향·거리에만 둔다.
-	##   그래서 카메라는 회전하지 않고 평행이동만 한다(예전에는 위치만 늦게 따라가고 시선은 바로 따라가서 흔들렸다)
-	## - 적 수에 따라 거리를 바꾸지 않는다. 보스 방에서만 천천히 한 번 물러난다
-	## - 영웅을 화면 아래쪽 약 60% 높이에 두어 진행 방향을 보여 준다
+	## - 바라보는 점(초점)은 임계 감쇠 스프링으로 부드럽게 옮긴다
+	## - 방향(yaw)은 싸우는 적들(없으면 다음 길) 쪽 뒤로 천천히 돈다. 15° 넘게 달라질 때만 새로 잡아 근접전 중에 흔들리지 않는다
+	## - 영웅을 화면 아래쪽 약 1/3에 두어 앞의 적과 방 안쪽이 보이게 한다
+	## - 연출: 방에 들어서면 잠깐 물러나 방을 보여 주고, 강타에 살짝 다가서고, 궁극기는 낮은 각도에서 돌며 비춘다
 	if player == null or not is_instance_valid(player):
 		return
 	var real := delta / maxf(Engine.time_scale, 0.05)
-	# 캐릭터가 화면에서 크게 보이도록 가깝게(보스전은 조금 물러난다)
-	var want := 6.6 + (2.0 if boss != null and is_instance_valid(boss) else 0.0)
+	var fighting := false
+	for e in enemies:
+		if is_instance_valid(e) and e.state != "dead" and e.global_position.distance_to(player.global_position) < 10.0:
+			fighting = true
+			break
+	var want := CAM_DIST if fighting else EXPLORE_DIST
+	var pitch := CAM_PITCH if fighting else EXPLORE_PITCH
+	if boss != null and is_instance_valid(boss):
+		want += 1.6
+		pitch += 4.0
+	_enter_t = maxf(_enter_t - real, 0.0)
+	if _enter_t > 0.0:
+		var k := smoothstep(0.0, 0.5, _enter_t)
+		want += 1.8 * k
+		pitch += 8.0 * k
+	_punch = maxf(_punch - real, 0.0)
+	want -= 0.7 * sin(PI * clampf(_punch / 0.28, 0.0, 1.0))
 	var vs := get_viewport().get_visible_rect().size
 	if vs.x > vs.y:
 		want *= 1.4   # 가로 화면은 세로 시야가 좁아 조금 더 물러난다
-	var dir := Vector3(0, 0, 1).rotated(Vector3.RIGHT, -deg_to_rad(CAM_PITCH)).rotated(Vector3.UP, deg_to_rad(CAM_YAW))
-	var target := player.global_position + Vector3(0, 1.0, 0) + screen_to_world(Vector2(0, -1)) * 1.4
+	# 방향: 목표 yaw를 정하고 임계 감쇠 스프링으로 따라간다(약 1초)
+	var goal := _desired_yaw()
+	if absf(goal - _yaw_goal) > 15.0:
+		_yaw_goal = goal
+	var yw := 2.4
+	var yx := cam_yaw - _yaw_goal
+	var ytmp := (_yaw_v + yx * yw) * real
+	_yaw_v = (_yaw_v - ytmp * yw) * exp(-yw * real)
+	cam_yaw = _yaw_goal + (yx + ytmp) * exp(-yw * real)
+	cam_pitch = lerpf(cam_pitch, pitch, 1.0 - exp(-real * 2.0))
+	var dir := Vector3(0, 0, 1).rotated(Vector3.RIGHT, -deg_to_rad(cam_pitch)).rotated(Vector3.UP, deg_to_rad(cam_yaw))
+	var target := player.global_position + Vector3(0, 1.1, 0) + screen_to_world(Vector2(0, -1)) * 1.9
 	if cine_t > 0.0:
 		# 처치 연출: 쓰러지는 적 쪽으로 다가가며 천천히 돈다
 		var k := 1.0 - cine_t / cine_len
 		target = target.lerp(cine_target + Vector3(0, 1.0, 0), smoothstep(0.0, 0.25, k))
-		want = 5.2 if cine_len > 1.0 else 6.8
+		want = 4.6 if cine_len > 1.0 else 5.6
 		dir = dir.rotated(Vector3.UP, deg_to_rad(28.0) * k * (1.0 if cine_len > 1.0 else 0.4))
 	if not _cam_ready:
 		_cam_ready = true
@@ -335,16 +378,69 @@ func _update_camera(delta: float) -> void:
 	var tmp := (_focus_v + x * omega) * real
 	_focus_v = (_focus_v - tmp * omega) * exp(-omega * real)
 	_focus = target + (x + tmp) * exp(-omega * real)
-	cam_dist = lerpf(cam_dist, want, 1.0 - exp(-real * 1.5))
+	cam_dist = lerpf(cam_dist, want, 1.0 - exp(-real * (6.0 if _punch > 0.0 else 1.8)))
 	cam_kick = cam_kick * exp(-real / 0.03)
-	camera.global_position = _focus + dir * cam_dist + cam_kick
-	camera.look_at(_focus + cam_kick, Vector3.UP)
+	var pos := _focus + dir * cam_dist + cam_kick
+	var look := _focus + cam_kick
+	_ult_t = maxf(_ult_t - real, 0.0)
+	if _ult_t > 0.0 and _ult_hero != null and is_instance_valid(_ult_hero):
+		# 궁극기: 영웅 앞쪽 낮은 각도에서 1.6초 동안 70° 돌며 비춘 뒤 원래 자리로 돌아온다
+		var k := 1.0 - _ult_t / ULT_CAM
+		var w := smoothstep(0.0, 0.18, k) * (1.0 - smoothstep(0.75, 1.0, k))
+		var hp: Vector3 = _ult_hero.global_position
+		var face: Vector3 = _ult_hero.face
+		var around := face.rotated(Vector3.UP, deg_to_rad(-35.0 + 70.0 * k))
+		var cpos := hp + around * 3.4 + Vector3(0, 0.9, 0)
+		pos = pos.lerp(cpos, w)
+		look = look.lerp(hp + Vector3(0, 1.3, 0), w)
+	camera.global_position = pos
+	camera.look_at(look, Vector3.UP)
+
+
+const ULT_CAM := 1.6
+
+
+## 카메라가 등 뒤에서 바라볼 방향: 가까운 적들의 무게중심(가까울수록 무겁게), 없으면 다음 길목
+func _desired_yaw() -> float:
+	var p := player.global_position
+	var sum := Vector3.ZERO
+	var wsum := 0.0
+	for e in enemies:
+		if not is_instance_valid(e) or e.state == "dead":
+			continue
+		var d: float = e.global_position.distance_to(p)
+		if d > 11.0:
+			continue
+		var w := 1.0 / (d + 1.5)
+		sum += e.global_position * w
+		wsum += w
+	var look: Vector3 = (sum / wsum - p) if wsum > 0.0 else (next_waypoint(p) - p)
+	look.y = 0
+	if look.length() < 1.2:
+		return _yaw_goal
+	var y := rad_to_deg(atan2(-look.x, -look.z))
+	# 범위 밖이면 가까운 쪽 끝으로
+	if y < YAW_MIN or y > YAW_MAX:
+		var mid := (YAW_MIN + YAW_MAX) * 0.5
+		y = YAW_MAX if angle_difference(deg_to_rad(mid), deg_to_rad(y)) > 0.0 else YAW_MIN
+	return y
+
+
+## 궁극기 카메라 연출을 건다
+func ult_camera(hero: Node3D) -> void:
+	_ult_hero = hero
+	_ult_t = ULT_CAM
+
+
+## 강타·JUST: 카메라가 순간 다가섰다 돌아온다
+func punch_in() -> void:
+	_punch = 0.28
 
 
 ## 화면 방향(2D, 위가 -y)을 월드 바닥 방향으로 바꾼다
 func screen_to_world(v: Vector2) -> Vector3:
-	var right := Vector3(1, 0, 0).rotated(Vector3.UP, deg_to_rad(CAM_YAW))
-	var up := Vector3(0, 0, -1).rotated(Vector3.UP, deg_to_rad(CAM_YAW))
+	var right := Vector3(1, 0, 0).rotated(Vector3.UP, deg_to_rad(cam_yaw))
+	var up := Vector3(0, 0, -1).rotated(Vector3.UP, deg_to_rad(cam_yaw))
 	return (right * v.x - up * v.y).normalized()
 
 
@@ -550,7 +646,7 @@ func hit_enemy(e: Node3D, dmg: float, hero: Node3D, just: bool, label: String, w
 	if label != "":
 		popup(e.global_position + Vector3(0, top + 0.6, 0), label, Color(1, 0.9, 0.6), 34)
 	shake_dir = dir
-	var at: Vector3 = e.global_position + Vector3(0, 1.0 * e.stats.scale, 0) - dir * e.radius * 0.6
+	var at: Vector3 = _contact(e, hero, dir)
 	# 레퍼런스 기준: 화면 전체를 멈추지 않는다. 공격자와 맞은 적만 아주 잠깐 멎고,
 	# 카메라는 맞은 방향으로 화면 너비의 0.7%쯤 한 번 밀렸다가 40~60ms 안에 돌아온다
 	if result == "counter":
@@ -565,6 +661,7 @@ func hit_enemy(e: Node3D, dmg: float, hero: Node3D, just: bool, label: String, w
 		if weight >= 0.9:
 			hero.freeze(0.05)
 			e.freeze(0.1)
+			punch_in()
 		elif just or weight >= 0.4:
 			hero.freeze(0.035)
 			e.freeze(0.075)
@@ -578,7 +675,7 @@ func hit_enemy(e: Node3D, dmg: float, hero: Node3D, just: bool, label: String, w
 		else:
 			sfx("heavy" if weight >= 0.9 else "hit", 0.12)
 			vibrate(12 + int(weight * 25))
-	impact(at, dir, color, weight)
+	impact(at, dir, color, weight, _sweep(hero, dir), just)
 	if result == "dead":
 		sfx("kill", 0.1, -2.0)
 		if e.kind == "boss":
@@ -653,6 +750,7 @@ func enemy_hit(e: Node3D, dmg: float) -> void:
 
 
 func ultimate_burst(hero: Node3D) -> void:
+	ult_camera(hero)
 	popup(hero.global_position + Vector3(0, 3.2, 0), "궁극기!", Color(1, 0.9, 0.5), 84)
 	slowmo(0.4, 0.5)
 	shake(0.8)
@@ -693,7 +791,7 @@ func hero_skill(hero: Node3D, dir: Vector3) -> void:
 			for e in enemies_in(at, dir, 4.5, 360.0):
 				hit_enemy(e, hero.data.atk * 2.4, hero, true, "", 1.0)
 			ring(at, 4.5, hero.data.color)
-			impact(at + Vector3(0, 0.3, 0), dir, hero.data.color, 1.0)
+			impact(at + Vector3(0, 0.3, 0), dir, hero.data.color, 1.0, Vector3.ZERO, false, false)
 
 
 func enemies_in_line(from: Vector3, dir: Vector3, length: float, width: float) -> Array:
@@ -833,11 +931,44 @@ func slash(pos: Vector3, face: Vector3, reach: float, arc_deg: float, color: Col
 		tw.tween_callback(mi.queue_free)
 
 
-## 맞은 자리: 작은 불꽃과, 바닥에 오래 남는 물결 링. 무거운 타격은 물보라가 솟는다
-## (레퍼런스: 화면을 덮는 섬광 대신 바닥 이펙트가 100~230ms에 솟고 350~750ms 남는다)
-func impact(at: Vector3, dir: Vector3, color: Color, weight: float) -> void:
-	spark(at, color, dir, 6 + int(weight * 10))
+## 칼날이 적의 몸을 지난 자리: 칼날 선분에서 적의 몸통 축에 가장 가까운 점을 몸 표면으로 옮긴다
+func _contact(e: Node3D, hero: Node3D, dir: Vector3) -> Vector3:
+	var base: Vector3 = e.global_position
+	var fallback: Vector3 = base + Vector3(0, 1.0 * e.stats.scale, 0) - dir * e.radius * 0.6
+	var w = hero.get("weapon")
+	if w == null:
+		return fallback
+	var a: Vector3 = w.hilt
+	var b: Vector3 = w.tip
+	var ab := Vector2(b.x - a.x, b.z - a.z)
+	var s := 1.0
+	if ab.length_squared() > 0.0001:
+		s = clampf(Vector2(base.x - a.x, base.z - a.z).dot(ab) / ab.length_squared(), 0.3, 1.0)
+	var p := a.lerp(b, s)
+	var side := Vector3(p.x - base.x, 0, p.z - base.z)
+	side = side.normalized() if side.length() > 0.05 else -dir
+	var top: float = 1.8 * e.stats.scale
+	return Vector3(base.x, clampf(p.y, base.y + 0.35 * e.stats.scale, base.y + top * 0.95), base.z) + side * e.radius * 0.85
+
+
+## 칼끝이 가던 방향(없으면 맞은 방향을 옆으로 돌린 것)
+func _sweep(hero: Node3D, dir: Vector3) -> Vector3:
+	var w = hero.get("weapon")
+	if w != null and w.tip_vel.length() > 1.0:
+		return w.tip_vel.normalized()
+	return dir.cross(Vector3.UP).normalized()
+
+
+## 맞은 자리: 베인 자국과 섬광, 불티, 피. 무거운 타격은 바닥 물결과 물보라가 더해진다
+## (레퍼런스: 화면을 덮는 섬광 대신 맞은 자리와 바닥에 짧고 날카롭게)
+func impact(at: Vector3, dir: Vector3, color: Color, weight: float, sweep := Vector3.ZERO, just := false, flesh := true) -> void:
+	if sweep == Vector3.ZERO:
+		sweep = dir.cross(Vector3.UP).normalized()
 	var ground := Vector3(at.x, height_at(at.x, at.z) + 0.04, at.z)
+	Vfx.cut(self, at, sweep, color if (just or color != Color(1, 1, 1)) else Color(1, 0.9, 0.75), weight, just)
+	Vfx.sparks(self, at, dir, sweep, color, 8 + int(weight * 10))
+	if flesh:
+		Vfx.blood(self, at, dir.lerp(sweep, 0.35), 10 + int(weight * 12), ground.y)
 	# 바닥 링은 무거운 타격에만, 작게(가벼운 타격까지 링을 그리면 화면이 시끄럽다)
 	if weight >= 0.5:
 		ripple(ground, 0.5 + weight * 0.6, 0.4 + weight * 0.2)

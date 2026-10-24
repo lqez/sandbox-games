@@ -24,7 +24,8 @@ var sim: PhysicalBoneSimulator3D
 var bodies: Array = []
 
 
-static func build(skel: Skeleton3D, table: Array) -> RefCounted:
+## unit: 스켈레톤에 구워 넣은 모델 크기(굵기 표를 그만큼 키운다)
+static func build(skel: Skeleton3D, table: Array, unit := 1.0) -> RefCounted:
 	var r = load("res://scripts/ragdoll.gd").new()
 	r.sim = PhysicalBoneSimulator3D.new()
 	skel.add_child(r.sim)
@@ -45,17 +46,18 @@ static func build(skel: Skeleton3D, table: Array) -> RefCounted:
 		pb.set("joint_constraints/swing_span", row[3])
 		pb.set("joint_constraints/twist_span", row[3] * 0.4)
 		# 뼈 길이: 다음 뼈의 쉬는 자세 위치(이 뼈 기준). 없으면 굵기로 둥글게
-		var length: float = row[2] * 2.0
+		var thick: float = row[2] * unit
+		var length: float = thick * 2.0
 		var dir := Vector3.UP
 		var c: int = skel.find_bone(row[1]) if row[1] != "" else -1
 		if c >= 0:
 			var rel: Vector3 = skel.get_bone_global_rest(b).affine_inverse() * skel.get_bone_global_rest(c).origin
-			length = maxf(rel.length(), row[2] * 2.0)
+			length = maxf(rel.length(), thick * 2.0)
 			dir = rel.normalized()
 		var cs := CollisionShape3D.new()
 		var cap := CapsuleShape3D.new()
-		cap.radius = row[2]
-		cap.height = maxf(length, row[2] * 2.0 + 0.01)
+		cap.radius = thick
+		cap.height = maxf(length, thick * 2.0 + 0.01)
 		cs.shape = cap
 		# 캡슐(세로축 Y)을 뼈 방향으로 눕히고 가운데에 둔다
 		var basis := Basis.IDENTITY

@@ -5,6 +5,7 @@ extends SkeletonModifier3D
 ## - 관성 기울기: 가속하는 쪽으로 몸을 싣고(급정지하면 뒤로 버틴다), 멈추면 반동으로 한 번 앞으로 쏠린다
 ## - 웅크림: crouch만큼 골반을 내린다. 발은 IK로 바닥에 붙어 있어 무릎이 굽는다(급정지, 착지)
 ## - 상체 비틀기: 목표 쪽으로 척추와 머리를 먼저 돌린다
+## - 시선: 목과 머리를 돌려 상대의 머리를 쳐다본다(몸통 기준 좌우 70°, 위아래 35°까지). 피격 반동은 그 위에 얹는다
 ## - 무기의 무게: 칼이 지나간 뒤 그 운동량이 윗몸을 칼끝이 가던 쪽으로 끌고 비틀며, 골반이 한 번 처진다
 ## - 발 IK: 애니메이션의 발 높이는 그대로 두고, 몸 아래 바닥과 발 아래 바닥의 높이 차만큼만 옮긴다(평지에서는 손대지 않는다).
 ##   디딘 발일수록 지형을 따르고, 공중에 뜬 발은 애니메이션 그대로 둔다. 내리막 쪽 발이 닿도록 골반을 내린다.
@@ -25,6 +26,10 @@ const RIG_KAYKIT := {
 ## 피격 스프링: 맞는 순간 바로 꺾이고(이징 없음), 조금 덜 감쇠해 한 번 되튄 뒤 돌아온다
 const HIT_STIFF := 260.0
 const HIT_DAMP := 16.0
+## 시선 한계(몸통 기준, 라디안)와 목이 맡는 몫(나머지는 머리)
+const GAZE_YAW := 1.2
+const GAZE_PITCH := 0.6
+const GAZE_NECK := 0.4
 ## 기울기 스프링: 약간 덜 감쇠해서 급정지 뒤 몸이 한 번 앞으로 쏠렸다 선다
 const LEAN_STIFF := 110.0
 const LEAN_DAMP := 13.0
@@ -35,6 +40,7 @@ var rig: Dictionary
 var foot_ik := true
 var lean_strength := 1.0
 var crouch := 0.0                  # 골반을 내리는 깊이(m, 모델 크기 1 기준)
+var unit := 1.0                    # 스켈레톤에 구워 넣은 모델 크기(crouch를 이만큼 키운다)
 var lock_feet := false             # 디딘 발을 지금 자리에 붙잡는다
 var twist_limit := 0.35            # 상체 비틀기 한계(라디안)
 var extra_lean := Vector3.ZERO     # 주인이 더하는 기울기(월드 회전 벡터). 헛디뎌 쏠린 자세 등
@@ -65,6 +71,11 @@ var _targets: Array = []           # 이번 틱의 발 목표(월드)
 var _locked: Array = []            # 붙잡은 발 자리(월드)
 var _lock_w := 0.0
 var _lock_prev := false
+var _gaze_on := false
+var _gaze_goal := Vector3.ZERO     # 쳐다볼 점(월드)
+var _gaze := Vector3.ZERO          # 실제로 보고 있는 점(목표를 부드럽게 따라간다)
+var _gaze_w := 0.0                 # 시선 세기(켜고 끌 때 0.25초에 걸쳐 바뀐다)
+var gaze_strength := 0.85          # 애니메이션의 머리 움직임을 얼마나 덮을지
 
 
 ## 클립에 박힌 수평 루트 이동(골반이 앞으로 굴러가는 등)을 지운다. 몸은 게임 코드가 움직인다.
@@ -176,6 +187,55 @@ func look(target: Variant) -> void:
 	_twist_target = clampf(fwd.normalized().signed_angle_to(to.normalized(), Vector3.UP), -twist_limit, twist_limit)
 
 
+## 쳐다볼 점(월드, 보통 상대의 머리). null이면 애니메이션의 머리 방향으로 되돌린다
+func gaze(p: Variant) -> void:
+	if p == null:
+		_gaze_on = false
+		return
+	if not _gaze_on and _gaze_w <= 0.0:
+		_gaze = p
+	_gaze_on = true
+	_gaze_goal = p
+
+
+## 뼈가 지금 '앞'으로 보는 방향(스켈레톤 공간). 쉬는 자세에서 +Z(모델 정면)이던 축이 지금 가리키는 쪽
+func _face_dir(sk: Skeleton3D, b: int) -> Vector3:
+	return (sk.get_bone_global_pose(b).basis * sk.get_bone_global_rest(b).basis.inverse() * Vector3(0, 0, 1)).normalized()
+
+
+## 목과 머리를 돌려 시선 점을 본다. 몸통이 향한 쪽에서 한계까지만 돌린다
+func _apply_gaze(sk: Skeleton3D, sk_global: Transform3D) -> void:
+	if _gaze_w <= 0.001 or _head < 0:
+		return
+	var top := _neck if _neck >= 0 else _head
+	var chest := sk.get_bone_parent(top)
+	if chest < 0:
+		return
+	var fwd := _face_dir(sk, chest)
+	var fh := Vector3(fwd.x, 0, fwd.z)
+	if fh.length() < 0.1:
+		return
+	fh = fh.normalized()
+	var want: Vector3 = sk_global.affine_inverse() * _gaze - sk.get_bone_global_pose(_head).origin
+	if want.length() < 0.05:
+		return
+	want = want.normalized()
+	var wh := Vector3(want.x, 0, want.z)
+	var yaw := clampf(fh.signed_angle_to(wh.normalized(), Vector3.UP), -GAZE_YAW, GAZE_YAW) if wh.length() > 0.01 else 0.0
+	var pitch := clampf(asin(clampf(want.y, -1.0, 1.0)), -GAZE_PITCH, GAZE_PITCH)
+	want = fh.rotated(Vector3.UP, yaw) * cos(pitch) + Vector3.UP * sin(pitch)
+	var w := _gaze_w * gaze_strength
+	for part in ([[_neck, GAZE_NECK], [_head, 1.0]] if _neck >= 0 else [[_head, 1.0]]):
+		var b: int = part[0]
+		var cur := _face_dir(sk, b)
+		var axis := cur.cross(want)
+		if axis.length() < 0.0001:
+			continue
+		var ang: float = cur.angle_to(want) * part[1] * w
+		var g := sk.get_bone_global_pose(b)
+		sk.set_bone_global_pose(b, Transform3D(Basis(axis.normalized(), ang) * g.basis, g.origin))
+
+
 func _process_modification() -> void:
 	var sk := get_skeleton()
 	if sk == null:
@@ -205,8 +265,13 @@ func _process_modification() -> void:
 	var shake := Vector3.ZERO
 	if _hold > 0.0 and _shiver > 0.0:
 		shake = _shiver_axis * _shiver * (1.0 if _tick % 2 == 0 else -1.0)
+	var gazed := false
 	for c in chain:
 		var b: int = c[0]
+		if not gazed and (b == _neck or b == _head):
+			# 시선은 척추까지 기울인 뒤 목·머리에 먼저 걸고, 피격 반동은 그 위에 얹는다
+			gazed = true
+			_apply_gaze(sk, sk_global)
 		var rot_world: Vector3 = (_lean + extra_lean) * c[1] + (_hit_ang + shake) * c[2]
 		var g := sk.get_bone_global_pose(b)
 		var basis := g.basis
@@ -217,7 +282,7 @@ func _process_modification() -> void:
 		if b in _spine and n > 0:
 			basis = Basis(Vector3.UP, _twist / float(n + 1)) * basis
 		if b == _head:
-			basis = Basis(Vector3.UP, _twist * 0.4) * basis
+			basis = Basis(Vector3.UP, _twist * 0.4 * (1.0 - _gaze_w)) * basis
 		sk.set_bone_global_pose(b, Transform3D(basis, g.origin))
 	if ik:
 		_feet(sk, dt)
@@ -225,6 +290,8 @@ func _process_modification() -> void:
 
 func _step(dt: float) -> void:
 	_tick += 1
+	_gaze_w = move_toward(_gaze_w, 1.0 if _gaze_on else 0.0, dt / 0.25)
+	_gaze = _gaze.lerp(_gaze_goal, 1.0 - exp(-dt * 10.0))
 	if _hold > 0.0:
 		# 히트스톱: 실제 시간으로 세고, 그동안은 스프링도 관성도 멈춘다
 		_hold -= dt / maxf(Engine.time_scale, 0.05)
@@ -305,7 +372,7 @@ func _feet(sk: Skeleton3D, dt: float) -> void:
 	for tg in _targets:
 		drop = minf(drop, tg[0].y - tg[1].y)
 	_hip_drop = lerpf(_hip_drop, drop, 1.0 - exp(-dt * 14.0))
-	var total := _hip_drop - maxf(_crouch, 0.0) * sk_global.basis.get_scale().y
+	var total := _hip_drop - maxf(_crouch, 0.0) * sk_global.basis.get_scale().y * unit
 	if _hips >= 0 and absf(total) > 0.001:
 		var hp := sk.get_bone_global_pose(_hips)
 		var shift := sk_global.basis.inverse() * Vector3(0, total, 0)

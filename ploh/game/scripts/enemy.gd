@@ -9,13 +9,16 @@ const Ragdoll := preload("res://scripts/ragdoll.gd")
 const Hero := preload("res://scripts/hero.gd")
 const SWING_AFTER := 0.16   # 예고가 끝난 뒤 칼이 내려오는 동안 판정을 이어 가는 시간
 const SOLDIER := "res://assets/soldiers/%s/%s.glb"
+## 임포트할 때 메시·뼈·애니메이션에 구워 넣은 크기(.glb.import의 nodes/root_scale).
+## 모델 노드를 키우면 래그돌로 넘어가는 순간 물리 몸체가 크기를 버려 몸이 0.6배로 쪼그라든다
+const BAKED := {"conscript": 1.6, "shieldbearer": 1.75, "boss": 2.3}
 
 ## 종류별 능력치. model은 assets/soldiers의 병사, attacks는 [클립, 접촉 시점(클립 길이 비율, 모션캡처 README의 타격 프레임)]
 ## 체력: 잡병 2~3타, 정예 5~7타, 보스 15~20타(영웅 공격력 42 기준)
 const KINDS := {
 	"minion": {"model": "conscript", "blade": ["weapon_sword"], "hp": 95.0, "atk": 9.0, "speed": 3.4, "reach": 1.35, "wind": 0.75, "area": 1.4, "scale": 1.6, "radius": 0.5, "poise": 1.0,
 		"attacks": [["attack_1", 0.566]], "tint": Color(0.5, 0.48, 0.7)},
-	"rogue": {"model": "conscript", "blade": ["weapon_sword"], "hp": 80.0, "atk": 11.0, "speed": 4.6, "reach": 1.4, "wind": 0.6, "area": 1.3, "scale": 1.5, "radius": 0.45, "poise": 1.0,
+	"rogue": {"model": "conscript", "blade": ["weapon_sword"], "hp": 80.0, "atk": 11.0, "speed": 4.6, "reach": 1.4, "wind": 0.6, "area": 1.3, "scale": 1.6, "radius": 0.45, "poise": 1.0,
 		"attacks": [["attack_2", 0.5]], "tint": Color(0.62, 0.5, 0.55)},
 	"warrior": {"model": "shieldbearer", "blade": ["weapon_sword"], "hp": 280.0, "atk": 18.0, "speed": 2.6, "reach": 1.25, "wind": 1.0, "area": 1.8, "scale": 1.75, "radius": 0.65, "poise": 0.4,
 		"attacks": [["attack_1", 0.536], ["shield_bash", 0.519]], "guard": true, "tint": Color(0.5, 0.48, 0.7)},
@@ -41,6 +44,8 @@ var root_motion := {}     # 클립에서 지운 수평 루트 이동(공격 런�
 var _rm_clip := ""
 var _rm_prev := Vector2.INF
 static var _root_cache := {}
+var _head_skel: Skeleton3D
+var _head_bone := -1
 static var _stride_cache := {}   # 모델 경로 → [달리기, 걷기] 보폭 속도
 var _run_nat := 4.0
 var _walk_nat := 1.6
@@ -90,7 +95,7 @@ func setup(g: Node, k: String) -> void:
 		_root_cache[path] = Hero.load_root_motion(path)
 	root_motion = _root_cache[path]
 	model = load(path).instantiate()
-	model.scale = Vector3.ONE * stats.scale
+	model.scale = Vector3.ONE * stats.scale / BAKED.get(stats.model, 1.0)
 	add_child(model)
 	mats = Fx.toonify(model, 0.002, stats.tint)
 	if kind == "boss":
@@ -127,16 +132,27 @@ func _ready() -> void:
 	if not _stride_cache.has(key):
 		var sk: Skeleton3D = model.find_children("*", "Skeleton3D", true, false)[0]
 		_stride_cache[key] = [Hero.stride_speed(anim, sk, "run", 1.0, 2.5), Hero.stride_speed(anim, sk, "walk", 1.0, 1.0)]
-	_run_nat = _stride_cache[key][0] * stats.scale
-	_walk_nat = _stride_cache[key][1] * stats.scale
+	_run_nat = _stride_cache[key][0] * model.scale.x
+	_walk_nat = _stride_cache[key][1] * model.scale.x
 	var skel: Skeleton3D = model.find_children("*", "Skeleton3D", true, false)[0]
 	anim.callback_mode_process = AnimationMixer.ANIMATION_CALLBACK_MODE_PROCESS_PHYSICS
 	skel.modifier_callback_mode_process = Skeleton3D.MODIFIER_CALLBACK_MODE_PROCESS_PHYSICS
 	proc = Procedural.new()
 	var meshy := skel.find_bone("Hips") >= 0
 	proc.setup(Procedural.RIG_MESHY if meshy else Procedural.RIG_KAYKIT, self, game.height_fn())
+	proc.unit = BAKED.get(stats.model, 1.0)
 	skel.add_child(proc)
-	ragdoll = Ragdoll.build(skel, Ragdoll.BONES_MESHY if meshy else Ragdoll.BONES_KAYKIT)
+	ragdoll = Ragdoll.build(skel, Ragdoll.BONES_MESHY if meshy else Ragdoll.BONES_KAYKIT, BAKED.get(stats.model, 1.0))
+
+
+## 머리 뼈의 월드 위치(상대가 쳐다볼 점)
+func head_pos() -> Vector3:
+	if _head_skel == null:
+		_head_skel = model.find_children("*", "Skeleton3D", true, false)[0]
+		_head_bone = _head_skel.find_bone("Head")
+	if _head_bone < 0:
+		return global_position + Vector3(0, 1.7 * stats.scale, 0)
+	return _head_skel.global_transform * _head_skel.get_bone_global_pose(_head_bone).origin
 
 
 func look_toward(p: Vector3) -> void:
@@ -257,6 +273,7 @@ func _physics_process(delta: float) -> void:
 	move_and_slide()
 	position.y = lerpf(position.y, game.height_at(position.x, position.z), 1.0 - exp(-delta * 25.0))
 	proc.look(hero.global_position if state in ["spawn", "chase", "wind"] else null)
+	proc.gaze(hero.head_pos() if state != "dead" and global_position.distance_to(hero.global_position) < 12.0 else null)
 	if face.length() > 0.01 and state != "spawn":
 		var diff := angle_difference(model.rotation.y, atan2(face.x, face.z))
 		var cap := 8.0 * delta
