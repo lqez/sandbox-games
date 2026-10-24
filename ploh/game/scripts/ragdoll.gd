@@ -166,7 +166,8 @@ func speed() -> float:
 ## 래그돌이 벽에 파묻히지 않게: 벽 등고선 선분마다 벽 뒤쪽에 상자(볼록 충돌체)를 세운다(충돌층 16)
 static func wall_guard(dungeon, parent: Node3D) -> void:
 	var body := StaticBody3D.new()
-	body.collision_layer = WALL_LAYER
+	# 래그돌(16)뿐 아니라 캐릭터(1)도 막는다: 얇은 오목 벽 면만으로는 세게 밀린 캡슐이 뚫고 들어갔다
+	body.collision_layer = WALL_LAYER | 1
 	body.collision_mask = 0
 	var e := 0.05
 	for sg in dungeon._segs:

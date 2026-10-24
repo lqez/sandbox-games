@@ -27,12 +27,12 @@ const YAW_MIN := 0.0         # 던전은 카메라 쪽(+X·+Z) 벽을 낮게 깎
 const YAW_MAX := 90.0
 ## 카메라 값은 research/look/ART_TARGET.md 1장(1_camera_mid.jpg에서 역산): 세로 화각 52°의 좁은 렌즈로 조금 멀리서,
 ## 영웅 발을 화면 85% 높이에 두고 키가 화면의 약 25%가 되게 잡는다
-const CAM_PITCH := 38.0      # 영웅 뒤에서 조금 낮게 내려다본다(갓 오브 워처럼, 그래도 앞의 적은 보이게)
+const CAM_PITCH := 31.0      # 영웅 뒤에서 낮게 내려다본다(갓 오브 워처럼). 낮을수록 적이 눈높이로 다가와 긴장감이 난다
 const CAM_DIST := 6.8
 const CAM_FOV := 52.0        # 세로 화각(세로 화면). 가로 화면은 40°
-const EXPLORE_PITCH := 44.0  # 적이 없을 때는 조금 높고 멀리
+const EXPLORE_PITCH := 37.0  # 적이 없을 때는 조금 높고 멀리
 const EXPLORE_DIST := 8.0
-const BOSS_PITCH := 42.0
+const BOSS_PITCH := 35.0
 const BOSS_DIST := 8.4
 const CAM_FIT := 0.84        # 싸우는 적이 화면 가로 8~92% 안에 들도록 물러난다
 ## 영웅 정의. 모든 캐릭터는 프라우 B와 같은 약 4.5등신으로 통일한다(사용자 결정)
@@ -102,6 +102,14 @@ var cam_yaw := CAM_YAW       # 지금 카메라 방향(도). 조작 방향도 �
 var cam_pitch := CAM_PITCH
 var _yaw_goal := CAM_YAW
 var _yaw_v := 0.0
+## 콤보 궤도: 콤보가 이어지는 동안 카메라가 영웅 둘레를 천천히 돌아 옆·정면을 보여 준다(조작 방향 cam_yaw는 그대로)
+const ORBIT_RATE := 24.0     # 도/초
+const ORBIT_MAX := 165.0
+var _orbit := 0.0            # 지금 궤도 각(도, cam_yaw에 더한다)
+var _orbit_goal := 0.0
+var _orbit_sign := 1.0
+var _combo_seen := 0
+var _combo_age := 10.0       # 마지막 콤보 타격 뒤 지난 실제 초
 var _enter_t := 0.0          # 방에 들어선 직후 한 발 물러나 방 전체를 보여 주는 연출(남은 실제 초)
 var _punch := 0.0            # 강타·JUST에 카메라가 순간 다가서는 연출(남은 실제 초)
 var _ult_t := 0.0            # 궁극기 연출: 영웅 앞쪽 낮은 각도에서 돌며 비춘다(남은 실제 초)
@@ -467,6 +475,23 @@ func _update_camera(delta: float) -> void:
 	_yaw_v = (_yaw_v - ytmp * yw) * exp(-yw * real)
 	cam_yaw = _yaw_goal + (yx + ytmp) * exp(-yw * real)
 	cam_pitch = lerpf(cam_pitch, pitch, 1.0 - exp(-real * 2.0))
+	# 콤보 궤도: 3타부터 ORBIT_RATE로 영웅이 보는 쪽(적 쪽)으로 돌아 옆모습, 길어지면 정면까지. 끊기면 1.5초쯤에 걸쳐 돌아온다
+	if combo != _combo_seen:
+		if combo > _combo_seen and combo >= 3 and _orbit_goal == 0.0:
+			var face_w := Vector3(0, 0, -1).rotated(Vector3.UP, deg_to_rad(cam_yaw))   # 카메라가 보는 쪽(화면 위)
+			var hero_face: Vector3 = player.face if player.face.length() > 0.1 else face_w
+			# 영웅의 정면이 카메라 왼쪽에 있으면 왼쪽으로 돈다(짧은 쪽으로 정면에 닿는다)
+			_orbit_sign = 1.0 if face_w.cross(hero_face).y >= 0.0 else -1.0
+		_combo_seen = combo
+		_combo_age = 0.0
+	_combo_age += real
+	var comboing: bool = combo >= 3 and _combo_age < 1.2 and player.state in ["attack", "recoil", "skill"]
+	if comboing and not has_boss:
+		_orbit_goal = clampf(_orbit_goal + _orbit_sign * ORBIT_RATE * real, -ORBIT_MAX, ORBIT_MAX)
+	elif not comboing:
+		_orbit_goal = move_toward(_orbit_goal, 0.0, 70.0 * real)
+	_orbit = lerpf(_orbit, _orbit_goal, 1.0 - exp(-real * 3.0))
+	var vis_yaw := cam_yaw + _orbit
 	# 궁극기 연출(ART_TARGET 1.3): 150ms에 낮고 가깝게 들어가(ease-out) 영웅 둘레를 12° 돌고, 마지막 300ms에 돌아온다
 	_ult_t = maxf(_ult_t - real, 0.0)
 	var uw := 0.0
@@ -475,8 +500,8 @@ func _update_camera(delta: float) -> void:
 		uk = 1.0 - _ult_t / ULT_CAM
 		uw = (1.0 - pow(1.0 - clampf(uk / 0.12, 0.0, 1.0), 3.0)) * (1.0 - smoothstep(0.76, 1.0, uk))
 	var c_pitch := lerpf(cam_pitch, 28.0, uw)
-	var dir := Vector3(0, 0, 1).rotated(Vector3.RIGHT, -deg_to_rad(c_pitch)).rotated(Vector3.UP, deg_to_rad(cam_yaw + 12.0 * uk * uw))
-	var target := player.global_position + Vector3(0, 1.0, 0) + screen_to_world(Vector2(0, -1)) * 2.0
+	var dir := Vector3(0, 0, 1).rotated(Vector3.RIGHT, -deg_to_rad(c_pitch)).rotated(Vector3.UP, deg_to_rad(vis_yaw + 12.0 * uk * uw))
+	var target := player.global_position + Vector3(0, 1.0, 0) + _screen_dir(Vector2(0, -1), vis_yaw) * 2.0
 	if has_boss:
 		# 보스 방: 초점을 보스 쪽으로 40%(6m 넘게 떨어지면 30%) 옮겨 둘 다 담는다
 		var bd: float = boss.global_position.distance_to(player.global_position)
@@ -484,7 +509,7 @@ func _update_camera(delta: float) -> void:
 	# 싸우는 적이 화면 옆으로 벗어나면 그만큼 물러난다(좁은 렌즈라 영웅 높이에서 보이는 너비가 3.4m뿐이다)
 	var vs := get_viewport().get_visible_rect().size
 	var tan_h := tan(deg_to_rad(camera.fov) * 0.5) * (vs.x / maxf(vs.y, 1.0)) if camera.keep_aspect == Camera3D.KEEP_HEIGHT else tan(deg_to_rad(camera.fov) * 0.5)
-	var right := screen_to_world(Vector2(1, 0))
+	var right := _screen_dir(Vector2(1, 0), vis_yaw)
 	var fit := want
 	for e in enemies:
 		if not is_instance_valid(e) or e.state == "dead":
@@ -502,7 +527,7 @@ func _update_camera(delta: float) -> void:
 		dir = dir.rotated(Vector3.UP, deg_to_rad(28.0) * k * (1.0 if cine_len > 1.0 else 0.4))
 	if uw > 0.0:
 		want = lerpf(want, 4.6, uw)
-		target = target.lerp(_ult_hero.global_position + Vector3(0, 1.0, 0) + screen_to_world(Vector2(0, -1)) * 1.4, uw)
+		target = target.lerp(_ult_hero.global_position + Vector3(0, 1.0, 0) + _screen_dir(Vector2(0, -1), vis_yaw) * 1.4, uw)
 	if not _cam_ready:
 		_cam_ready = true
 		_focus = target
@@ -519,7 +544,7 @@ func _update_camera(delta: float) -> void:
 	_hand_t += real
 	var hs := (1.0 if fighting else 0.6) * (0.4 if uw > 0.0 or cine_t > 0.0 else 1.0)
 	var width := 2.0 * cam_dist * tan(deg_to_rad(camera.fov) / 2.0)
-	var right_w := Vector3(1, 0, 0).rotated(Vector3.UP, deg_to_rad(cam_yaw))
+	var right_w := Vector3(1, 0, 0).rotated(Vector3.UP, deg_to_rad(vis_yaw))
 	var n1 := Vector2(_hand_noise.get_noise_2d(_hand_t * 18.0, 0.0), _hand_noise.get_noise_2d(0.0, _hand_t * 18.0 + 37.0))
 	var n2 := Vector2(_hand_noise.get_noise_2d(_hand_t * 190.0, 91.0), _hand_noise.get_noise_2d(53.0, _hand_t * 190.0))
 	var drift := (right_w * n1.x + Vector3.UP * n1.y * 0.6) * width * HAND_SLOW * hs
@@ -577,10 +602,14 @@ func punch_in() -> void:
 	_punch = 0.28
 
 
-## 화면 방향(2D, 위가 -y)을 월드 바닥 방향으로 바꾼다
+## 화면 방향(2D, 위가 -y)을 월드 바닥 방향으로 바꾼다(조작 기준: 콤보 궤도로 돈 각은 빼고 cam_yaw만 쓴다)
 func screen_to_world(v: Vector2) -> Vector3:
-	var right := Vector3(1, 0, 0).rotated(Vector3.UP, deg_to_rad(cam_yaw))
-	var up := Vector3(0, 0, -1).rotated(Vector3.UP, deg_to_rad(cam_yaw))
+	return _screen_dir(v, cam_yaw)
+
+
+func _screen_dir(v: Vector2, yaw: float) -> Vector3:
+	var right := Vector3(1, 0, 0).rotated(Vector3.UP, deg_to_rad(yaw))
+	var up := Vector3(0, 0, -1).rotated(Vector3.UP, deg_to_rad(yaw))
 	return (right * v.x - up * v.y).normalized()
 
 
@@ -1560,7 +1589,8 @@ func _build_env() -> void:
 	e.background_color = Color(0.08, 0.1, 0.12)
 	e.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 	e.ambient_light_color = Color(0.44, 0.47, 0.52)
-	e.ambient_light_energy = 0.62
+	# 앰비언트를 낮추고 키 라이트를 올려 그림자 맵이 읽히게 한다(앰비언트가 세면 그림자가 씻겨 보이지 않는다)
+	e.ambient_light_energy = 0.46
 	e.tonemap_mode = Environment.TONE_MAPPER_FILMIC
 	e.tonemap_exposure = 1.1
 	e.glow_enabled = not mobile
@@ -1578,12 +1608,18 @@ func _build_env() -> void:
 	moon.rotation_degrees = Vector3(-60, 20, 0)
 	# 천장 균열로 드는 차가운 낮빛(횃불의 따뜻한 빛과 대비)
 	moon.light_color = Color(0.79, 0.83, 0.86)
-	moon.light_energy = 0.6
+	moon.light_energy = 0.9
 	_env_base.y = moon.light_energy
-	# 모바일은 실시간 그림자를 끄고 발밑 원형 그림자만 쓴다
+	# 모바일은 실시간 그림자를 끄고 발밑 원형 그림자만 쓴다. 데스크톱은 2분할 그림자 맵(가까운 쪽이 또렷하다)
 	moon.shadow_enabled = not mobile
-	moon.directional_shadow_mode = DirectionalLight3D.SHADOW_ORTHOGONAL
-	moon.directional_shadow_max_distance = 35.0
+	moon.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS
+	moon.directional_shadow_split_1 = 0.25
+	moon.directional_shadow_max_distance = 26.0
+	moon.directional_shadow_fade_start = 0.85
+	moon.shadow_blur = 1.4
+	moon.shadow_bias = 0.04
+	moon.shadow_normal_bias = 1.6
+	moon.directional_shadow_blend_splits = true
 	add_child(moon)
 	# 방 분위기(앰비언트·달빛 색과 방향·안개·배경)는 던전이 영웅 위치에 따라 섞는다(dungeon.gd MOODS, Mood 노드).
 	# 세기는 _env_base에 써 주므로 위 _process의 궁극기 '둘레 어둡게'가 그대로 겹친다

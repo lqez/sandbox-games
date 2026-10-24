@@ -226,6 +226,15 @@ func _strike(m: Dictionary, at: Vector3, dir: Vector3) -> void:
 		if d <= float(m.radius) + e.radius:
 			hits.append(e)
 	hero.blade_strike(hits, at, dir, m)
+	# 부서지는 소품(상자·통)도 칼이 닿으면 부서진다
+	var props: Array = hero.game.dungeon.breakables if hero.game.dungeon != null else []
+	for b in props:
+		if not is_instance_valid(b) or b.broken:
+			continue
+		var pd := Vector2(b.global_position.x - at.x, b.global_position.z - at.z).length()
+		if pd <= float(m.radius) + b.radius and absf(b.global_position.y + b.height * 0.5 - at.y) < b.height:
+			b.hit(dir, at, float(m.get("info", {}).get("weight", 0.4)))
+			hits.append(b)
 	if hits.is_empty() and m.get("whiff_fx", true):
 		hero.game.sfx("whoosh", 0.15, -6.0)
 

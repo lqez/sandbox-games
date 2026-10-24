@@ -166,7 +166,7 @@ func setup(g: Node, k: String) -> void:
 	for loop_name in ["idle", "walk", "run", "block"]:
 		if anim.has_animation(loop_name):
 			anim.get_animation(loop_name).loop_mode = Animation.LOOP_LINEAR
-	add_child(Fx.disc(radius * 1.3, Color(0, 0, 0, 0.4)))
+	add_child(Fx.disc(radius * 1.3, Color(0, 0, 0, 0.4 if g.mobile else 0.16)))
 	_play("idle", 1.0, 0.0)
 	t = -randf() * 0.4
 
@@ -429,6 +429,14 @@ func _physics_process(delta: float) -> void:
 	move_and_slide()
 	Breakable.push_from(self, v_in)
 	position.y = lerpf(position.y, game.height_at(position.x, position.z), 1.0 - exp(-delta * 25.0))
+	# 벽에 파묻히지 않는다(얇은 벽 면을 뚫었으면 벽 거리장으로 밀어낸다)
+	var unbury: Vector2 = game.dungeon.wall_push(Vector2(position.x, position.z), 0.3) if game.dungeon != null else Vector2.ZERO
+	if unbury != Vector2.ZERO:
+		position.x += unbury.x
+		position.z += unbury.y
+		var un := Vector3(unbury.x, 0.0, unbury.y).normalized()
+		if knock.dot(-un) > 0.0:
+			knock += un * knock.dot(-un)
 	# 세게 밀려 벽에 부딪혔다: 벽에 튕겨 앞으로 고꾸라진다(래그돌)
 	if pushed.length() > 3.0 and kind != "boss" and state != "dead":
 		for i in get_slide_collision_count():

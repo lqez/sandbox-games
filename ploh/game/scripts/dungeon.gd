@@ -369,6 +369,19 @@ func sdf(p: Vector2) -> float:
 	return d + _noise.get_noise_2d(p.x, p.y) * 1.0
 
 
+## 벽에 파묻힌 몸을 밖으로 밀어낼 변위(월드 xz). 벽 거리장이 -pad보다 안쪽(벽 쪽)이면 기울기 반대쪽으로 그만큼 민다.
+## 물리 캡슐이 얇은 벽 면을 뚫었을 때(세게 밀림, 돌진)의 안전판
+func wall_push(p: Vector2, pad: float) -> Vector2:
+	var d := sdf(p)
+	if d <= -pad:
+		return Vector2.ZERO
+	var e := 0.05
+	var g := Vector2(sdf(p + Vector2(e, 0)) - sdf(p - Vector2(e, 0)), sdf(p + Vector2(0, e)) - sdf(p - Vector2(0, e)))
+	if g.length() < 0.0001:
+		return Vector2.ZERO
+	return -g.normalized() * (d + pad)
+
+
 func _seg(p: Vector2, a: Vector2, b: Vector2) -> float:
 	var ab := b - a
 	var t := clampf((p - a).dot(ab) / ab.length_squared(), 0.0, 1.0)

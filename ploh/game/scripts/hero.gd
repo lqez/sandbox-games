@@ -212,7 +212,8 @@ func setup(g: Node, d: Dictionary) -> void:
 	for loop_name in [d.anims.moves.idle, d.anims.moves.run, d.anims.moves.charge, d.anims.moves.get("guard", "guard"), "guard_fwd", "guard_back", "strafe_l", "strafe_r"]:
 		if anim.has_animation(loop_name):
 			anim.get_animation(loop_name).loop_mode = Animation.LOOP_LINEAR
-	add_child(Fx.disc(0.6, Color(0, 0, 0, 0.4)))
+	# 발밑 그림자: 그림자 맵이 있으면(데스크톱) 접지감만 살짝, 없으면(모바일) 이것이 그림자다
+	add_child(Fx.disc(0.6, Color(0, 0, 0, 0.4 if g.mobile else 0.16)))
 	mats = Fx.toonify(model, 0.0022)
 	Fx.set_param(mats, "aura_color", d.color.lightened(0.15))
 	trail = Trail.new()
@@ -343,6 +344,21 @@ func _play(name: String, speed := 1.0, blend := 0.08, restart := false) -> void:
 	# (예비 동작을 2배속으로 틀면 0.15초 섞기가 2프레임에 끝나 칼이 순간이동처럼 튀었다)
 	anim.play(name, blend * maxf(speed, 0.05))
 	anim.speed_scale = speed
+
+
+## 벽에 파묻히지 않는다: 벽 거리장으로 캡슐 반지름 안쪽까지 밀어내고, 벽으로 향하던 속도는 지운다
+func _unbury() -> void:
+	if game.dungeon == null:
+		return
+	var push: Vector2 = game.dungeon.wall_push(Vector2(position.x, position.z), 0.3)
+	if push == Vector2.ZERO:
+		return
+	position.x += push.x
+	position.z += push.y
+	var n := Vector3(push.x, 0.0, push.y).normalized()
+	var into := _vel.dot(-n)
+	if into > 0.0:
+		_vel += n * into
 
 
 ## 긴 모션캡처 클립을 욱여넣지 않고, 칼이 빨라지기 조금 전부터 speed배로 보여 준다(스킬·궁극기)
@@ -1055,6 +1071,7 @@ func _physics_process(delta: float) -> void:
 	Breakable.push_from(self, v_in)
 	# 벽에 막히면 몸에 실린 속도도 그만큼 줄어든다
 	_vel += Vector3(velocity.x, 0.0, velocity.z) - Vector3(v_in.x, 0.0, v_in.z)
+	_unbury()
 	# 지형 위를 걷는다(발은 절차적 IK가 지형에 붙인다)
 	position.y = lerpf(position.y, game.height_at(position.x, position.z), 1.0 - exp(-delta * 25.0))
 	# 상체와 시선은 싸우는 상대를 먼저 향한다

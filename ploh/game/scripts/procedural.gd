@@ -62,7 +62,7 @@ const PLANT_IN := 0.035      # 애니메이션 발목이 쉬는 높이에서 이
 const PLANT_OUT := 0.07      # 이만큼 넘게 들면 뗐다고 본다(두 문턱으로 들고 내릴 때 떨지 않게)
 const STEP_FAR := 0.24       # 디딘 발이 애니메이션 자리에서 이만큼 멀어지면 옮겨 딛는다
 const STEP_TURN := 0.55      # 발 방향이 이만큼(라디안) 어긋나면 옮겨 딛는다
-const STEP_MAX := 0.85       # 한 걸음의 최대 보폭
+const STEP_MAX := 0.85       # 발자국을 클립 자리에서 옮길 수 있는 최대 거리(다리 길이 비율)
 const STEP_TIME := 0.3       # 한 걸음 시간(초, 다리 길이 0.9m 기준). 몸이 빠를수록 짧다(0.2초 아래로는 가지 않는다: 발이 휙 넘어가 보인다)
 const GAIT_LIFT := 0.08      # 클립이 발을 거의 들지 않고 끄는 걸음(옆걸음 등)에 더해 주는 들림(다리 길이 비율)
 const CROSS_GAP := 0.1       # 발자국이 다른 발을 건너지 않게 두는 최소 옆 간격(다리 길이 비율)
@@ -234,22 +234,32 @@ static func analyze_gait(ap: AnimationPlayer, skel: Skeleton3D, clip: String, le
 		# 디딤: 가장 낮은 높이 + 다리 길이의 4% 안이고, 수평 속도가 보폭 속도의 35% 아래(루트 이동이 지워진 클립에서 디딘 발은 뒤로 흐른다)
 		var h_th := lowest + 0.04 * leg_len
 		var speeds: Array = []
+		var rel_v: Array = []      # 골반 기준 발 속도(수평)
 		for i in n + 1:
 			var j := (i + 1) % (n + 1) if out.loop else mini(i + 1, n)
 			var k := i if out.loop or i < n else n - 1
 			var pa: Vector3 = samples[k][f]
 			var pb: Vector3 = samples[j if out.loop else k + 1][f]
 			speeds.append(Vector2(pb.x - pa.x, pb.z - pa.z).length() / dt)
+			var ra: Vector3 = pa - hip_xz[k]
+			var rb: Vector3 = pb - hip_xz[j if out.loop else k + 1]
+			rel_v.append(Vector2(rb.x - ra.x, rb.z - ra.z) / dt)
 		var ground_speeds: Array = []
+		var flow := Vector2.ZERO   # 디딘 발이 몸 기준으로 흐르는 방향(달리기면 뒤)
 		for i in n + 1:
 			if samples[i][f].y < h_th:
 				ground_speeds.append(speeds[i])
+				flow += rel_v[i]
 		ground_speeds.sort()
 		var med: float = ground_speeds[ground_speeds.size() / 2] if ground_speeds.size() > 0 else 0.0
 		var v_th := maxf(med * 1.6, 0.25)
+		flow = flow.normalized() if flow.length() > 0.001 else Vector2.ZERO
 		var down: Array = []
 		for i in n + 1:
-			down.append(samples[i][f].y < h_th and speeds[i] < v_th)
+			# 디딤은 발이 몸 기준으로 뒤로 흐르는 동안만이다. 내려 디디며 앞으로 가던 발이 멎는 몇 프레임을 디딤에 넣으면
+			# 그 자리에 붙잡힌 발이 클립보다 뒤에 남아 디딤 끝에 다리가 늘어나고 골반이 처졌다
+			var backward: bool = med < 0.3 or (rel_v[i] as Vector2).dot(flow) > 0.5 * med
+			down.append(samples[i][f].y < h_th and speeds[i] < v_th and backward)
 		# 2프레임 미만의 들림·디딤은 잡음으로 보고 메운다
 		for pass_i in 2:
 			for i in n + 1:
@@ -1046,8 +1056,12 @@ func _plan_gait(sk: Skeleton3D, dt: float, i: int, gi: Dictionary, a: Vector3, h
 		f.land = Vector3.INF
 	var hip_w: Vector3 = sk_global * sk.get_bone_global_pose(_legs[i][0]).origin
 	if st[0] and f.gstance and f.rel_t <= 0.0:
-		# 안전판(UE Foot Placement의 unplant): 붙잡은 발이 엉덩이에서 다리 길이의 92%보다 멀어지면(몸이 밀렸다, 돌진했다) 놓는다
-		if Vector2(f.lock.x - hip_w.x, f.lock.z - hip_w.z).length() > 0.92 * leg:
+		# 안전판(UE Foot Placement의 unplant): 붙잡은 발이 엉덩이에서 다리 길이의 92%보다 멀어지고,
+		# 클립의 발보다도 눈에 띄게(다리 길이의 12%) 더 멀면(몸이 밀렸다, 돌진했다) 놓는다.
+		# 달리기의 뒷다리는 클립에서도 멀리 뻗으므로 클립보다 멀어졌을 때만 놓아야 미끄러지지 않는다
+		var lock_d := Vector2(f.lock.x - hip_w.x, f.lock.z - hip_w.z).length()
+		var clip_d := Vector2(a.x - hip_w.x, a.z - hip_w.z).length()
+		if lock_d > 0.92 * leg and lock_d > clip_d + 0.12 * leg:
 			f.rel_t = 0.22
 			f.off = f.lock - a
 			f.yoff = angle_difference(ya, f.lock_yaw)
@@ -1101,11 +1115,11 @@ func _plan_gait(sk: Skeleton3D, dt: float, i: int, gi: Dictionary, a: Vector3, h
 	var print_now: Vector3 = Vector3(hw.x, 0.0, hw.z) + sk_global.basis * Vector3(pr.x, 0.0, pr.z)
 	var t_rem: float = float(nx[1]) / maxf(absf(anim.speed_scale), 0.05)
 	var landing: Vector3 = print_now + _body_v * t_rem
-	# 보폭 제한: 붙잡혔던 자리에서 다리 길이의 STEP_MAX 안
-	var from: Vector3 = f.lock
-	var dxz := Vector3(landing.x - from.x, 0.0, landing.z - from.z)
+	# 보정 제한: 클립 발자국에서 다리 길이의 STEP_MAX 안. 보폭을 지난 발자국 기준으로 묶으면 안 된다:
+	# 몸이 빠르면 발이 한 걸음에 따라잡지 못해 걸음마다 뒤로 밀려나고, 끝내 몇 미터 뒤에 끌리며 골반이 주저앉았다
+	var dxz := Vector3(landing.x - print_now.x, 0.0, landing.z - print_now.z)
 	if dxz.length() > STEP_MAX * leg:
-		landing = from + dxz.normalized() * STEP_MAX * leg
+		landing = print_now + dxz.normalized() * STEP_MAX * leg
 	# 다리 꼬임 금지: 다른 발을 건너지 않는다(왼발은 오른발보다 몸 왼쪽(+side)에)
 	if _legs.size() == 2:
 		var sgn := 1.0 if i == 0 else -1.0
@@ -1119,6 +1133,8 @@ func _plan_gait(sk: Skeleton3D, dt: float, i: int, gi: Dictionary, a: Vector3, h
 		f.land = landing
 	elif u < 0.8:
 		f.land = (f.land as Vector3).lerp(landing, 1.0 - exp(-dt * 14.0))
+	# 보정 = 내려 디딜 자리 − 지금 발자국. 들림 중에는 몸 속도 × 남은 시간만큼 발이 클립보다 앞서 간다(내려놓을 자리를
+	# 미리 향한다). 클립 발의 예측 자리와 비교하는 식(보정≈0)도 재 봤지만 옆걸음에서 다리 꼬임이 0→50틱으로 늘어 이쪽을 둔다
 	var corr: Vector3 = (f.land as Vector3) - print_now
 	corr.y = 0.0
 	var out: Vector3 = a + (f.off as Vector3) * (1.0 - e_in) + corr * e_in
@@ -1155,10 +1171,10 @@ func _wrap(d: float, length: float) -> float:
 func _step_goal(i: int, a: Vector3, leg: float, side: Vector3) -> Vector3:
 	var f: Dictionary = _ft[i]
 	var goal: Vector3 = a + _body_v * ((1.0 - float(f.s)) * float(f.dur) + STEP_LEAD)
-	var from: Vector3 = f.from
-	var d := Vector3(goal.x - from.x, 0.0, goal.z - from.z)
+	# 내다본 자리는 클립 자리에서 다리 길이의 STEP_MAX 안(지난 자리 기준이면 빠르게 밀릴 때 발이 영영 못 따라온다)
+	var d := Vector3(goal.x - a.x, 0.0, goal.z - a.z)
 	if d.length() > STEP_MAX * leg:
-		goal = from + d.normalized() * STEP_MAX * leg
+		goal = a + d.normalized() * STEP_MAX * leg
 	if _ft.size() == 2:
 		# 디딘 발을 건너 딛지 않는다(옆으로 밀릴 때 다리가 꼬이지 않게)
 		var sgn := 1.0 if i == 0 else -1.0
@@ -1195,6 +1211,9 @@ func _feet(sk: Skeleton3D, dt: float) -> void:
 	var h_des_min := INF
 	var h_des_sum := 0.0
 	var h_max_min := INF
+	var n_reach := 0
+	# 골반은 디딘 발(무게를 받는 발)에만 맞춘다. 들린 발의 목표는 옮겨 가는 길 위라 거기에 골반을 내리면
+	# 달릴 때 거의 다 뻗은 다리에 작은 보정만 들어도 골반이 20cm씩 주저앉아 무릎 굽은 채 끌며 뛰어 보였다
 	for i in _legs.size():
 		var hp_w: Vector3 = sk_global * sk.get_bone_global_pose(_legs[i][0]).origin
 		var tw: Vector3 = _targets[i][0]
@@ -1204,16 +1223,21 @@ func _feet(sk: Skeleton3D, dt: float) -> void:
 		var want_len: float = minf(hp_w.distance_to(fw0), L)          # 원래 자세의 엉덩이-발목 거리
 		var h_des: float = tw.y + sqrt(maxf(want_len * want_len - dh * dh, 0.0)) - hp_w.y
 		var h_max: float = tw.y + sqrt(maxf(L * L - dh * dh, 0.0)) - hp_w.y
-		h_des_min = minf(h_des_min, h_des)
-		h_des_sum += h_des
-		h_max_min = minf(h_max_min, h_max)
+		# 옆으로 닿지 않는 발(밀려난 몸, 순간이동)에는 골반을 내려도 소용없다. 그 발은 IK가 닿는 데까지만 뻗는다
+		# 두 발 다 떠 있으면(달리기의 공중 구간) 골반을 내릴 까닭이 없다
+		var bearing: bool = _ft[i].mode == PLANT or _ft[i].gstance
+		if dh <= L and bearing:
+			h_des_min = minf(h_des_min, h_des)
+			h_des_sum += h_des
+			h_max_min = minf(h_max_min, h_max)
+			n_reach += 1
 		# 한 발을 드는 동안 몸무게를 디딘 발 쪽으로 옮긴다
 		if _ft[i].mode == STEP and _legs.size() == 2:
 			var sup: Vector3 = _ft[1 - i].out
 			var to_sup := Vector3(sup.x - hp_w.x, 0.0, sup.z - hp_w.z)
 			sway_goal = to_sup.limit_length(0.05 * L) * 0.6 * sin(PI * float(_ft[i].s))
-	if _legs.size() > 0 and h_max_min != INF:
-		var h_des_avg := h_des_sum / _legs.size()
+	if n_reach > 0 and h_max_min != INF:
+		var h_des_avg := h_des_sum / n_reach
 		var mintoavg := maxf(h_des_avg - h_des_min, 0.0)
 		var mintomax := maxf(h_max_min - h_des_min, 0.0)
 		var hip_off := h_des_min + (mintoavg * mintomax) / maxf(mintoavg + mintomax, 0.0001)
