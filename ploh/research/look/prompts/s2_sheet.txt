@@ -1,0 +1,10 @@
+A game VFX concept breakdown sheet for a stylized anime mobile action RPG, on a PURE BLACK background (so every element could be used as an additive texture), clean grid of 8 separate elements with generous black space between them, no text, no labels, no characters:
+1. a thin crescent SWORD-QI ARC (like a new moon, sharp tapered tips, white-hot core, warm gold #F2CC73 glow);
+2. the same crescent arc in flame red-orange #FF6A3D with ember flecks;
+3. the same crescent arc in ice blue #8CCBFF with frost flecks;
+4. a SPARK BURST: 20 short white-hot streaks radiating from a point, some yellow-orange, with a 4-pointed star flash at the centre;
+5. a stylized CRIMSON SPRAY: a fan-shaped burst of dark-crimson ink droplets and soft red mist, like a paint splash (game-appropriate, not gore);
+6. a SLASH TRAIL ribbon: a long curved tapered ribbon, white at the head, gold in the middle, fading to transparent at the tail;
+7. a flat SHOCKWAVE RING seen at an angle (ellipse), thin bright edge with a soft inner fade;
+8. a HALO RING: a glowing thin circle with small rune ticks and a soft bloom, gold.
+Crisp shapes, soft glow, high contrast, game-ready look.

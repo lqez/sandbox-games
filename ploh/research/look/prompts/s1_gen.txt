@@ -1,0 +1,11 @@
+Vertical 9:16 in-game screenshot of a premium stylized 3D mobile action RPG (anime cel-shaded characters with thin ink outlines, painterly hand-made dungeon textures), rendered in real time. NO user interface, no text, no buttons, no health bars.
+
+CAMERA: a close third-person over-the-shoulder chase camera like God of War (2018) adapted for a portrait phone: the camera sits about 4 metres behind and 2.5 metres above the hero, looking down at about 30 degrees, slightly offset so the hero stands left of centre. The hero is seen from behind (three-quarter back view), standing in the LOWER THIRD of the frame, her full body visible, about 22% of the screen height tall. The floor recedes into strong perspective depth toward the top of the frame.
+
+HERO: a 4.5-head-tall stylized anime girl swordfighter: black messy hair tied in a small top bun with an antenna strand, pointed elf ears, a cropped pale-yellow puffer vest over a white T-shirt with green and cyan paint splashes, black leggings, pale-yellow boots, a large flat grey broadsword held low in her right hand, mid-step toward the enemies.
+
+ENEMIES: in the middle third, 4 to 6 metres ahead of her, three Gallus Empire conscript soldiers (the same 4.5-head stylized proportions): navy-grey long military greatcoats with gold buttons, peaked caps, brown leather belts, sabres; one of them is raising his sabre in a wind-up with a thin orange-red danger arc on the floor at his feet. Further back, a heavy armoured shield-bearer with a tall grey-blue tower shield with a gold chevron.
+
+DUNGEON: an ancient castle swallowed by a cave: huge worn polygonal flagstones on the floor, dressed ashlar castle walls up to about 2 metres then rough cave rock above, thick tree roots hanging over the jagged top of the wall, warm torches on the walls casting pools of orange light, a faded navy imperial eagle banner, crates and barrels along the walls, a dark archway in the far wall leading deeper. Dust motes in the torchlight. The centre of the room is open floor for fighting. Neutral grey-blue ambient shadows, warm torch light, readable mid-tone floor (not too dark).
+
+The lower 25% of the image is calm, mostly floor, so a thumb can rest there without covering the action.

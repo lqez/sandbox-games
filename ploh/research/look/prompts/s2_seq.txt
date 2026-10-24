@@ -1,0 +1,8 @@
+Image 1 is a real screenshot of our portrait mobile action RPG; image 2 is the hero 프라우 (black hair top bun, elf ears, pale-yellow puffer vest, white T-shirt, black leggings, pale-yellow boots, big flat grey broadsword); image 3 is a Gallus Empire conscript soldier. All characters are about 4.5 heads tall (big heads, stylized anime 3D game models), keep exactly the designs, colours and proportions of the reference model images.
+
+Make a timing STORYBOARD of ONE sword hit as FOUR equal vertical panels side by side (left to right), the same close over-the-shoulder camera in every panel, same dungeon, no text or numbers:
+Panel 1 (impact frame, 0 ms): the blade touches the soldier; a bright 4-pointed white star flash at the contact point, the soldier tinted pure white, a white-hot gold crescent sword-qi arc just appearing along the swing.
+Panel 2 (+50 ms): the crescent arc fully extended beyond the blade, a radial burst of white-hot spark streaks, a fan of stylized dark-crimson droplets bursting out behind the soldier, the white tint fading, the soldier bent backward.
+Panel 3 (+150 ms): the arc thinning and fading from the tail, sparks falling with gravity and turning orange, crimson mist drifting, the slash trail ribbon still visible behind the blade.
+Panel 4 (+400 ms): everything faded except a few embers and a faint mist, the soldier knocked back one step, the hero recovering.
+Stylized anime toon-shaded 3D game look, additive glow VFX, game-appropriate (no gore).
