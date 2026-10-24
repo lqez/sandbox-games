@@ -565,8 +565,9 @@ func _sidestep(dir: Vector3, from: Node3D) -> void:
 	if _anim(key) == _anim("dodge"):
 		# 횡대시 클립이 없으면 구르기 클립을 옆으로(앞부분만)
 		face = _step_dir
-	_play(_anim(key), 2.2, 0.06, true)
-	_snap(_anim(key), [2.2, 0.12, 0.6, 0.12, 1.0])
+	# 횡대시 클립(0.43초): 튀어 나가 옆으로 미끄러지고, 무릎을 굽혀 버틴 뒤 일어선다
+	_play(_anim(key), 1.6, 0.05, true)
+	_snap(_anim(key), [1.6, 0.12, 0.7, 0.12, 1.0])
 	game.sfx("dodge", 0.15, -3.0)
 
 

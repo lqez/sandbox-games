@@ -3,7 +3,7 @@
 갈루스 제국의 방패 중장보병입니다(`design/enemies/ROSTER.md` 3장). 프라우 `astrid/B_mid`와 같은 약 4.5등신 비율(투구가 머리), 같은 키 1.25 m, 같은 Meshy 휴머노이드 리그를 씁니다. 폭은 징집병보다 넓습니다(A-pose 몸 폭 0.80 m, 징집병 0.65 m).
 
 ## 파일
-- `shieldbearer.glb`: 몸 메시 `body`(스킨) + `weapon_shield`(`LeftHand` 본의 자식) + `weapon_sword`(`RightHand` 본의 자식) + 아마추어 1개(24본), 액션 9개, 30 fps
+- `shieldbearer.glb`: 몸 메시 `body`(스킨) + `weapon_shield`(`LeftHand` 본의 자식) + `weapon_sword`(`RightHand` 본의 자식) + 아마추어 1개(24본), 액션 11개, 30 fps
 - `turnaround.png`: gpt-image-2 3면도(정면·좌측면·후면, 1536×1024)
 - `view_front.png`, `view_side.png`, `view_back.png`: 같은 배율·같은 발 높이로 자른 1024² 입력 이미지
 - `beauty.png`: 정면 3/4, idle 0프레임, Eevee 1024². 방패가 몸을 다 가리지 않도록 캐릭터 오른쪽 앞(-35°)에서 찍었습니다
@@ -29,12 +29,14 @@
 | 액션 | 라이브러리 액션(ID) | 원본 프레임 | 길이 | 타격 프레임(빠른 구간), 칼끝 최고 속도 | 손질 |
 |---|---|---|---|---|---|
 | idle | Combat Idel (89) | 0–50 | 51 (1.67 s) | – | 루프 |
-| walk | Walk Fight Forward (21) | 0–50 | 51 (1.67 s) | – | 루프 |
-| run | 리깅 기본 달리기 | 0–19 | 20 (0.63 s) | – | 루프 |
+| walk | Walk Fight Forward (21) | 0–50 | 51 (1.67 s) | – | 루프. v2: 왼팔을 idle 자세로 두고 방패를 정면으로 세움(원본은 두 손으로 검을 쥐어 방패가 오른다리를, 검이 방패를 지나감) |
+| run | 리깅 기본 달리기 | 0–19 | 20 (0.63 s) | – | 루프. v2: 왼팔 idle 자세, 방패 정면(원본 팔 흔들기는 방패를 눕혀 몸통에 넣음) |
 | attack_1 | Triple Combo Attack (105) | 0–29 | 44 (1.43 s) | 23 (21–29), 16 m/s | idle에서 6프레임 섞어 시작, idle 복귀 14프레임 덧붙임 |
-| shield_bash | Boxing Guard, Prep Straight Punch (210) | 30–84 | 55 (1.80 s) | 28 (22–33), 4 m/s | 좌우 반전, idle에서 10프레임 섞어 시작, 끝 12프레임 idle로 섞음, 무기 팔 idle 고정 |
-| block | Sword Parry (147) | 0–54 | 55 (1.80 s) | – | 루프 |
-| block_hit | Sword Parry Backward (148) | 0–39 | 40 (1.30 s) | – | – |
+| shield_bash | Boxing Guard, Prep Straight Punch (210) | 30–84 | 45 (1.47 s) | 20 (19–21), 9.8 m/s(방패 모서리) | 좌우 반전, v2: 내지르는 6프레임을 3프레임으로 줄이고 방패를 내내 정면으로 세움, idle에서 10프레임 섞어 시작, 끝 12프레임 idle로 섞음, 무기 팔 idle 고정 |
+| block | Block2 (139) | 0–47 | 48 (1.57 s) | – | 루프. v2: 복싱 가드 몸 + 방패를 정면으로 세우고 10 cm 내림, 무기 팔 idle 고정 |
+| block_hit | Block4 (141) | 0–32 | 20 (0.63 s) | – | v2: 가드가 가슴 쪽으로 밀렸다 돌아옴(1.7배 빠르게), block에서 3프레임 섞어 시작, block으로 4프레임 복귀 |
+| parry | Left Jab from Guard (191) | 2–40 | 25 (0.80 s) | 방패 타격 4 (2–5), 4.9 m/s, 방패 앞 구간 3–9 | 새 클립. block에서 3프레임 섞어 시작, 방패를 3프레임 만에 앞으로 내밀었다 회수, block으로 4프레임 복귀 |
+| counter | Right Jab from Guard (192) | 6–30 | 35 (1.13 s) | 11 (11–12), 9.8 m/s | 새 클립. parry 끝(block 자세)에서 6프레임 섞어 시작, 검을 앞으로 겨눠 찌르기, 방패는 왼쪽으로 열림, idle 복귀 10프레임 |
 | hit | Hit Reaction 1 (179) | 0–22 | 23 (0.73 s) | – | idle에서 3프레임 섞어 시작, 끝 8프레임 idle로 섞음, 양팔 idle 고정 |
 | death | Fall Dead from Abdominal Injury (188) | 0–105 | 106 (3.50 s) | – | idle에서 4프레임 섞어 시작 |
 
@@ -51,16 +53,50 @@
 | `01a169eb-ae39-71f0-8439-c505c37f4537` | 89, 21, 92, 220, 147, 148, 151, 179 | 24 |
 | `01a169f8-a810-7092-9dee-f2c7e11d3acd` | 105 | 3 |
 | `01a16a08-f395-7502-bcde-b347fb44b526` | 210 | 3 |
+| `01a16bdd-9a08-71f7-a491-099b8c366118` | 139, 140, 141, 191, 192 (막기·패리·반격, 140 Block3은 안 씀) | 15 |
+
+### 막기·패리·반격 (2026-10-24, v2)
+방패 병사가 막고(block), 영웅의 공격을 방패로 쳐내고(parry), 찌르기로 반격(counter)하는 흐름입니다. 방패 징집병(`../conscript_shield/`)과 같은 설정(`mocap_build.py`의 `SHIELD_NEW`)을 씁니다.
+- 흐름: `block`(루프) → 맞는 순간 `parry` → `counter` → idle. parry는 block 자세로 시작하고 끝나며, counter는 그 자세에서 시작합니다. 막는 중 맞으면 `block_hit`(block 자세로 시작·끝).
+- 라이브러리에 방패 막기가 없습니다. 복싱 가드(Block2, Block4)와 잽(Left/Right Jab from Guard)의 몸과 방패 팔을 쓰고, 주먹 방향 그대로면 방패가 머리 위로 눕기 때문에 방패 바깥면이 캐릭터 정면(약간 위), 세로축이 위를 향하도록 손 회전을 덮어썼습니다(`motion.orient_prop`, `shield_axes`). block·block_hit·parry·counter에서는 방패 손을 10 cm 내려(IK) 투구부터 무릎 위까지 가립니다.
+- parry는 방패로 쳐내는 짧은 동작입니다. 방패 앞 구간(3–9프레임, 0.10–0.30 s)을 패리 판정 창으로 쓸 수 있습니다.
+- counter는 영웅의 thrust와 같은 방법(Right Jab + 검 방향 덮어쓰기 + IK로 10 cm 더 뻗음)입니다. 찌르는 동안 방패를 왼쪽 뒤로 16 cm 열고 바깥쪽으로 돌려 검이 방패를 지나가지 않게 했습니다.
+- 이전 block(Sword Parry)·block_hit(Sword Parry Backward)은 손바닥을 편 칼 막기라 방패가 머리 위에 우산처럼 눕고 검이 방패를 지나갔습니다. 이전 shield_bash는 내지르는 순간 방패가 옆으로 서 있었습니다(4 m/s).
 
 ### 문제
 - 라이브러리에 방패 치기가 없습니다. Shield Push Left는 방패를 옆으로 세워 미는 동작이라 쓰지 않았고, 주먹(=방패 앞면)이 앞으로 나가는 Boxing Guard, Prep Straight Punch를 좌우 반전해 방패 팔에 입혔습니다. 칼 든 팔은 idle 자세를 유지합니다. 준비 자세에서 방패를 머리 높이로 듭니다.
-- block은 Sword Parry(정지한 막기 자세), block_hit은 Sword Parry Backward입니다. 방패로 막는 전용 동작은 라이브러리에 없습니다.
-- attack_1의 5프레임(예비 동작, 칼을 머리 뒤로 젖힘)에서 칼날이 투구를 최대 9.5 cm 지나갑니다.
+- 방패로 막는 전용 동작은 라이브러리에 없어서 복싱 가드에 방패 방향을 덮어썼습니다(위 '막기·패리·반격').
+- 이전 버전의 'attack_1 5프레임에서 칼날이 투구를 9.5 cm 지나감'은 캡슐 검사의 과대 추정이었습니다. 실제 몸 메시 검사로는 20프레임에 1.5 cm였고 v2에서 고쳤습니다(아래 표).
 - 라이브러리 클립은 레퍼런스(예비 150–250 ms, 베기 50–130 ms)보다 예비 동작이 깁니다. 시간 재배치는 게임 코드가 맡습니다.
+
+### 무기 관통 검사·수정 (2026-10-24)
+`ploh/tools/mocap/clipcheck.py`로 실제 몸 메시(감축 전 `raw/shieldbearer_handkeyed.glb`)에 대해 무기 관통을 프레임마다 검사하고, `mocap_build.py`가 클립마다 손목 회전과 팔 IK로 고칩니다(방법은 `../../astrid/B_mid/README.md`의 '무기 관통 검사·수정'). 무기를 쥔 손과 아래팔은 검사에서 빼고(방패는 왼팔 전체), 검이 자기 방패를 지나가는 것도 관통으로 셉니다. 무기 관통 수정으로 공격 클립의 타격 프레임은 바뀌지 않았습니다(attack_1 23, shield_bash 20, counter 11). 아래는 이전 GLB(`raw/shieldbearer_mocap1.glb`)와 새 GLB를 같은 검사로 비교한 결과입니다(1 cm 복셀 기준, ±0.5 cm).
+
+| 액션 | 무기 | 이전 GLB: 최대 깊이 / 1 cm 넘는 프레임 (부위) | 새 GLB | 수정: 손목 회전 최대 / 팔 IK 이동 최대 |
+|---|---|---|---|---|
+| idle | 방패 | 1.6 cm / 12 (오른팔) | 0.6 cm / 0 | 6.0° / 0.0 cm |
+| walk | 방패 | 7.3 cm / 51 (오른다리) | 0.0 cm / 0 | 0.0° / 0.0 cm |
+| walk | 검 | 7.1 cm / 51 (자기 방패) | 0.0 cm / 0 | 0.0° / 0.0 cm |
+| run | 방패 | 6.8 cm / 13 (왼다리, 오른다리) | 0.0 cm / 0 | 0.0° / 0.0 cm |
+| run | 검 | 7.8 cm / 10 (자기 방패) | 0.6 cm / 0 | 21.2° / 0.0 cm |
+| attack_1 | 방패 | 4.9 cm / 15 (왼다리, 오른팔, 오른다리) | 0.6 cm / 0 | 10.8° / 0.0 cm |
+| attack_1 | 검 | 1.5 cm / 1 (머리) | 0.5 cm / 0 | 5.4° / 0.0 cm |
+| shield_bash | 방패 | 2.7 cm / 7 (오른팔, 머리) | 0.7 cm / 0 | 17.4° / 0.0 cm |
+| shield_bash | 검 | 3.1 cm / 2 (자기 방패) | 0.0 cm / 0 | 0.0° / 0.0 cm |
+| block | 검 | 6.8 cm / 55 (자기 방패) | 0.0 cm / 0 | 0.0° / 0.0 cm |
+| block_hit | 방패 | 3.0 cm / 31 (머리) | 0.4 cm / 0 | 5.7° / 0.0 cm |
+| block_hit | 검 | 7.8 cm / 32 (왼팔, 자기 방패) | 0.1 cm / 0 | 59.3° / 8.4 cm |
+| hit | 방패 | 1.2 cm / 12 (오른팔) | 0.1 cm / 0 | 0.0° / 0.0 cm |
+| death | 방패 | 5.6 cm / 103 (왼다리, 오른팔, 오른다리) | 5.5 cm / 19 (왼다리, 오른팔, 오른다리) | 60.0° / 18.8 cm |
+| death | 검 | 7.8 cm / 99 (자기 방패) | 7.8 cm / 56 (왼팔, 왼다리, 오른팔, 오른다리, 머리, 자기 방패, 몸통) | 60.0° / 30.5 cm |
+
+- death는 앞으로 쓰러지며 검·방패를 몸 아래에 깔아서 다 빼지 못했습니다(검이 방패를 56프레임, 방패가 다리를 19프레임 지나감). 적의 죽음은 게임에서 래그돌을 쓰고 이 클립은 래그돌이 없을 때만 쓰므로 그대로 두었습니다.
 
 ### 재현
 - Meshy 요청: `uv run --no-project --with requests python ploh/tools/heroes/meshy.py soldiers/shieldbearer anim <action_id,...> <태그>` (`raw/animations_<태그>.glb`)
-- GLB·사이드카: `uv run --no-project --with numpy python ploh/tools/mocap/mocap_build.py shieldbearer` (클립 표는 이 스크립트의 `SPEC`, 몸 감축은 `decimate_body.py`를 헤드리스 Blender로 실행, 검사는 `qa.py`)
+- GLB·사이드카: `uv run --no-project --with numpy --with scipy python ploh/tools/mocap/mocap_build.py shieldbearer` (클립 표는 이 스크립트의 `SPEC`, 몸 감축은 `decimate_body.py`를 헤드리스 Blender로 실행, 무기 관통 검사·수정은 `clipcheck.py`, 그 밖의 검사는 `qa.py`)
+- 무기 관통 검사만: `uv run --no-project --with numpy --with scipy python ploh/tools/mocap/clipcheck.py ploh/game/assets/soldiers/shieldbearer/shieldbearer.glb`
+- 이전 GLB: 모캡 1차 버전은 `raw/shieldbearer_mocap1.glb`(+ `raw/shieldbearer_root_mocap1.json`), 손 키 버전은 `raw/shieldbearer_handkeyed.glb`
 
 ## 손 키 액션(이전 버전, `raw/shieldbearer_handkeyed.glb`, 30 fps)
 이 절과 아래 하위 절은 모캡으로 바꾸기 전의 액션 설명입니다.

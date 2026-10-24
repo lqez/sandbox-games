@@ -51,13 +51,23 @@
 
 ### 문제
 - 손 키 버전은 펜듈럼을 손등 쪽으로 뻗게 붙였는데, 모캡의 무기 동작은 엄지 쪽으로 뻗는 칼 쥠새를 전제로 해서 `weapon_pendulum`의 손 안 방향만 바꿨습니다(손잡이 원점과 구조는 같음, 가장 먼 정점이 끝).
-- attack_1(Charged Ground Slam)의 머리 위 들어올림(47–50프레임)에서 펜듈럼이 머리를 최대 12 cm 지나갑니다.
+- attack_1(Charged Ground Slam)의 머리 위 들어올림(48–49프레임)에서 펜듈럼이 머리를 지나가던 것을 v2에서 고쳤습니다(아래 '무기 관통 검사·수정'; 이전 캡슐 검사의 12 cm는 과대 추정이고 실제 몸 메시로는 2.8 cm).
 - cast는 Jump Attack입니다(프람·슈나이더와 같은 원본).
 - 라이브러리 클립은 레퍼런스(예비 150–250 ms, 베기 50–130 ms)보다 예비 동작이 깁니다. 시간 재배치는 게임 코드가 맡습니다.
 
+### 무기 관통 검사·수정 (2026-10-24)
+`ploh/tools/mocap/clipcheck.py`로 실제 몸 메시(감축 전 `raw/boss_handkeyed.glb`)에 대해 무기 관통을 프레임마다 검사하고, `mocap_build.py`가 클립마다 손목 회전과 팔 IK로 고칩니다(방법은 `../../astrid/B_mid/README.md`의 '무기 관통 검사·수정'). 무기를 쥔 손과 아래팔은 검사에서 뺍니다. 무기 관통 수정으로 공격 클립의 타격 프레임은 바뀌지 않았습니다(attack_1 52, attack_2 36, cast 42). 아래는 이전 GLB(`raw/boss_mocap1.glb`)와 새 GLB를 같은 검사로 비교한 결과입니다(1 cm 복셀 기준, ±0.5 cm).
+
+| 액션 | 무기 | 이전 GLB: 최대 깊이 / 1 cm 넘는 프레임 (부위) | 새 GLB | 수정: 손목 회전 최대 / 팔 IK 이동 최대 |
+|---|---|---|---|---|
+| attack_1 | 펜듈럼 | 2.8 cm / 2 (머리) | 0.6 cm / 0 | 5.4° / 0.0 cm |
+| death | 펜듈럼 | 2.3 cm / 9 (오른다리) | 0.9 cm / 0 | 11.3° / 0.0 cm |
+
 ### 재현
 - Meshy 요청: `uv run --no-project --with requests python ploh/tools/heroes/meshy.py soldiers/boss anim <action_id,...> <태그>` (`raw/animations_<태그>.glb`)
-- GLB·사이드카: `uv run --no-project --with numpy python ploh/tools/mocap/mocap_build.py boss` (클립 표는 이 스크립트의 `SPEC`, 몸 감축은 `decimate_body.py`를 헤드리스 Blender로 실행, 검사는 `qa.py`)
+- GLB·사이드카: `uv run --no-project --with numpy --with scipy python ploh/tools/mocap/mocap_build.py boss` (클립 표는 이 스크립트의 `SPEC`, 몸 감축은 `decimate_body.py`를 헤드리스 Blender로 실행, 무기 관통 검사·수정은 `clipcheck.py`, 그 밖의 검사는 `qa.py`)
+- 무기 관통 검사만: `uv run --no-project --with numpy --with scipy python ploh/tools/mocap/clipcheck.py ploh/game/assets/soldiers/boss/boss.glb`
+- 이전 GLB: 모캡 1차 버전은 `raw/boss_mocap1.glb`(+ `raw/boss_root_mocap1.json`), 손 키 버전은 `raw/boss_handkeyed.glb`
 
 ## 손 키 액션(이전 버전, `raw/boss_handkeyed.glb`, 30 fps)
 이 절과 아래 하위 절은 모캡으로 바꾸기 전의 액션 설명입니다.

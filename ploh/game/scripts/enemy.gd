@@ -23,11 +23,11 @@ const KINDS := {
 	"rogue": {"model": "conscript", "blade": ["weapon_sword"], "hp": 80.0, "atk": 11.0, "speed": 4.6, "reach": 1.4, "wind": 0.6, "area": 1.3, "scale": 1.6, "radius": 0.45, "poise": 1.0,
 		"attacks": [["attack_2", 0.5]], "tint": Color(0.78, 0.66, 0.7)},
 	"warrior": {"model": "shieldbearer", "blade": ["weapon_sword"], "hp": 280.0, "atk": 18.0, "speed": 2.6, "reach": 1.25, "wind": 1.0, "area": 1.8, "scale": 1.75, "radius": 0.65, "poise": 0.4,
-		"attacks": [["attack_1", 0.536], ["shield_bash", 0.519]], "guard": true, "parry": 0.35, "counter": ["attack_1", 0.536], "tint": Color(0.7, 0.68, 0.82)},
+		"attacks": [["attack_1", 0.536], ["shield_bash", 0.455]], "guard": true, "parry": 0.35, "counter": ["counter", 0.324], "tint": Color(0.7, 0.68, 0.82)},
 	# 방패 사병: 정면의 가벼운 타격을 방패로 막고, 자주 받아쳐 영웅을 휘청이게 한 뒤 찌르기로 반격한다.
 	# 잡병이라 막지 못한 타에는 바로 끊긴다. 방패 사병 모델이 없으면 방패병 모델로 대신한다
 	"guard": {"model": "conscript_shield", "fallback": "shieldbearer", "blade": ["weapon_sword"], "hp": 110.0, "atk": 10.0, "speed": 3.2, "reach": 1.35, "wind": 0.8, "area": 1.4, "scale": 1.6, "radius": 0.55, "poise": 1.0,
-		"attacks": [["attack_1", 0.566]], "guard": true, "parry": 0.45, "counter": ["attack_1", 0.566], "tint": Color(0.72, 0.7, 0.8)},
+		"attacks": [["attack_1", 0.566]], "guard": true, "parry": 0.45, "counter": ["counter", 0.324], "tint": Color(0.72, 0.7, 0.8)},
 	# 궁병: 거리를 두고 박자에 맞춰 활을 쏜 뒤 뛰어서 자리를 옮겨 다시 쏜다. 궁병 모델이 없으면 징집병으로 대신한다
 	"archer": {"model": "archer", "fallback": "conscript", "blade": [], "hp": 70.0, "atk": 12.0, "speed": 4.4, "reach": 9.0, "wind": 0.9, "area": 0.6, "scale": 1.6, "radius": 0.45, "poise": 1.0,
 		"ranged": true, "attacks": [["shoot", 0.586]], "draw_from": 0.667, "fallback_attack": ["attack_1", 0.566], "tint": Color(0.74, 0.72, 0.8)},
@@ -614,10 +614,12 @@ func _start_counter(hero: Node3D) -> void:
 	if to.length() > 0.01:
 		face = to.normalized()
 	strike_at = global_position + face * (stats.reach + 0.6)
+	# 반격 찌르기 클립(타격 11프레임 = 0.367초)이 없는 모델은 첫 공격 클립으로 대신한다
 	var pick: Array = stats.get("counter", stats.attacks[0])
-	var clip: String = "counter" if anim.has_animation("counter") else pick[0]
-	var contact: float = 0.5 if clip == "counter" else pick[1]
-	_contact = anim.get_animation(clip).length * contact
+	if not anim.has_animation(pick[0]):
+		pick = stats.attacks[0]
+	var clip: String = pick[0]
+	_contact = anim.get_animation(clip).length * pick[1]
 	_clip0 = 0.0
 	_play(clip, _contact / wind_time, 0.06, true)
 	# 반격 예고(ART_TARGET 5.3): 앞쪽 60° 부채꼴(길이 2m, 주황-빨강, 안쪽 옅게)과 테두리. 안에서 자라는 부채꼴이

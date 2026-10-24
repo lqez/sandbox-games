@@ -7,7 +7,7 @@
 - `archer_root.json`: 클립별 루트 이동(다른 병사와 같은 형식)
 - `turnaround.png`: gpt-image-2 3면도(정면·좌측면·후면, 1536×1024). 후보 2장 중 v2를 골랐습니다(`raw/sheets/`)
 - `view_front.png`, `view_side.png`, `view_back.png`: 3면도를 같은 배율·같은 발 높이로 자른 1024² 입력 이미지
-- `beauty.png`: 정면 3/4, idle 0프레임, Eevee 1024²
+- `beauty.png`: 정면 3/4(캐릭터 오른쪽 앞 -20°), idle 0프레임, Eevee 1024²
 - `raw/`: Meshy 원본(`model.glb`, `rigged.glb`, `basic_walking.glb`, `basic_running.glb`, `animations_mocap.glb`, `animations_mocap2.glb`, `animations_idle.glb`, `thumb.png`, 작업 JSON, `tasks.json`), 기준 GLB `archer_handkeyed.glb`, 감축한 몸 `archer_body8000.glb`, 3면도 후보 `sheets/`. `.gdignore`로 Godot 가져오기에서 뺐습니다
 
 ## 제작 과정

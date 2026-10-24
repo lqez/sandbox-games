@@ -58,15 +58,27 @@
 |---|---|---|
 | `01a169eb-693b-7156-a20b-bc813caf9355` | 89, 21, 219, 240, 179 | 15 |
 | `01a169f8-782d-7403-bf2a-3f2f62f44d7d` | 97, 92 | 6 |
+| `01a16bdd-9a10-7219-b093-0dfe99f17140` | 139, 191, 192 (방패 징집병 `conscript_shield`용) | 9 |
 
 ### 문제
 - walk(Walk Fight Forward)는 두 손을 검 손잡이 앞에 모은 경계 걸음입니다.
-- attack_2의 2프레임에서 칼날이 머리를 3.5 cm 이내로 스칩니다.
+- 방패를 든 변형은 `../conscript_shield/`에 있습니다. 그 변형용 라이브러리 동작(Block2, Left/Right Jab from Guard)도 이 리깅 작업에 요청해 `raw/animations_shield.glb`에 두었습니다(위 Meshy 요청 표).
 - 라이브러리 클립은 레퍼런스(예비 150–250 ms, 베기 50–130 ms)보다 예비 동작이 깁니다. 시간 재배치는 게임 코드가 맡습니다.
+
+### 무기 관통 검사·수정 (2026-10-24)
+`ploh/tools/mocap/clipcheck.py`로 실제 몸 메시(감축 전 `raw/conscript_handkeyed.glb`)에 대해 무기 관통을 프레임마다 검사하고, `mocap_build.py`가 클립마다 손목 회전과 팔 IK로 고칩니다(방법은 `../../astrid/B_mid/README.md`의 '무기 관통 검사·수정'). 무기를 쥔 손과 아래팔은 검사에서 뺍니다. 무기 관통 수정으로 공격 클립의 타격 프레임은 바뀌지 않았습니다(attack_1 26, attack_2 21). 아래는 이전 GLB(`raw/conscript_mocap1.glb`)와 새 GLB를 같은 검사로 비교한 결과입니다(1 cm 복셀 기준, ±0.5 cm).
+
+| 액션 | 무기 | 이전 GLB: 최대 깊이 / 1 cm 넘는 프레임 (부위) | 새 GLB | 수정: 손목 회전 최대 / 팔 IK 이동 최대 |
+|---|---|---|---|---|
+| walk | 검 | 1.6 cm / 43 (왼팔, 머리) | 0.7 cm / 0 | 26.0° / 0.0 cm |
+| run | 검 | 2.5 cm / 2 (오른다리, 머리) | 0.3 cm / 0 | 11.3° / 0.0 cm |
+| attack_2 | 검 | 2.2 cm / 1 (머리) | 0.4 cm / 0 | 15.3° / 0.0 cm |
 
 ### 재현
 - Meshy 요청: `uv run --no-project --with requests python ploh/tools/heroes/meshy.py soldiers/conscript anim <action_id,...> <태그>` (`raw/animations_<태그>.glb`)
-- GLB·사이드카: `uv run --no-project --with numpy python ploh/tools/mocap/mocap_build.py conscript` (클립 표는 이 스크립트의 `SPEC`, 몸 감축은 `decimate_body.py`를 헤드리스 Blender로 실행, 검사는 `qa.py`)
+- GLB·사이드카: `uv run --no-project --with numpy --with scipy python ploh/tools/mocap/mocap_build.py conscript` (클립 표는 이 스크립트의 `SPEC`, 몸 감축은 `decimate_body.py`를 헤드리스 Blender로 실행, 무기 관통 검사·수정은 `clipcheck.py`, 그 밖의 검사는 `qa.py`)
+- 무기 관통 검사만: `uv run --no-project --with numpy --with scipy python ploh/tools/mocap/clipcheck.py ploh/game/assets/soldiers/conscript/conscript.glb`
+- 이전 GLB: 모캡 1차 버전은 `raw/conscript_mocap1.glb`(+ `raw/conscript_root_mocap1.json`), 손 키 버전은 `raw/conscript_handkeyed.glb`
 
 ## 손 키 액션(이전 버전, `raw/conscript_handkeyed.glb`, 30 fps)
 이 절과 아래 하위 절은 모캡으로 바꾸기 전의 액션 설명입니다.

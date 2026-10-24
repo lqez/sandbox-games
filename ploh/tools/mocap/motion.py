@@ -356,3 +356,154 @@ def mirror(rig, c):
             T = c["bones"]["Hips"]["T"].copy(); T[:, 0] = 2 * rig.rest["Hips"][0][0] - T[:, 0]
         out["bones"][b] = {"T": T, "R": fk.m2q(L), "S": np.ones((n, 3))}
     return out
+
+
+# ------------------------------------------------------------------ weapon / prop orientation overrides (parry, thrust, shield)
+def ramp(n, a, b, c, d):
+    """weights (n,): 0 before a, smooth 0->1 over a..b, 1 over b..c, 1->0 over c..d, 0 after d (frames; d may exceed n)."""
+    f = np.arange(n, dtype=float)
+    up = smooth((f - a) / max(b - a, 1e-6)) if b > a else (f >= a).astype(float)
+    dn = 1.0 - smooth((f - c) / max(d - c, 1e-6)) if d > c else (f <= c).astype(float)
+    return np.minimum(up, dn)
+
+
+def rest_globals(rig):
+    rb = {b: {"T": rig.rest[b][0][None], "R": rig.rest[b][1][None], "S": rig.rest[b][2][None]} for b in rig.joints}
+    return rig.fk(rb)
+
+
+def _frame_dirs(rig, g, v, frame):
+    """direction(s) given in the character frame ('char', glTF axes) or the chest frame ('chest': the Spine bone's rotation
+    relative to its rest, so at rest both frames agree)."""
+    v = np.asarray(v, float)
+    if frame == "chest":
+        Rr = rest_globals(rig)["Spine"][1][0]
+        return np.einsum("nij,j->ni", g["Spine"][1] @ Rr.T[None], v)
+    return np.broadcast_to(v, (len(g["Hips"][0]), 3)).copy()
+
+
+def weapon_axis(rig, pose_or_clip, wname):
+    """world weapon axis (n,3) of a clip, or (3,) of a single pose dict"""
+    c = pose_or_clip if "bones" in pose_or_clip else {"n": 1, "bones": {b: {k: np.asarray(v[k])[None] for k in v} for b, v in pose_or_clip.items()}}
+    W = rig.weapons[wname]; g = globals_(rig, c)
+    ax = np.einsum("nij,j->ni", g[W["bone"]][1], W["axis"])
+    return ax if "bones" in pose_or_clip else ax[0]
+
+
+def aim_weapon(rig, c, wname, direction, w, base=None, frame="char"):
+    """rotate the weapon's hand (minimal rotation) so the weapon axis (grip -> tip) points along direction (character frame,
+    (3,) or (n,3)). Without base, w (n,) blends between the mocap hand and the aimed hand. With base (a direction, e.g. the
+    idle guard's weapon axis) the target direction itself travels base -> direction -> base by w and is applied fully on
+    every frame, so the wrist of the source clip never swings the weapon (used to turn a straight punch into a thrust)."""
+    W = rig.weapons[wname]; hb = W["bone"]
+    g = globals_(rig, c)
+    R = g[hb][1]
+    ax = np.einsum("nij,j->ni", R, W["axis"])
+    d = _frame_dirs(rig, g, direction, frame) if frame != "char" else np.broadcast_to(np.asarray(direction, float), ax.shape).copy()
+    d /= np.linalg.norm(d, axis=1, keepdims=True)
+    if base is not None:
+        b = np.asarray(base, float) / np.linalg.norm(base)
+        dq = fk.m2q(rot_between(np.repeat(b[None], len(d), 0), d))
+        d = np.einsum("nij,j->ni", fk.q2m(G.slerp(np.tile([0, 0, 0, 1.0], (len(d), 1)), dq, w)), b)
+        w = np.ones(len(d))
+    Q = rot_between(ax, d) @ R
+    q = G.slerp(fk.m2q(R), fk.m2q(Q), w)
+    set_local_from_global(rig, c, g, hb, fk.q2m(q))
+    return c
+
+
+def warp(c, pts):
+    """piecewise-linear retime: pts = [(source frame, output frame), ...] increasing; output length = last output frame + 1."""
+    src = np.array([p[0] for p in pts], float); dst = np.array([p[1] for p in pts], float)
+    m = int(dst[-1]) + 1
+    tq = np.interp(np.arange(m), dst, src)
+    t = np.arange(nframes(c), dtype=float)
+    return {"n": m, "bones": {b: {"T": G.sample(t, v["T"], "LINEAR", tq), "R": G.sample(t, qfix(v["R"]), "LINEAR", tq, rot=True),
+                                  "S": G.sample(t, v["S"], "LINEAR", tq)} for b, v in c["bones"].items()}}
+
+
+def reach(rig, c, side, add, w, direction=(0, 0, 1.0)):
+    """push the hand further along direction (character frame) by add*w metres with two-bone IK (hand rotation kept)."""
+    g = globals_(rig, c)
+    hd = side + "Hand"
+    tgt = g[hd][0] + np.asarray(direction, float)[None] * (add * w)[:, None]
+    return two_bone_ik(rig, c, side, tgt, None, g[hd][1])[0]
+
+
+def orient_prop(rig, c, wname, face_local, up_local, face, up, w, frame="char"):
+    """set the full orientation of a hand prop (shield): prop-local face normal -> face, prop-local up -> up (projected),
+    blended by w. face_local/up_local are in the prop node's local axes (glTF); face/up in the character or chest frame."""
+    W = rig.weapons[wname]; hb = W["bone"]
+    Rn = fk.q2m(np.asarray(rig.rest[wname][1]))               # node rotation in the hand bone
+    fh = Rn @ np.asarray(face_local, float); uh = Rn @ np.asarray(up_local, float)
+    g = globals_(rig, c)
+    R = g[hb][1]; n = len(R)
+    F = _frame_dirs(rig, g, face, frame); U = _frame_dirs(rig, g, up, frame)
+    F /= np.linalg.norm(F, axis=1, keepdims=True)
+    U = U - F * np.sum(U * F, 1)[:, None]; U /= np.linalg.norm(U, axis=1, keepdims=True)
+    # hand basis in hand space (fh, uh', fh x uh') -> world basis (F, U, F x U)
+    uh2 = uh - fh * fh.dot(uh); uh2 /= np.linalg.norm(uh2); fh2 = fh / np.linalg.norm(fh)
+    Bh = np.stack([fh2, uh2, np.cross(fh2, uh2)], 1)
+    Bw = np.stack([F, U, np.cross(F, U)], 2)
+    Q = Bw @ Bh.T[None]
+    q = G.slerp(fk.m2q(R), fk.m2q(Q), w)
+    set_local_from_global(rig, c, g, hb, fk.q2m(q))
+    return c
+
+
+def hold_first(c, k):
+    """prepend k copies of the first frame (a held pose that a start blend can ease into)."""
+    if k <= 0:
+        return c
+    return concat({"n": k, "bones": {b: {kk: np.repeat(v[kk][:1], k, 0) for kk in v} for b, v in c["bones"].items()}}, c)
+
+
+def seq(lib, parts):
+    """concatenate clip segments [(src, a, b), ...]; the Hips X/Z of each segment is shifted to continue the previous one."""
+    out = None
+    for src, a, b in parts:
+        s = sub(lib[src], a, b)
+        if out is not None:
+            T = s["bones"]["Hips"]["T"]
+            d = T[0, [0, 2]] - out["bones"]["Hips"]["T"][-1, [0, 2]]
+            T[:, 0] -= d[0]; T[:, 2] -= d[1]
+            s = sub(s, 1, -1) if np.allclose(frame_pose(s, 0)["Hips"]["R"], out["bones"]["Hips"]["R"][-1], atol=1e-4) else s
+        out = s if out is None else concat(out, s)
+    return out
+
+
+def sidestep(rig, pose, side, dist=0.5, n=14, lift=0.06, dip=0.035, lean=9.0):
+    """procedural lateral dash from a static pose (idle frame 0): the lead foot (on the travel side) steps out, the hips glide,
+    the trail foot follows; hips dip and the chest leans into the travel, then everything settles back into the pose.
+    side: +1 = character's left (+X), -1 = right. Returns a clip whose Hips X carries the travel (stripped later into root json)."""
+    c = {"n": n, "bones": {b: {k: np.repeat(np.asarray(v[k])[None], n, 0).astype(float) for k in ("T", "R", "S")}
+                           for b, v in pose.items()}}
+    u = np.arange(n) / (n - 1)
+    sm = lambda x: smooth(np.clip(x, 0, 1))
+    lead, trail = ("Left", "Right") if side > 0 else ("Right", "Left")
+    steps = {lead: (0.02, 0.44), trail: (0.30, 0.80)}
+    kf = {ft: sm((u - a) / (b - a)) for ft, (a, b) in steps.items()}
+    hx = dist * (0.55 * kf[lead] + 0.45 * kf[trail])      # hips ride between the feet, a little toward the lead foot
+    H = c["bones"]["Hips"]["T"]
+    H[:, 0] += side * hx
+    H[:, 1] -= dip * np.sin(np.pi * np.clip(u / 0.92, 0, 1)) ** 1.5
+    # lean the chest into the travel (roll about the forward axis), peaking early (push-off), gone by the end
+    lw = np.sin(np.pi * np.clip(u / 0.85, 0, 1)) * np.exp(-1.2 * u)
+    lw /= lw.max()
+    g = globals_(rig, c)
+    for bn, k in (("Spine02", 0.35), ("Spine01", 0.35), ("Spine", 0.3)):
+        a = np.radians(-side * lean * k) * lw
+        Rr = np.stack([np.array([[np.cos(t), -np.sin(t), 0], [np.sin(t), np.cos(t), 0], [0, 0, 1]]) for t in a])  # about +Z (forward)
+        g = globals_(rig, c)
+        set_local_from_global(rig, c, g, bn, Rr @ g[bn][1])
+    # feet: planted in the world, lead foot first then trail foot, each lifted on an arc
+    g0 = globals_(rig, {"n": 1, "bones": {b: {k: v[k][:1] for k in v} for b, v in c["bones"].items()}})
+    for ft in (lead, trail):
+        u0, u1 = steps[ft]
+        P0 = np.repeat(g0[ft + "Foot"][0], n, 0)
+        k = kf[ft]
+        tgt = P0.copy()
+        tgt[:, 0] += side * dist * k
+        tgt[:, 1] += lift * np.sin(np.pi * np.clip((u - u0) / (u1 - u0), 0, 1))
+        c = chain_ik(rig, c, ft + "UpLeg", ft + "Leg", ft + "Foot", tgt, np.ones(n))
+    return c
