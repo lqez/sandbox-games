@@ -126,6 +126,23 @@ func _process(delta: float) -> void:
 		"dodge":
 			if near and fmod(t, 1.6) < delta * 1.5:
 				g.swipe(Vector2(1, 0) if int(t / 1.6) % 2 == 0 else Vector2(-1, 0))
+		"room2", "room3":
+			# 앞 방들을 정리한 것으로 하고 그 방(궁병이 있는 넓은 방)으로 옮겨 자동 전투로 싸운다
+			if _once("room"):
+				var ri := 2 if scenario == "room2" else 3
+				for e in g.enemies:
+					if is_instance_valid(e):
+						e.queue_free()
+				g.enemies.clear()
+				for i in ri:
+					g.dungeon.rooms[i].active = true
+					g.dungeon.rooms[i].cleared = true
+				g.room = ri - 1
+				g._populate(ri)
+				var prev: Vector3 = g.dungeon.rooms[ri - 1].center
+				var c: Vector3 = g.dungeon.rooms[ri].center
+				p.global_position = c + (prev - c).normalized() * 3.0
+				g.auto_mode = true
 		"boss":
 			# 앞 방들을 정리한 것으로 하고 보스 방으로 옮겨 싸운다
 			if _once("boss"):

@@ -11,23 +11,27 @@ const SWING_AFTER := 0.16   # 예고가 끝난 뒤 칼이 내려오는 동안 �
 const SOLDIER := "res://assets/soldiers/%s/%s.glb"
 ## 임포트할 때 메시·뼈·애니메이션에 구워 넣은 크기(.glb.import의 nodes/root_scale).
 ## 모델 노드를 키우면 래그돌로 넘어가는 순간 물리 몸체가 크기를 버려 몸이 0.6배로 쪼그라든다
-const BAKED := {"conscript": 1.6, "shieldbearer": 1.75, "boss": 2.3, "archer": 1.6}
+const BAKED := {"conscript": 1.6, "shieldbearer": 1.75, "boss": 2.3, "archer": 1.6, "conscript_shield": 1.6}
 const ARCHER_KEEP := Vector2(6.5, 8.5)   # 궁병이 영웅과 두는 거리
 
 ## 종류별 능력치. model은 assets/soldiers의 병사, attacks는 [클립, 접촉 시점(클립 길이 비율, 모션캡처 README의 타격 프레임)]
 ## 체력: 잡병 2~3타, 정예 5~7타, 보스 15~20타(영웅 공격력 42 기준)
 const KINDS := {
 	"minion": {"model": "conscript", "blade": ["weapon_sword"], "hp": 95.0, "atk": 9.0, "speed": 3.4, "reach": 1.35, "wind": 0.75, "area": 1.4, "scale": 1.6, "radius": 0.5, "poise": 1.0,
-		"attacks": [["attack_1", 0.566]], "tint": Color(0.5, 0.48, 0.7)},
+		"attacks": [["attack_1", 0.566]], "tint": Color(0.7, 0.68, 0.82)},
 	"rogue": {"model": "conscript", "blade": ["weapon_sword"], "hp": 80.0, "atk": 11.0, "speed": 4.6, "reach": 1.4, "wind": 0.6, "area": 1.3, "scale": 1.6, "radius": 0.45, "poise": 1.0,
-		"attacks": [["attack_2", 0.5]], "tint": Color(0.62, 0.5, 0.55)},
+		"attacks": [["attack_2", 0.5]], "tint": Color(0.78, 0.66, 0.7)},
 	"warrior": {"model": "shieldbearer", "blade": ["weapon_sword"], "hp": 280.0, "atk": 18.0, "speed": 2.6, "reach": 1.25, "wind": 1.0, "area": 1.8, "scale": 1.75, "radius": 0.65, "poise": 0.4,
-		"attacks": [["attack_1", 0.536], ["shield_bash", 0.519]], "guard": true, "parry": 0.35, "counter": ["attack_1", 0.536], "tint": Color(0.5, 0.48, 0.7)},
+		"attacks": [["attack_1", 0.536], ["shield_bash", 0.519]], "guard": true, "parry": 0.35, "counter": ["attack_1", 0.536], "tint": Color(0.7, 0.68, 0.82)},
+	# 방패 사병: 정면의 가벼운 타격을 방패로 막고, 자주 받아쳐 영웅을 휘청이게 한 뒤 찌르기로 반격한다.
+	# 잡병이라 막지 못한 타에는 바로 끊긴다. 방패 사병 모델이 없으면 방패병 모델로 대신한다
+	"guard": {"model": "conscript_shield", "fallback": "shieldbearer", "blade": ["weapon_sword"], "hp": 110.0, "atk": 10.0, "speed": 3.2, "reach": 1.35, "wind": 0.8, "area": 1.4, "scale": 1.6, "radius": 0.55, "poise": 1.0,
+		"attacks": [["attack_1", 0.566]], "guard": true, "parry": 0.45, "counter": ["attack_1", 0.566], "tint": Color(0.72, 0.7, 0.8)},
 	# 궁병: 거리를 두고 박자에 맞춰 활을 쏜 뒤 뛰어서 자리를 옮겨 다시 쏜다. 궁병 모델이 없으면 징집병으로 대신한다
-	"archer": {"model": "archer", "fallback": "conscript", "blade": ["weapon_bow"], "hp": 70.0, "atk": 12.0, "speed": 4.4, "reach": 9.0, "wind": 0.9, "area": 0.6, "scale": 1.6, "radius": 0.45, "poise": 1.0,
-		"ranged": true, "attacks": [["shoot", 0.6]], "fallback_attack": ["attack_1", 0.566], "tint": Color(0.55, 0.52, 0.62)},
+	"archer": {"model": "archer", "fallback": "conscript", "blade": [], "hp": 70.0, "atk": 12.0, "speed": 4.4, "reach": 9.0, "wind": 0.9, "area": 0.6, "scale": 1.6, "radius": 0.45, "poise": 1.0,
+		"ranged": true, "attacks": [["shoot", 0.586]], "draw_from": 0.667, "fallback_attack": ["attack_1", 0.566], "tint": Color(0.74, 0.72, 0.8)},
 	"boss": {"model": "boss", "blade": ["weapon_pendulum"], "hp": 1050.0, "atk": 26.0, "speed": 2.8, "reach": 2.6, "wind": 1.1, "area": 3.2, "scale": 2.3, "radius": 1.0, "poise": 0.1,
-		"attacks": [["attack_2", 0.6]], "slam": ["attack_1", 0.578], "tint": Color(0.55, 0.45, 0.6)},
+		"attacks": [["attack_2", 0.6]], "slam": ["attack_1", 0.578], "tint": Color(0.72, 0.62, 0.78)},
 }
 const COUNTER_WINDOW := 0.35
 
@@ -80,6 +84,7 @@ var thrusting := false      # 받아친 뒤의 반격 찌르기(내디디며 찔
 var _counter_wait := -1.0   # 받아친 뒤 반격 찌르기를 시작하기까지 남은 시간
 var model_name := ""        # 실제로 쓰는 병사 모델(궁병 모델이 없으면 대신한 것)
 var _contact := 0.5         # 지금 공격 클립에서 무기가 닿는(시위를 놓는) 위치(클립 초)
+var _clip0 := 0.0           # 예고를 시작하는 클립 위치(궁병은 화살을 뽑는 앞부분을 건너뛰고 시위를 당기는 데서 시작)
 var _env_clip := ""         # 공격 밖 동작(피격·막기·거두기)의 이징을 걸 클립
 var _env_t := 0.0
 var _env: Array = []        # [빠르게 들어가는 속도, 그 시간, 머무는 속도, 그 시간, 나머지 속도]
@@ -117,6 +122,9 @@ func setup(g: Node, k: String) -> void:
 	model.scale = Vector3.ONE * stats.scale / BAKED.get(model_name, 1.0)
 	add_child(model)
 	mats = Fx.toonify(model, 0.002, stats.tint)
+	# 어두운 군복이 실루엣으로 뭉개지지 않게 윤곽광을 조금 세게(컨셉 1_camera_mid.jpg)
+	Fx.set_param(mats, "rim_amount", 0.32)
+	Fx.set_param(mats, "rim_color", Color(0.85, 0.88, 1.0))
 	if kind == "boss":
 		# 보스는 붉은 기운을 덧씌운다
 		var aura := Fx.mat(Color(1.0, 0.25, 0.3, 0.18), 1.5, true)
@@ -241,7 +249,7 @@ func _physics_process(delta: float) -> void:
 		# 찌르기: 닿기 직전에 한 걸음 내디딘다
 		velocity += face * 4.5
 	knock = knock.move_toward(Vector3.ZERO, delta * knock_decel)
-	if stats.has("ranged") and state in ["chase", "wind", "recover"]:
+	if stats.has("ranged") and state in ["chase", "wind", "recover", "hop"]:
 		_archer(hero, to, dist, delta)
 	else:
 		match state:
@@ -324,7 +332,7 @@ func _physics_process(delta: float) -> void:
 ## 지금 클립의 루트 이동만큼 몸을 옮길 속도(월드). 공격·피격 클립에서만
 func _root_velocity(delta: float) -> Vector3:
 	var clip: String = anim.current_animation
-	if root_motion.is_empty() or not root_motion.has(clip) or delta <= 0.0 or state not in ["wind", "recover", "stagger"]:
+	if root_motion.is_empty() or not root_motion.has(clip) or delta <= 0.0 or state not in ["wind", "recover", "stagger", "hop"]:
 		_rm_clip = ""
 		return Vector3.ZERO
 	var arr: PackedVector2Array = root_motion[clip]
@@ -377,6 +385,7 @@ func _start_wind(hero: Node3D) -> void:
 	# 무기가 닿는 순간(접촉 프레임)이 예고 끝과 맞도록 재생 위치를 이끈다(_servo_wind)
 	if anim.has_animation(pick[0]):
 		_contact = anim.get_animation(pick[0]).length * pick[1]
+		_clip0 = 0.0
 		_play(pick[0], _contact / wind_time, 0.1, true)
 	telegraph = Node3D.new()
 	telegraph.add_child(Fx.disc(strike_area, Color(1, 0.2, 0.15, 0.07)))
@@ -404,7 +413,7 @@ func _servo_wind(delta: float) -> void:
 		anim.speed_scale = 1.4
 		return
 	var u := clampf((t + delta) / maxf(wind_time, 0.01), 0.0, 1.0)
-	var c := _contact
+	var c := _contact - _clip0
 	var strike := minf(0.2, c * 0.45)
 	var s0 := c - strike
 	var p: float
@@ -415,7 +424,7 @@ func _servo_wind(delta: float) -> void:
 	else:
 		var k := (u - 0.85) / 0.15
 		p = s0 + 0.015 + (c - s0 - 0.015) * k * k
-	anim.speed_scale = clampf((p - anim.current_animation_position) / maxf(delta, 0.001), 0.0, 4.0)
+	anim.speed_scale = clampf((_clip0 + p - anim.current_animation_position) / maxf(delta, 0.001), 0.0, 4.0)
 
 
 ## 궁병: 자리를 잡고 서서 조준(바닥에 조준선)하고, 박자에 맞춰 쏜 뒤 뛰어서 다른 자리로 옮긴다.
@@ -430,6 +439,15 @@ func _archer(hero: Node3D, to: Vector3, dist: float, delta: float) -> void:
 			elif dist < 3.2 and _spot.distance_to(hero.global_position) < 4.5 and _flee_cd <= 0.0:
 				_flee_cd = 4.0
 				_spot = _pick_spot(hero)
+				if anim.has_animation("hop_back"):
+					# 뒤로 뛰어 물러난 뒤(루트 이동 약 2m) 새 자리로 달린다
+					state = "hop"
+					t = 0.0
+					if dist > 0.01:
+						face = to.normalized()
+					_play("hop_back", 1.2, 0.06, true)
+					_snap("hop_back", [1.5, 0.12, 1.0, 0.3, 1.1])
+					return
 			var go := _spot - global_position
 			go.y = 0
 			if go.length() > 0.5:
@@ -458,6 +476,9 @@ func _archer(hero: Node3D, to: Vector3, dist: float, delta: float) -> void:
 				state = "chase"
 				_rest = randf_range(0.6, 1.3)
 				_spot = _pick_spot(hero)
+		"hop":
+			if t >= 0.7:
+				state = "chase"
 
 
 ## 영웅에게서 ARCHER_KEEP만큼 떨어진, 방 안쪽의 다른 자리(지금 자리에서 2m 넘게, 다른 적과 겹치지 않게)
@@ -495,9 +516,14 @@ func _start_aim(hero: Node3D) -> void:
 	attacks += 1
 	wind_time = game.time_to_beat(stats.wind / game.BEAT)
 	strike_area = stats.area
-	var pick: Array = stats.attacks[0] if anim.has_animation(stats.attacks[0][0]) else stats.fallback_attack
+	var own := anim.has_animation(stats.attacks[0][0])
+	var pick: Array = stats.attacks[0] if own else stats.fallback_attack
 	_contact = anim.get_animation(pick[0]).length * pick[1]
-	_play(pick[0], _contact / wind_time, 0.1, true)
+	# 궁병 클립은 등 화살통에서 화살을 뽑는 데서 시작한다. 예고는 시위를 당기는 데서부터
+	_clip0 = stats.get("draw_from", 0.0) if own else 0.0
+	_play(pick[0], (_contact - _clip0) / wind_time, 0.1, true)
+	if _clip0 > 0.0:
+		anim.seek(_clip0, true)
 	# 조준선: 궁병에서 영웅까지 바닥에 깔리는 가는 띠. 쏘기 직전에는 금색으로 바뀐다
 	_aim_line = MeshInstance3D.new()
 	var q := QuadMesh.new()
@@ -538,6 +564,11 @@ func _clear_aim() -> void:
 func _release(hero: Node3D) -> void:
 	_clear_aim()
 	var from := global_position + Vector3(0, 1.3 * stats.scale / 1.6, 0) + face * 0.5
+	var sk: Skeleton3D = model.find_children("*", "Skeleton3D", true, false)[0]
+	var rh := sk.find_bone("RightHand")
+	if rh >= 0 and model_name == "archer":
+		# 시위를 당긴 손에서 쏜다
+		from = sk.global_transform * sk.get_bone_global_pose(rh).origin + face * 0.3
 	var hv: Vector3 = hero.velocity
 	hv.y = 0
 	var aim: Vector3 = hero.global_position + Vector3(0, 1.1, 0) + hv * (from.distance_to(hero.global_position) / 15.0) * 0.6
@@ -563,6 +594,7 @@ func _start_counter(hero: Node3D) -> void:
 	var clip: String = "counter" if anim.has_animation("counter") else pick[0]
 	var contact: float = 0.5 if clip == "counter" else pick[1]
 	_contact = anim.get_animation(clip).length * contact
+	_clip0 = 0.0
 	_play(clip, _contact / wind_time, 0.06, true)
 	telegraph = Node3D.new()
 	_tg_edge = Fx.mat(Color(1, 0.85, 0.3, 0.75), 0.0, true)
@@ -658,15 +690,16 @@ func take_hit(dmg: float, dir: Vector3, power: float) -> String:
 		if stats.has("parry") and (_blocks == 2 or randf() < stats.parry):
 			result = "parry"
 			_counter_wait = 0.12
-			var pc := "parry" if anim.has_animation("parry") else "block_hit"
+			var pc := "parry" if anim.has_animation("parry") else ("block_hit" if anim.has_animation("block_hit") else "block")
 			_play(pc, 2.2, 0.04, true)
 			_snap(pc, [2.2, 0.08, 0.2, 0.1, 0.9])
 			proc.hit(dir, 0.15)
 			knock = dir * 0.8
 			knock_decel = 12.0
 			return result
-		_play("block_hit", 2.0, 0.04, true)
-		_snap("block_hit", [2.0, 0.08, 0.25, 0.1, 0.8])
+		var bh := "block_hit" if anim.has_animation("block_hit") else "block"
+		_play(bh, 2.0, 0.04, true)
+		_snap(bh, [2.0, 0.08, 0.25, 0.1, 0.8])
 		proc.hit(dir, 0.3)
 		hp = maxf(hp - dmg, 1.0)
 		flash = 0.04

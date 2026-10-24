@@ -32,9 +32,9 @@ const TEX := "res://assets/textures/%s"
 ## 방마다 나오는 적. 마지막 방은 보스
 const ROOMS := [
 	{"minion": 3},
-	{"minion": 3, "rogue": 2},
-	{"warrior": 1, "minion": 2, "archer": 2},
-	{"rogue": 3, "warrior": 2, "minion": 1, "archer": 1},
+	{"minion": 2, "rogue": 2, "guard": 1},
+	{"warrior": 1, "minion": 1, "guard": 1, "archer": 2},
+	{"rogue": 2, "warrior": 1, "guard": 2, "minion": 1, "archer": 1},
 	{"boss": 1, "minion": 2},
 ]
 ## 넓은 방(방 번호 → 크기 배율). 궁병이 거리를 두고 자리를 옮겨 다닐 만큼 넓게
