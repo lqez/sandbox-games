@@ -209,7 +209,7 @@ func setup(g: Node, d: Dictionary) -> void:
 	Procedural.strip_root_motion(anim)
 	# 애니메이션을 물리 틱에 맞춰 진행한다. 칼날 판정과 시간표(t)가 같은 시계로 움직여야 프레임이 밀려도 칼을 놓치지 않는다
 	anim.callback_mode_process = AnimationMixer.ANIMATION_CALLBACK_MODE_PROCESS_PHYSICS
-	for loop_name in [d.anims.moves.idle, d.anims.moves.run, d.anims.moves.charge, "guard", "guard_fwd", "guard_back", "strafe_l", "strafe_r"]:
+	for loop_name in [d.anims.moves.idle, d.anims.moves.run, d.anims.moves.charge, d.anims.moves.get("guard", "guard"), "guard_fwd", "guard_back", "strafe_l", "strafe_r"]:
 		if anim.has_animation(loop_name):
 			anim.get_animation(loop_name).loop_mode = Animation.LOOP_LINEAR
 	add_child(Fx.disc(0.6, Color(0, 0, 0, 0.4)))
@@ -669,8 +669,8 @@ func _start_guard() -> void:
 		if to.length() > 0.01:
 			face = to.normalized()
 	# 막는 자세: 막기 클립이 있으면 그것을, 없으면 패링 클립의 칼을 들어 올린 자세에서 멈춰 버틴다
-	if anim.has_animation("guard"):
-		_play("guard", 1.0, 0.1)
+	if anim.has_animation(_anim("guard")):
+		_play(_anim("guard"), 1.0, 0.1)
 	else:
 		_play(_anim("parry"), 2.0, 0.08, true)
 		_snap(_anim("parry"), [2.0, 0.1, 0.0, 999.0, 0.0])
@@ -678,13 +678,13 @@ func _start_guard() -> void:
 
 ## 막은 채 걷기: 몸이 가는 쪽(몸 기준 앞·뒤·옆)의 막기 걸음 클립을 걸음 속도에 맞춰 튼다. 거의 서 있으면 막기 자세
 func _guard_anim() -> void:
-	if not anim.has_animation("guard"):
+	if not anim.has_animation(_anim("guard")):
 		return
 	var hv := Vector3(_vel.x, 0.0, _vel.z)
 	var sp := hv.length()
 	if sp < 0.3 or not anim.has_animation("guard_fwd"):
 		_guard_clip = ""
-		_play("guard", 1.0, 0.2)
+		_play(_anim("guard"), 1.0, 0.2)
 		return
 	var loc: Vector3 = model.global_transform.basis.inverse() * hv
 	loc = loc.normalized()
@@ -1165,7 +1165,8 @@ func _strike_range() -> float:
 func _anim(key: String) -> String:
 	## 동작 키를 영웅의 실제 클립 이름으로 바꾼다
 	var moves: Dictionary = data.anims.get("moves", {})
-	var name: String = moves[key] if moves.has(key) else data.anims.get(key, "")
+	# 표에 없는 키는 클립 이름 그대로("guard" 등 모든 영웅이 같은 이름으로 가진 클립)
+	var name: String = moves[key] if moves.has(key) else data.anims.get(key, key)
 	if anim != null and not anim.has_animation(name) and CLIP_FALLBACK.has(key):
 		return _anim(CLIP_FALLBACK[key])
 	return name

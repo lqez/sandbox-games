@@ -43,9 +43,11 @@ const HEROES := [
 		# 이오케이라: 손에 쥐지 않는 떠다니는 칼 여섯 자루(blades.gd). 모델의 검 메시는 숨긴다
 		"blades": true, "hide": ["weapon_sword"],
 		"skill_name": "Let's SHOOT!", "skill": "dash",
-		"anims": {"moves": {"idle": "idle", "run": "run", "a1": "attack_1", "a2": "attack_2", "a3": "attack_3", "a4": "cast",
-			"spin": "spin", "dodge": "dodge", "hit": "hit", "death": "death", "charge": "idle", "skill": "attack_3", "ult": "spin",
-			"parry": "parry", "thrust": "thrust", "step_l": "sidestep_l", "step_r": "sidestep_r"}}},
+		# 몸짓 클립(cmd_*): 칼을 부리는 손짓. strikes는 손이 다 뻗는 '명령 프레임'(초) — 그 순간 칼이 날아간다
+		"strikes": {"cmd_1": 0.333, "cmd_2": 0.367, "cmd_3": 0.733, "cmd_fire": 0.467, "cmd_ult": 1.433},
+		"anims": {"moves": {"idle": "idle", "run": "run", "a1": "cmd_1", "a2": "cmd_2", "a3": "cmd_3", "a4": "cmd_fire",
+			"spin": "cmd_3", "dodge": "dodge", "hit": "hit", "death": "death", "charge": "idle", "skill": "cmd_fire", "ult": "cmd_ult",
+			"parry": "cmd_guard", "guard": "cmd_guard", "thrust": "cmd_1", "step_l": "sidestep_l", "step_r": "sidestep_r"}}},
 	# 프람(불꽃의 용병): 검과 방패. 단단하고 표준 속도
 	{"name": "프람", "model": "res://assets/fram/fram.glb", "scale": 1.6, "color": Color(1.0, 0.416, 0.239),
 		"max_hp": 250.0, "atk": 38.0, "speed": 4.1, "reach": 2.6, "guard": 0.7, "ranged": false,

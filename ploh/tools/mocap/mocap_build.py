@@ -217,6 +217,26 @@ SHIELD_NEW = dict(SHIELD_NEW,
                   block_hit=dict(SHIELD_NEW["block_hit"], reach=None, place=dict(SB_OUT, at={"x": 0.06, "y": -0.05, "fwd": 0.8}),
                                  shield=SB_FRONT),
                   parry=dict(SHIELD_NEW["parry"], reach=None, place=SB_OUT, shield=SB_FRONT))
+# v5 (2026-10-24) astrid only: Frau's real weapon is six floating blades she commands by gesture (research/motion/FRAU_COMBAT.md);
+# the game animates the blades, these are the body gestures. Library actions requested on the v4 rig as 'cmd' / 'cmd2'. The
+# command frame (hand fully extended / landed) is reported as 'command' in the build report. The sword mesh is hidden in game.
+CMD = {
+    # Let's GO!: Mage Spell Cast 7 (136) = step-in, right arm thrust straight out, palm open; the thrust 15 -> 10 frames
+    "cmd_1": dict(src="mage_soell_cast_7", a=12, b=57, warp=[(0, 0), (15, 10), (20, 13), (45, 24)], bi=4, bo=6, command="Right"),
+    # mirror-ish: Mage Spell Cast 1 (130) left arm sweeps from across the body out to the left (sword arm kept in idle)
+    "cmd_2": dict(src="mage_soell_cast_1", a=12, b=36, warp=[(0, 0), (12, 9), (15, 11), (24, 20)], bi=4, tail=4, arms=ARMS_R, command="Left"),
+    # overhead command: Charged Spell Cast (125) both arms raised high, then slammed down into a crouch
+    "cmd_3": dict(src="Charged_Spell_Cast", a=0, b=24, warp=[(0, 0), (12, 10), (15, 12), (21, 18), (24, 22)], bi=4, tail=10, command="down"),
+    # Let's SHOOT!: Mage Spell Cast 6 (135) mirrored = crouch, the left arm thrust straight up (finger snap), held 0.3 s
+    "cmd_fire": dict(src="mage_soell_cast_6", a=6, b=57, mirror=True, warp=[(0, 0), (12, 6), (21, 12), (27, 15), (36, 27), (51, 38)],
+                     bi=4, bo=6, command="Left"),
+    # Let's PARTY!: Backflip (452) = crouch, backflip, land in a crouch, rise
+    "cmd_ult": dict(src="Backflip", bi=4, bo=6, command="land"),
+    # guard: combat idle body with Block1's half-raised boxing guard arms, torso 6 deg back and hips 3 cm lower (weight back)
+    "cmd_guard": dict(src="Combat_Stance", loop=True, lf=4, arms_from=("Block1", 0), load=dict(lean=-6, dip=0.03, ramp=(-1, 0, 9999, 10000))),
+    # hero-screen stance: Hand on Hip Gesture (315) 24-52, right hand on the hip, left arm relaxed
+    "cmd_idle": dict(src="Hand_on_Hip_Gesture", a=24, b=52, loop=True, lf=6),
+}
 SPEC = {
     # 프라우: 한손검, 민첩. 콤보는 Double Combo Attack(92, 검을 들고 찍은 모캡) 한 벌을 칼끝 속도가 가장 느린 멈춤에서 셋으로 나눈다
     # v4 (2026-10-24): 몸을 공식 3면도로 다시 만들어(raw/astrid_handkeyed.glb = tools/blender/astrid_build.py 결과, 손 키 동작 없음)
@@ -226,7 +246,7 @@ SPEC = {
     "astrid": {
         "tris": DECIMATE["hero"], "dec_opts": (1.0, 1.0, 1.0, 1.0, 10.0),
         "glb": "astrid/B_mid/astrid.glb", "weapon": "weapon_sword",
-        "src": ["animations_mocap.glb", "animations_hero2.glb", "animations_guard.glb"],
+        "src": ["animations_mocap.glb", "animations_hero2.glb", "animations_guard.glb", "animations_cmd.glb", "animations_cmd2.glb"],
         "clips": {
             "idle": dict(src="Combat_Stance", loop=True, lf=4),
             "run": dict(src="Run_02", loop=True, lf=4),
@@ -244,6 +264,7 @@ SPEC = {
             "parry": dict(HERO_NEW["parry"], press=PRESS),
             **react(),
             **guard_set("press"),
+            **CMD,
         },
     },
     # 프람: 검과 방패. 콤보는 Triple Combo Attack(105)을 셋으로 나눈다
@@ -718,6 +739,18 @@ def build(name, out=None):
         if cn != "idle":
             info["start_vs_idle_deg"] = round(pose_dist(rig, c, 0, idle, 0), 1)
             info["end_vs_idle_deg"] = round(pose_dist(rig, c, n - 1, idle, 0), 1)
+        if d.get("command"):                      # gesture clips: the frame the blades are launched on
+            g_ = rig.fk(c["bones"]); cm = d["command"]
+            if cm in ("Left", "Right"):           # the hand fully extended, farthest from the hips, first such frame
+                dist = np.linalg.norm(g_[cm + "Hand"][0] - g_["Hips"][0], axis=1)
+                ext = dist / (np.linalg.norm(g_[cm + "ForeArm"][0] - g_[cm + "Arm"][0], axis=1) + np.linalg.norm(g_[cm + "Hand"][0] - g_[cm + "ForeArm"][0], axis=1))
+                cf = int(np.argmax(dist >= dist.max() - 0.02))
+            elif cm == "down":                    # both hands at their lowest after the raise
+                hy = (g_["LeftHand"][0][:, 1] + g_["RightHand"][0][:, 1]) / 2
+                cf = int(np.argmin(hy))
+            else:                                 # 'land': the hips' lowest point after the apex
+                hy = g_["Hips"][0][:, 1]; ap = int(np.argmax(hy)); cf = ap + int(np.argmin(hy[ap:]))
+            info.update({"command": cf, "command_s": round(cf / 30, 3), "command_frac": round(cf / (n - 1), 3)})
         if d.get("window"):                       # parry: frames in which the guard pose is up (raise done .. recovery starts)
             w0, w1 = d["window"]
             info["window"] = [w0, n - 1 + w1 if w1 < 0 else w1]
