@@ -997,6 +997,7 @@ func _start_hit() -> void:
 	_whooshed = false
 	_followed = false
 	_peak_vel = Vector3.ZERO
+	trail.qi_weight = maxf(_move_weight, 1.0 if just else 0.0)
 	_bite = 0.0
 	_lunge = 0.0
 	trail.emitting = false

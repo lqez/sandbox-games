@@ -21,7 +21,8 @@ uniform float aura : hint_range(0.0, 1.0) = 0.0;                     // 궁극�
 void fragment() {
 	vec4 c = use_tex ? texture(albedo_tex, UV) * albedo : albedo;
 	c.rgb = mix(vec3(dot(c.rgb, vec3(0.299, 0.587, 0.114))), c.rgb, saturation);
-	ALBEDO = c.rgb;
+	// 피격 섬광: 몸 전체를 하양으로 80%까지 덮는다(ART_TARGET 2.2)
+	ALBEDO = mix(c.rgb, vec3(1.0), flash * 0.8);
 	float rim = pow(1.0 - clamp(dot(NORMAL, VIEW), 0.0, 1.0), 3.0);
 	// 글로우는 몸 전체가 아니라 윤곽(림)에만 실어 실루엣이 달아오르게 한다
 	float rim2 = pow(1.0 - clamp(dot(NORMAL, VIEW), 0.0, 1.0), 2.0);

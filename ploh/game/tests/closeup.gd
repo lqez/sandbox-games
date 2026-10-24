@@ -1,7 +1,7 @@
 extends Node
 ## 개발용: 무비 메이커로 영웅을 가까이 찍어 동작을 프레임 단위로 본다(애니메이션·IK·워프 점검).
 ## 실행: Godot --path ploh/game --write-movie <폴더>/f.png --fixed-fps 30 --resolution 480x480 res://tests/closeup.tscn -- <장면> <카메라> <초>
-## 장면: combo(박자마다 탭), auto(자동 전투), run(자동 이동과 직접 이동 급정지·급선회), hit(가만히 맞기), dodge(구르기), slope(단 오르내리기)
+## 장면: combo(박자마다 탭), auto(자동 전투), ult(궁극기), run(자동 이동과 직접 이동 급정지·급선회), hit(가만히 맞기), dodge(구르기), slope(단 오르내리기)
 ## 카메라: side(옆에서 3.6m), near(게임 각도로 3.5m), game(게임 카메라 그대로)
 
 const Game := preload("res://main.tscn")
@@ -110,6 +110,15 @@ func _process(delta: float) -> void:
 		"hit":
 			# 탭하지 않고 맞기만 한다(적의 내려치기와 피격 반응을 본다)
 			pass
+		"ult":
+			# 적 가까이에서 궁극기를 쓴다(오라·카메라 연출을 본다)
+			if near and _once("ult"):
+				g.party[g.active].ult = 100.0
+				g.use_ult()
+			elif not _did.has("ult"):
+				var b2 := int(floorf((g.beat_clock() + 0.03) / g.BEAT))
+				if b2 != _last_beat:
+					_last_beat = b2
 		"auto":
 			# 자동 전투(회피·패링·반격까지)
 			if _once("auto"):

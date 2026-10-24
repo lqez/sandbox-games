@@ -11,7 +11,7 @@ const CUT := preload("res://shaders/vfx_cut.gdshader")
 const STREAK := preload("res://shaders/streak.gdshader")
 const BLOOD := preload("res://shaders/blood.gdshader")
 const AURA := preload("res://shaders/aura.gdshader")
-const STAIN_MAX := 14
+const STAIN_MAX := 12
 
 static var _quad: QuadMesh
 static var _spark_mesh: QuadMesh
@@ -45,12 +45,14 @@ static func _init_shared() -> void:
 	bm.set_shader_parameter("color", Color(1, 1, 1))
 	_drop_mesh.material = bm
 	_ramp_spark = Gradient.new()
-	_ramp_spark.set_color(0, Color(1, 0.97, 0.85, 1))
-	_ramp_spark.add_point(0.35, Color(1, 0.72, 0.3, 1))
-	_ramp_spark.set_color(_ramp_spark.get_point_count() - 1, Color(0.9, 0.3, 0.08, 0))
+	# 하양 → #FFD27A → #FF8A3D(ART_TARGET 2.2)
+	_ramp_spark.set_color(0, Color(1, 1, 1, 1))
+	_ramp_spark.add_point(0.35, Color(1.0, 0.82, 0.48, 1))
+	_ramp_spark.set_color(_ramp_spark.get_point_count() - 1, Color(1.0, 0.54, 0.24, 0))
 	_ramp_blood = Gradient.new()
-	_ramp_blood.set_color(0, Color(0.62, 0.03, 0.07, 1))
-	_ramp_blood.set_color(1, Color(0.3, 0.01, 0.03, 0))
+	# 어두운 진홍 #C2303A → #8E1B2A(예고색 주황-빨강과 헷갈리지 않게 어둡고 채도를 낮춘다)
+	_ramp_blood.set_color(0, Color(0.76, 0.19, 0.23, 1))
+	_ramp_blood.set_color(1, Color(0.56, 0.11, 0.16, 0))
 	# 바닥 얼룩: 가장자리가 들쭉날쭉한 둥근 무늬(노이즈를 원형 기울기로 깎는다)
 	_stain_mesh = QuadMesh.new()
 	_stain_mesh.size = Vector2(1, 1)
@@ -58,7 +60,7 @@ static func _init_shared() -> void:
 	_stain_mat = StandardMaterial3D.new()
 	_stain_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	_stain_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	_stain_mat.albedo_color = Color(0.3, 0.03, 0.05, 0.6)
+	_stain_mat.albedo_color = Color(0.37, 0.08, 0.13, 0.6)   # #5E1420
 	_stain_mat.albedo_texture = _radial_noise()
 	_stain_mesh.material = _stain_mat
 
@@ -111,24 +113,23 @@ static func _cut_mat(color: Color, kind: int, energy: float) -> ShaderMaterial:
 	return m
 
 
-## 맞은 자리의 베인 자국과 섬광. sweep은 칼끝이 가던 방향(월드), weight 0~1, color는 강조색
-static func cut(parent: Node3D, at: Vector3, sweep: Vector3, color: Color, weight: float, just: bool) -> void:
-	var len := 1.6 + weight * 1.0 + (0.6 if just else 0.0)
-	var dur := 0.16 + weight * 0.06
-	var m := _cut_mat(color, 0, 2.4 + weight)
-	var line := _facing_quad(parent, at, sweep if sweep.length() > 0.1 else Vector3.RIGHT, len, 0.16 + weight * 0.1, m)
-	_run(line, m, dur)
-	if just or weight >= 0.9:
-		# 무거운 타격과 JUST는 비스듬히 엇갈린 두 번째 선(X자 자국)
-		var m2 := _cut_mat(color, 0, 1.8)
-		var cross_axis := sweep.rotated(Vector3.UP, 0.0).cross(Vector3.UP)
-		var axis2 := (sweep.normalized() * 0.55 + Vector3.UP * 0.85 + cross_axis.normalized() * 0.2).normalized()
-		var l2 := _facing_quad(parent, at, axis2, len * 0.7, 0.12, m2)
-		_run(l2, m2, dur * 0.9, 0.03)
-	var star_m := _cut_mat(color, 1, 2.6 + weight)
-	var size := 0.9 + weight * 0.7 + (0.4 if just else 0.0)
-	var star := _facing_quad(parent, at, Vector3.RIGHT, size, size, star_m)
-	_run(star, star_m, 0.12 + weight * 0.04)
+## 맞은 자리의 별 섬광(ART_TARGET 2.2): 4각 별, 지름 0.9m, 0ms에 가장 밝고 80ms에 사라진다.
+## 무거운 일격과 JUST는 1.3배 크고 1.5배 오래
+static func cut(parent: Node3D, at: Vector3, _sweep: Vector3, color: Color, weight: float, just: bool) -> void:
+	var big := just or weight >= 0.9
+	var star_m := _cut_mat(Color(1, 0.95, 0.78).lerp(color, 0.3), 1, 3.0)
+	star_m.set_shader_parameter("rays", 4.0)
+	var size := 0.9 * (1.3 if big else 1.0)
+	var star := _facing_quad(parent, at, Vector3.RIGHT.rotated(Vector3.UP, randf() * TAU), size, size, star_m)
+	_run(star, star_m, 0.08 * (1.5 if big else 1.0))
+
+
+## 칼과 칼이 부딪친 자리(패링·받아치기): 별 섬광에 짧게 그어지는 빛선을 더한다
+static func clash(parent: Node3D, at: Vector3, axis: Vector3, color: Color) -> void:
+	cut(parent, at, axis, color, 1.0, true)
+	var m := _cut_mat(color, 0, 2.6)
+	var line := _facing_quad(parent, at, axis if axis.length() > 0.1 else Vector3.RIGHT, 1.4, 0.18, m)
+	_run(line, m, 0.16)
 
 
 static func _run(mi: MeshInstance3D, m: ShaderMaterial, dur: float, delay := 0.0) -> void:
@@ -149,17 +150,18 @@ static func sparks(parent: Node3D, at: Vector3, dir: Vector3, sweep: Vector3, co
 	var p := CPUParticles3D.new()
 	p.one_shot = true
 	p.amount = amount
-	p.lifetime = 0.32
+	p.lifetime = 0.35
+	p.lifetime_randomness = 0.45
 	p.explosiveness = 1.0
 	p.local_coords = false
 	var d := (dir.normalized() * 0.6 + sweep.normalized() * 0.7 + Vector3(0, 0.35, 0)).normalized()
 	p.direction = d
 	p.spread = 50.0
-	p.initial_velocity_min = 5.0
+	p.initial_velocity_min = 6.0
 	p.initial_velocity_max = 12.0
-	p.damping_min = 6.0
-	p.damping_max = 10.0
-	p.gravity = Vector3(0, -9, 0)
+	p.damping_min = 4.0
+	p.damping_max = 8.0
+	p.gravity = Vector3(0, -9.8, 0)
 	p.particle_flag_align_y = true
 	p.scale_amount_min = 0.5
 	p.scale_amount_max = 1.2
@@ -167,9 +169,7 @@ static func sparks(parent: Node3D, at: Vector3, dir: Vector3, sweep: Vector3, co
 	curve.add_point(Vector2(0, 1))
 	curve.add_point(Vector2(1, 0.15))
 	p.scale_amount_curve = curve
-	var ramp := _ramp_spark.duplicate()
-	ramp.set_color(1, color.lerp(Color(1, 0.6, 0.2), 0.5))
-	p.color_ramp = ramp
+	p.color_ramp = _ramp_spark
 	p.mesh = _spark_mesh
 	parent.add_child(p)
 	p.global_position = at
@@ -202,7 +202,8 @@ static func blood(parent: Node3D, at: Vector3, dir: Vector3, amount: int, ground
 	parent.get_tree().create_timer(1.0, true, false, true).timeout.connect(p.queue_free)
 	# 바닥 얼룩은 맞은 방향 조금 앞에, 오래된 것부터 지워 개수를 묶는다
 	var spot := at + dir.normalized() * randf_range(0.5, 1.1)
-	stain(parent, Vector3(spot.x, ground_y + 0.02, spot.z), randf_range(0.28, 0.5))
+	stain(parent, Vector3(spot.x, ground_y + 0.01, spot.z), randf_range(0.4, 0.6))
+	mist(parent, at, dir)
 
 
 static func stain(parent: Node3D, at: Vector3, size: float) -> void:
@@ -224,9 +225,72 @@ static func stain(parent: Node3D, at: Vector3, size: float) -> void:
 	_stains.append(mi)
 	var tw := mi.create_tween()
 	tw.tween_property(mi, "scale", Vector3.ONE * size, 0.12).set_ease(Tween.EASE_OUT)
-	tw.tween_interval(4.0)
-	tw.tween_property(m, "albedo_color:a", 0.0, 1.5)
+	tw.tween_interval(2.0)
+	tw.tween_property(m, "albedo_color:a", 0.0, 1.0)
 	tw.tween_callback(mi.queue_free)
+
+
+## 진홍 안개: 맞은 방향으로 번지며 500ms에 1→1.8배로 퍼지고 사라지는 옅은 구름 2~3장(#B0283A, 알파 0.35)
+static func mist(parent: Node3D, at: Vector3, dir: Vector3) -> void:
+	_init_shared()
+	for i in randi_range(2, 3):
+		var m := _soft_mat(Color(0.69, 0.16, 0.23, 0.35), false)
+		var mi := MeshInstance3D.new()
+		mi.mesh = _quad
+		mi.material_override = m
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		parent.add_child(mi)
+		mi.global_position = at + dir.normalized() * (0.2 + i * 0.2) + Vector3(randf_range(-0.1, 0.1), randf_range(-0.1, 0.15), randf_range(-0.1, 0.1))
+		mi.scale = Vector3.ONE * 0.6
+		var tw := mi.create_tween()
+		tw.tween_property(mi, "scale", Vector3.ONE * 1.08, 0.5).set_ease(Tween.EASE_OUT)
+		tw.parallel().tween_property(mi, "global_position", mi.global_position + dir.normalized() * 0.4, 0.5)
+		tw.parallel().tween_property(m, "albedo_color:a", 0.0, 0.5).set_ease(Tween.EASE_IN)
+		tw.tween_callback(mi.queue_free)
+
+
+## 흙먼지: 적 발밑에 200ms 피어오르는 옅은 연기(#C9B79A, 알파 0.4)
+static func dust(parent: Node3D, at: Vector3) -> void:
+	_init_shared()
+	var m := _soft_mat(Color(0.79, 0.72, 0.6, 0.4), false)
+	var mi := MeshInstance3D.new()
+	mi.mesh = _quad
+	mi.material_override = m
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	parent.add_child(mi)
+	mi.global_position = at + Vector3(0, 0.25, 0)
+	mi.scale = Vector3.ONE * 0.5
+	var tw := mi.create_tween()
+	tw.tween_property(mi, "scale", Vector3.ONE * 0.9, 0.2).set_ease(Tween.EASE_OUT)
+	tw.parallel().tween_property(m, "albedo_color:a", 0.0, 0.2)
+	tw.tween_callback(mi.queue_free)
+
+
+static var _soft_tex: GradientTexture2D
+
+
+## 카메라를 보는 부드러운 원(안개·먼지)
+static func _soft_mat(color: Color, add: bool) -> StandardMaterial3D:
+	if _soft_tex == null:
+		_soft_tex = GradientTexture2D.new()
+		_soft_tex.width = 64
+		_soft_tex.height = 64
+		_soft_tex.fill = GradientTexture2D.FILL_RADIAL
+		_soft_tex.fill_from = Vector2(0.5, 0.5)
+		_soft_tex.fill_to = Vector2(1.0, 0.5)
+		var g := Gradient.new()
+		g.set_color(0, Color(1, 1, 1, 1))
+		g.set_color(1, Color(1, 1, 1, 0))
+		_soft_tex.gradient = g
+	var m := StandardMaterial3D.new()
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	m.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+	m.albedo_texture = _soft_tex
+	m.albedo_color = color
+	if add:
+		m.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	return m
 
 
 ## 궁극기 오라: 몸을 감싸 위로 피어오르는 빛의 껍질, 바닥의 빛 고리, 떠오르는 빛알갱이.

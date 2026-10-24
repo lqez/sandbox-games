@@ -695,7 +695,7 @@ func hit_enemy(e: Node3D, dmg: float, hero: Node3D, just: bool, label: String, w
 		popup(e.global_position + Vector3(0, 2.0 * e.stats.scale + 0.4, 0), "받아침", Color(1, 0.75, 0.4), 40)
 		var at2: Vector3 = e.global_position + Vector3(0, 1.1 * e.stats.scale, 0) - dir * e.radius
 		Vfx.sparks(self, at2, -dir, Vector3.UP, Color(1, 0.85, 0.5), 18)
-		Vfx.cut(self, at2, Vector3.UP, Color(1, 0.8, 0.5), 0.5, false)
+		Vfx.clash(self, at2, Vector3.UP, Color(1, 0.8, 0.5))
 		hero.freeze(0.06)
 		e.freeze(0.04)
 		hero.recoil(e.global_position)
@@ -858,7 +858,7 @@ func arrow_hit(a: Node3D) -> void:
 func parried_arrow(a: Node3D) -> void:
 	var at: Vector3 = a.global_position
 	Vfx.sparks(self, at, a.vel.normalized(), Vector3.UP, Color(1, 0.9, 0.6), 14)
-	Vfx.cut(self, at, Vector3.UP.cross(a.vel.normalized()), Color(0.75, 0.9, 1.0), 0.4, true)
+	Vfx.clash(self, at, Vector3.UP.cross(a.vel.normalized()), Color(0.75, 0.9, 1.0))
 	popup(player.global_position + Vector3(0, 2.6, 0), "튕겨 냄!", Color(0.7, 0.92, 1.0), 52)
 	sfx("glint", 0.05, 2.0)
 	vibrate(30)
@@ -872,8 +872,8 @@ func parried(e: Node3D) -> void:
 	dir.y = 0
 	dir = dir.normalized() if dir.length() > 0.01 else player.face
 	var at: Vector3 = hp + dir * 0.7 + Vector3(0, 1.3, 0)
-	Vfx.cut(self, at, dir.cross(Vector3.UP), Color(0.75, 0.9, 1.0), 0.6, true)
-	Vfx.sparks(self, at, dir, Vector3.UP, Color(1, 0.9, 0.6), 22)
+	Vfx.clash(self, at, dir.cross(Vector3.UP), Color(0.75, 0.9, 1.0))
+	Vfx.sparks(self, at, dir, Vector3.UP, Color(1, 0.9, 0.6), 24)
 	popup(hp + Vector3(0, 2.6, 0), "패링!", Color(0.7, 0.92, 1.0), 60)
 	sfx("glint", 0.05, 2.0)
 	sfx("counter", 0.05, -2.0)
@@ -1105,9 +1105,11 @@ func impact(at: Vector3, dir: Vector3, color: Color, weight: float, sweep := Vec
 		sweep = dir.cross(Vector3.UP).normalized()
 	var ground := Vector3(at.x, height_at(at.x, at.z) + 0.04, at.z)
 	Vfx.cut(self, at, sweep, color if (just or color != Color(1, 1, 1)) else Color(1, 0.9, 0.75), weight, just)
-	Vfx.sparks(self, at, dir, sweep, color, 8 + int(weight * 10))
+	# 불꽃: 일반 12, 무거운 24, JUST 30(ART_TARGET 2.2)
+	Vfx.sparks(self, at, dir, sweep, color, 30 if just else (24 if weight >= 0.9 else 12))
 	if flesh:
 		Vfx.blood(self, at, dir.lerp(sweep, 0.35), 10 + int(weight * 12), ground.y)
+		Vfx.dust(self, ground + dir * 0.3)
 	# 바닥 링은 무거운 타격에만, 작게(가벼운 타격까지 링을 그리면 화면이 시끄럽다)
 	if weight >= 0.5:
 		ripple(ground, 0.5 + weight * 0.6, 0.4 + weight * 0.2)

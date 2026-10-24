@@ -58,7 +58,7 @@ func _ready() -> void:
 	_waist_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	_waist_mat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
 	_waist_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	_waist_mat.albedo_color = Color(color.lightened(0.5), 1.0)
+	_waist_mat.albedo_color = Color(color.lightened(0.25) * 1.6, 1.0)
 	_waist = MeshInstance3D.new()
 	_waist.mesh = tm
 	_waist.material_override = _waist_mat
@@ -95,12 +95,26 @@ func _ready() -> void:
 	curve.add_point(Vector2(1, 0))
 	_motes.scale_amount_curve = curve
 	var mesh := QuadMesh.new()
-	mesh.size = Vector2(0.07, 0.07)
+	mesh.size = Vector2(0.12, 0.12)
 	var mm := StandardMaterial3D.new()
 	mm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	mm.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
 	mm.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
 	mm.albedo_color = color.lightened(0.4) * 2.0
+	# 둥글고 부드러운 빛알갱이(사각형이 보이지 않게)
+	var tex := GradientTexture2D.new()
+	tex.width = 32
+	tex.height = 32
+	tex.fill = GradientTexture2D.FILL_RADIAL
+	tex.fill_from = Vector2(0.5, 0.5)
+	tex.fill_to = Vector2(1.0, 0.5)
+	var gr := Gradient.new()
+	gr.set_color(0, Color(1, 1, 1, 1))
+	gr.add_point(0.35, Color(1, 1, 1, 0.6))
+	gr.set_color(gr.get_point_count() - 1, Color(1, 1, 1, 0))
+	tex.gradient = gr
+	mm.albedo_texture = tex
+	mm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	mesh.material = mm
 	_motes.mesh = mesh
 	_motes.emitting = false

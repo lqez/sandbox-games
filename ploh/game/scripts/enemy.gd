@@ -315,7 +315,7 @@ func _physics_process(delta: float) -> void:
 		var diff := angle_difference(model.rotation.y, atan2(face.x, face.z))
 		var cap := 8.0 * delta
 		model.rotation.y += clampf(diff * (1.0 - exp(-delta * 10.0)), -cap, cap)
-	Fx.set_param(mats, "flash", clampf(flash / 0.1, 0.0, 1.0))
+	Fx.set_param(mats, "flash", clampf(flash / 0.07, 0.0, 1.0))
 	# 공격 예고 막바지(카운터 구간)에는 몸이 달아올라 동작으로도 알린다
 	var late := state == "wind" and wind_time - t <= COUNTER_WINDOW
 	Fx.set_param(mats, "glow", 0.8 if late else 0.0)
@@ -685,7 +685,7 @@ func take_hit(dmg: float, dir: Vector3, power: float) -> String:
 	hit_count += 1
 	hp = maxf(hp - dmg, 0.0)
 	_trail_wait = 0.35
-	flash = 0.08
+	flash = 0.07
 	# 밀림: 레퍼런스처럼 약 250ms에 걸쳐 감속하며 몸 하나 거리만큼(순간이동처럼 보이지 않게)
 	var dist: float = (0.3 + power * 0.035) * stats.poise
 	knock = dir * (dist * 2.0 / 0.25)

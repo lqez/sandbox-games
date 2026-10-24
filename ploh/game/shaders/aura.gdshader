@@ -29,7 +29,7 @@ void fragment() {
 		float flame = smoothstep(0.35, 0.85, n + (1.0 - h) * 0.45 - 0.15);
 		float fade = (1.0 - smoothstep(0.55, 1.0, h)) * smoothstep(0.0, 0.08, h);
 		float edge = pow(1.0 - abs(dot(NORMAL, VIEW)), 1.6);
-		a = flame * fade * (0.18 + edge * 1.1);
+		a = flame * fade * (0.3 + edge * 1.4);
 	} else if (mode == 2) {
 		float h = 1.0 - UV.y;
 		float edge = pow(1.0 - abs(dot(NORMAL, VIEW)), 1.2);

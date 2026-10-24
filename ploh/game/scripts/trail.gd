@@ -2,13 +2,23 @@ extends MeshInstance3D
 ## 칼날이 실제로 지나간 자리를 따라 그리는 검기 리본.
 ## weapon.gd가 매 프레임 내놓는 손잡이·칼끝 위치를 쌓아 띠를 만들고, 오래된 쪽부터 사라진다.
 ## 빠른 베기는 프레임 사이에 칼이 크게 돌아 띠가 각져 보이므로, 표본 사이를 캣멀롬 곡선으로 메운다.
+## 한 번의 베기가 끝나면(emitting이 꺼지면) 칼끝이 지나간 길을 따라 초승달 검기를 따로 띄운다(ART_TARGET 2.2).
 
-const LIFE := 0.22   # 검기가 남는 시간. 앞쪽은 하얗게 달아오르고 꼬리로 갈수록 영웅 색으로 옅어진다
+const LIFE := 0.18   # 칼 궤적이 남는 시간(ART_TARGET: 160~200ms). 앞쪽은 하얗게 달아오르고 꼬리로 갈수록 영웅 색으로 옅어진다
 const SUB := 3       # 표본 사이에 끼워 넣는 점 수
+const QI := preload("res://shaders/qi.gdshader")
 
 var color := Color(1, 0.9, 0.7)
-var emitting := false
+var qi_weight := 0.0          # 이번 베기의 무게(1이면 검기가 1.3배 크고 1.5배 오래, 두 번째 호가 따라 나온다)
+var emitting := false:
+	set(v):
+		if emitting and not v:
+			_release_qi()
+		if v and not emitting:
+			_stroke.clear()
+		emitting = v
 var _samples: Array = []      # {hilt, tip, t}
+var _stroke: Array = []       # 이번 베기에서 칼끝이 지나간 길 전체(검기를 만든다)
 var _imesh := ImmediateMesh.new()
 var _mat := ShaderMaterial.new()
 var _t := 0.0
@@ -27,6 +37,7 @@ func push(hilt: Vector3, tip: Vector3, delta: float) -> void:
 	_t += delta
 	if emitting:
 		_samples.append({"hilt": hilt, "tip": tip, "t": _t})
+		_stroke.append({"hilt": hilt, "tip": tip, "t": _t})
 	while not _samples.is_empty() and _t - _samples[0].t > LIFE:
 		_samples.pop_front()
 	_rebuild()
@@ -68,3 +79,74 @@ func _rebuild() -> void:
 			_imesh.surface_set_uv(v[1])
 			_imesh.surface_add_vertex(v[0])
 	_imesh.surface_end()
+
+
+## 칼끝 궤적을 따라 초승달 검기를 띄운다: 0.7배에서 40ms에 1.0배로 펼쳐지고, 60ms 머문 뒤 120ms에 꼬리부터 사라진다.
+## 가운데 두께 0.22m에서 양 끝으로 가늘어진다. 무거운 일격과 JUST는 1.3배 크고 1.5배 오래, 30ms 뒤 0.8배 호가 하나 더
+func _release_qi() -> void:
+	if _stroke.size() < 3:
+		return
+	var heavy := qi_weight >= 0.9
+	_spawn_qi(_stroke.duplicate(), 1.3 if heavy else 1.0, 1.5 if heavy else 1.0, 0.0)
+	if heavy:
+		_spawn_qi(_stroke.duplicate(), 0.8, 1.2, 0.03)
+
+
+func _spawn_qi(stroke: Array, size: float, slow: float, delay: float) -> void:
+	# 몸 가운데(손잡이들의 평균)를 축으로 펼친다
+	var pivot := Vector3.ZERO
+	for smp in stroke:
+		pivot += smp.hilt
+	pivot /= stroke.size()
+	var n := stroke.size()
+	var pts: Array = []
+	for i in n - 1:
+		var a: Dictionary = stroke[maxi(i - 1, 0)]
+		var b: Dictionary = stroke[i]
+		var c: Dictionary = stroke[i + 1]
+		var d: Dictionary = stroke[mini(i + 2, n - 1)]
+		for k in SUB:
+			var s := float(k) / SUB
+			pts.append([_cr(a.hilt, b.hilt, c.hilt, d.hilt, s), _cr(a.tip, b.tip, c.tip, d.tip, s)])
+	pts.append([stroke[n - 1].hilt, stroke[n - 1].tip])
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var m := pts.size()
+	var rows: Array = []
+	for i in m:
+		var u := float(i) / (m - 1)
+		var hilt: Vector3 = pts[i][0]
+		var tip: Vector3 = pts[i][1]
+		var out := (tip - hilt).normalized()
+		var w := 0.22 * size * sin(PI * u)
+		# 띠는 칼끝 바로 바깥쪽(칼날보다 조금 더 멀리)에 놓인다
+		var mid := tip + out * 0.08 * size
+		rows.append([mid - out * w * 0.5 - pivot, mid + out * w * 0.5 - pivot, u])
+	for i in m - 1:
+		var p: Array = rows[i]
+		var q: Array = rows[i + 1]
+		for v in [[p[0], Vector2(p[2], 0)], [p[1], Vector2(p[2], 1)], [q[1], Vector2(q[2], 1)],
+				[p[0], Vector2(p[2], 0)], [q[1], Vector2(q[2], 1)], [q[0], Vector2(q[2], 0)]]:
+			st.set_uv(v[1])
+			st.add_vertex(v[0])
+	var mi := MeshInstance3D.new()
+	mi.mesh = st.commit()
+	var mat := ShaderMaterial.new()
+	mat.shader = QI
+	mat.set_shader_parameter("color", color)
+	mi.material_override = mat
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	mi.top_level = true
+	add_child(mi)
+	mi.global_position = pivot
+	mi.scale = Vector3.ONE * 0.7
+	mi.visible = delay <= 0.0
+	var tw := mi.create_tween()
+	tw.set_ignore_time_scale(true)
+	if delay > 0.0:
+		tw.tween_interval(delay)
+		tw.tween_callback(func(): mi.visible = true)
+	tw.tween_property(mi, "scale", Vector3.ONE, 0.04 * slow).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_CUBIC)
+	tw.tween_interval(0.06 * slow)
+	tw.tween_method(func(v: float): mat.set_shader_parameter("erase", v), 0.0, 1.1, 0.12 * slow)
+	tw.tween_callback(mi.queue_free)
