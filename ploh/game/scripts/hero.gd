@@ -30,6 +30,8 @@ const Trail := preload("res://scripts/trail.gd")
 const Vfx := preload("res://scripts/vfx.gd")
 const AWAKEN_TIME := 8.0
 const Procedural := preload("res://scripts/procedural.gd")
+const Bomb := preload("res://scripts/bomb.gd")
+const Breakable := preload("res://scripts/breakable.gd")
 
 ## 박자 판정(음악 시계 기준, 초)
 const JUST_WINDOW := 0.07            # 박자 ±0.07초: JUST
@@ -70,6 +72,9 @@ const RIPOSTE_WINDOW := 0.9          # 받아 낸 뒤 이 안에 누르면 반�
 const STEP_TIME := 0.42              # 횡대시 길이
 const STEP_MOVE := 0.26              # 이 동안 옆으로 미끄러진다
 const RECOIL_TIME := 0.4             # 방패에 받아쳐져 휘청이는 시간
+const GUARD_SPEED := 1.7             # 막은 채 게걸음·뒷걸음하는 최대 속도(m/s)
+const GUARD_RUN := 0.55              # 막는 중 이동 입력이 이보다 크면 막기를 풀고 걷거나 뛴다
+const SKILL_CD := 5.0                # 스킬 버튼을 다시 쓰기까지(초)
 ## 새 동작 클립이 모델에 없을 때 대신 쓰는 동작
 const CLIP_FALLBACK := {"parry": "a2", "thrust": "a3", "step_l": "dodge", "step_r": "dodge"}
 
@@ -99,6 +104,10 @@ var awakened := 0.0           # 궁극기 뒤 강화 상태(남은 초). 공격�
 var aura: Node3D
 var holding := false
 var hold_t := 0.0
+var guarding := false                # 손가락을 누르고 있다: 막기(타이밍이 맞으면 패링)
+var skill_cd := 0.0
+var _block_t := 0.0                  # 막은 충격에 밀려 버티는 시간
+var _stumble := 0.0                  # 급히 서다 넘어질 뻔한 정도(팔을 벌리고 앞으로 쏠렸다가 추스른다)
 var invuln := 0.0
 var flash := 0.0
 var face := Vector3(0, 0, -1)
@@ -177,6 +186,8 @@ func setup(g: Node, d: Dictionary) -> void:
 	cap.radius = 0.45
 	cap.height = 1.8
 	shape.shape = cap
+	# 벽·적(1)과 소품(32)에 막힌다. 소품은 밀고 들어가면 밀린다(Breakable.push_from)
+	collision_mask = 1 | 32
 	shape.position.y = 0.9
 	add_child(shape)
 	model = load(d.model).instantiate()
@@ -205,6 +216,9 @@ func setup(g: Node, d: Dictionary) -> void:
 	skel.modifier_callback_mode_process = Skeleton3D.MODIFIER_CALLBACK_MODE_PROCESS_PHYSICS
 	proc = Procedural.new()
 	proc.setup(Procedural.RIG_MESHY if skel.find_bone("Hips") >= 0 else Procedural.RIG_KAYKIT, self, g.height_fn())
+	# 배를 맞으면 빈손(왼손)으로 감싼다. 두 손으로 쥐는 무거운 무기는 놓지 않는다. 영웅은 적보다 빨리 추스른다
+	proc.clutch_arm = -1 if d.get("weapon_mass", 1.0) >= 1.8 else 0
+	proc.recover = 0.55
 	skel.add_child(proc)
 
 
@@ -617,6 +631,73 @@ func parrying() -> bool:
 	return state == "parry" and t <= PARRY_ACTIVE
 
 
+## 누르고 있기(막기) 시작·끝. 적의 칼이 곧 닿을 때 막기 시작하면 패링, 아니면 막는 자세로 버틴다
+func guard(on: bool) -> void:
+	guarding = on
+	if not on:
+		if state == "guard":
+			_to_idle()
+		return
+	if state in ["idle", "brake", "recoil", "guard"] or (state == "attack" and not _striking()):
+		var th: Array = game.incoming(self, PARRY_WINDOW)
+		if not th.is_empty():
+			_parry(th[0])
+		else:
+			_start_guard()
+
+
+func _start_guard() -> void:
+	state = "guard"
+	t = 0.0
+	queued = false
+	trail.emitting = false
+	var e: Node3D = game.nearest_enemy(global_position, 8.0)
+	if e != null:
+		var to: Vector3 = e.global_position - global_position
+		to.y = 0
+		if to.length() > 0.01:
+			face = to.normalized()
+	# 막는 자세: 막기 클립이 있으면 그것을, 없으면 패링 클립의 칼을 들어 올린 자세에서 멈춰 버틴다
+	if anim.has_animation("guard"):
+		_play("guard", 1.0, 0.1)
+	else:
+		_play(_anim("parry"), 2.0, 0.08, true)
+		_snap(_anim("parry"), [2.0, 0.1, 0.0, 999.0, 0.0])
+
+
+## 막는 중에 적의 칼을 받았다: 피해를 크게 줄이고, 충격에 반걸음 밀리며 버틴다
+func blocked(from: Vector3, dmg: float) -> void:
+	var back := global_position - from
+	back.y = 0
+	back = back.normalized() if back.length() > 0.01 else -face
+	data.hp = maxf(data.hp - dmg * 0.2 * data.guard, 1.0)
+	_vel += back * 2.6
+	_block_t = 0.25
+	proc.hit(back, 0.5)
+	proc.push(back, 0.5)
+	flash = 0.05
+
+
+## 스킬 버튼: 가까운 적 쪽으로 바로 스킬을 쓴다(예전의 길게 눌러 끌기 대신)
+func quick_skill() -> void:
+	if skill_cd > 0.0 or state in ["dead", "skill", "dodge"] or (state == "attack" and _striking()):
+		return
+	var e: Node3D = game.nearest_enemy(global_position, 9.0)
+	if e != null:
+		var to: Vector3 = e.global_position - global_position
+		to.y = 0
+		if to.length() > 0.01:
+			face = to.normalized()
+	skill_cd = SKILL_CD
+	state = "skill"
+	t = 0.0
+	queued = false
+	_push_len = 0.0
+	invuln = 0.3
+	_play_near_strike(_anim("skill"), 1.4)
+	game.hero_skill(self, face)
+
+
 ## 받아 냈다(game.gd가 부른다)
 func on_parry(from: Node3D) -> void:
 	_riposte = RIPOSTE_WINDOW
@@ -647,8 +728,30 @@ func recoil(from: Vector3) -> void:
 	back.y = 0
 	_vel = back.normalized() * 2.0 if back.length() > 0.01 else Vector3.ZERO   # 약 0.15m 밀려난다
 	proc.hit(back, 1.0)
+	proc.push(back, 1.0)
 	_play(_anim("hit"), 2.2, 0.05, true)
 	_snap(_anim("hit"), [2.2, 0.06, 0.3, 0.14, 1.0])
+
+
+## 폭탄 던지기: 대상 쪽을 보고 팔을 휘두르는 동작(스킬 클립)에 맞춰 손에서 폭탄이 떠난다. 던질 수 없으면 false
+func throw_item(target: Vector3) -> bool:
+	if state not in ["idle", "attack", "brake"] or (state == "attack" and _striking()):
+		return false
+	var to := target - global_position
+	to.y = 0
+	if to.length() > 0.1:
+		face = to.normalized()
+	state = "skill"
+	t = 0.0
+	_push_len = 0.0
+	queued = false
+	trail.emitting = false
+	_play_near_strike(_anim("a4"), 1.6)
+	var hand: Vector3 = weapon.hilt if weapon != null else global_position + Vector3(0, 1.6, 0)
+	var from := Vector3(hand.x, maxf(hand.y, global_position.y + 1.3), hand.z) + face * 0.3
+	get_tree().create_timer(0.1).timeout.connect(func(): Bomb.throw(game, from, Vector3(target.x, game.height_at(target.x, target.z) + 0.2, target.z), 0.55))
+	game.sfx("whoosh", 0.1, -4.0)
+	return true
 
 
 ## 스킬 돌진: offset만큼 sec초 동안 감속하며 이동한다
@@ -712,7 +815,16 @@ func _physics_process(delta: float) -> void:
 	flash = maxf(flash - delta, 0.0)
 	empowered = maxf(empowered - delta, 0.0)
 	_riposte = maxf(_riposte - delta, 0.0)
+	skill_cd = maxf(skill_cd - delta, 0.0)
+	_stumble = maxf(_stumble - delta * 1.6, 0.0)
+	proc.flail = _stumble * 1.2
+	_block_t = maxf(_block_t - delta, 0.0)
 	var manual := move_input.length() > 0.15
+	# 누른 채 조금 끌면 막은 채로 걷고, 많이 끌면 막기를 풀고 뛴다. 다시 조금만 끌면 막기로 돌아온다
+	if guarding and state == "guard" and move_input.length() >= GUARD_RUN:
+		_to_idle()
+	elif guarding and state == "idle" and move_input.length() < GUARD_RUN * 0.8:
+		_start_guard()
 	manual_t = 0.0 if manual else manual_t + delta
 	if holding:
 		hold_t += delta
@@ -743,7 +855,6 @@ func _physics_process(delta: float) -> void:
 				proc.crouch = 0.0
 			if t >= _brake_len:
 				state = "idle"
-				proc.lock_feet = false
 				if queued:
 					queued = false
 					_begin_chain()
@@ -792,6 +903,19 @@ func _physics_process(delta: float) -> void:
 					_do_riposte()
 				else:
 					_to_idle()
+		"guard":
+			# 막은 채 상대를 보고 게걸음·뒷걸음(발은 절차적 걸음이 옮긴다). 막은 충격에 밀리는 동안은 버틴다
+			t += delta
+			var foe: Node3D = game.nearest_enemy(global_position, 8.0)
+			if foe != null:
+				var to_f: Vector3 = foe.global_position - global_position
+				to_f.y = 0
+				if to_f.length() > 0.01:
+					face = to_f.normalized()
+			var want_g := Vector3.ZERO
+			if manual and _block_t <= 0.0:
+				want_g = move_input.normalized() * GUARD_SPEED * clampf(move_input.length() / GUARD_RUN, 0.3, 1.0)
+			_vel = _vel.move_toward(want_g, (14.0 if want_g.length() > _vel.length() else 10.0) * delta)
 		"recoil":
 			t += delta
 			_vel = _vel.move_toward(Vector3.ZERO, 14.0 * delta)
@@ -819,6 +943,7 @@ func _physics_process(delta: float) -> void:
 	_root_v = Vector3.ZERO
 	velocity = v_in
 	move_and_slide()
+	Breakable.push_from(self, v_in)
 	# 벽에 막히면 몸에 실린 속도도 그만큼 줄어든다
 	_vel += Vector3(velocity.x, 0.0, velocity.z) - Vector3(v_in.x, 0.0, v_in.z)
 	# 지형 위를 걷는다(발은 절차적 IK가 지형에 붙인다)
@@ -843,6 +968,8 @@ func _physics_process(delta: float) -> void:
 ## snappy: 손가락으로 직접 움직일 때는 더 빨리 가속하고 꺾는다(조작이 굼뜨지 않게)
 func _steer(want: Vector3, delta: float, allow_brake := true, snappy := false) -> void:
 	want.y = 0
+	# 다리나 배를 다쳤으면 굼뜨다
+	want *= 1.0 - 0.3 * proc.hurt_level()
 	var spd := _vel.length()
 	var wspd := want.length()
 	if allow_brake and spd > BRAKE_SPEED and (wspd < spd * 0.35 or (wspd > 0.1 and want.dot(_vel) / (wspd * spd) < -0.3)):
@@ -858,7 +985,7 @@ func _steer(want: Vector3, delta: float, allow_brake := true, snappy := false) -
 	_vel = cur.rotated(Vector3.UP, clampf(ang, -turn, turn)) * move_toward(spd, wspd, rate * delta)
 
 
-## 급정지: 빠를수록 길게 미끄러지고 깊이 버틴다(6m/s에서 약 0.2초). 디딘 발은 붙잡는다
+## 급정지: 빠를수록 길게 버티며 선다(6m/s에서 약 0.2초). 디딘 발은 붙잡히고, 몸이 발을 지나치면 한 걸음 내디뎌 멈춘다
 func _brake() -> void:
 	var spd := _vel.length()
 	state = "brake"
@@ -866,9 +993,15 @@ func _brake() -> void:
 	_brake_len = 0.08 + 0.02 * spd
 	_brake_decel = spd / (_brake_len * 0.55)
 	proc.crouch = clampf(0.03 + 0.012 * spd, 0.0, 0.12)
-	proc.lock_feet = true
 	trail.emitting = false
 	game.sfx("step", 0.15, -6.0)
+	# 아주 빨리 달리다 서면 가끔 넘어질 뻔한다: 윗몸이 앞으로 쏠리고 두 팔을 벌려 균형을 잡은 뒤 한 걸음 내디뎌 추스른다
+	if spd > 5.2 and randf() < 0.35:
+		_stumble = 1.0
+		_brake_len *= 1.6
+		_brake_decel = spd / (_brake_len * 0.7)
+		proc.push(_vel.normalized(), 1.8)
+		proc.crouch = 0.13
 
 
 ## 자동 이동의 목표 속도: 싸울 적이 있으면 붙고, 없으면 다음 방으로 간다. 도착하기 전에 미리 감속한다
@@ -1018,6 +1151,8 @@ func _start_hit() -> void:
 	_followed = false
 	_peak_vel = Vector3.ZERO
 	trail.qi_weight = maxf(_move_weight, 1.0 if just else 0.0)
+	# 콤보가 쌓일수록 검기가 짙어진다(trail.gd가 combo를 읽는다)
+	trail.set("combo", game.combo)
 	_bite = 0.0
 	_lunge = 0.0
 	trail.emitting = false
@@ -1262,6 +1397,15 @@ func _root_velocity(delta: float) -> Vector3:
 	return v
 
 
+## 이 적을 노리고 휘두르는 중이면 칼이 닿기까지 남은 시간(초), 아니면 -1. 적이 빠져 헛치게 할 때 본다
+func strike_eta(e: Node3D) -> float:
+	if state != "attack" or target != e or _end_t >= 0.0:
+		return -1.0
+	if phase != "swing":
+		return 0.6
+	return maxf(_swing().start - t, 0.0)
+
+
 func _clip_pos() -> float:
 	return anim.current_animation_position if anim.current_animation == _clip else 0.0
 
@@ -1356,6 +1500,10 @@ func _update_attack(delta: float) -> void:
 		if not _followed:
 			# 칼이 지나간 운동량이 몸을 끌어당긴다
 			_followed = true
+			if _hit_set.is_empty() and target != null and is_instance_valid(target) and target.has_method("evading") and target.evading():
+				# 상대가 빠져 헛쳤다: 칼에 끌려 몸이 앞으로 쏠린다
+				proc.push(face, 0.7)
+				game.on_hero_whiff(self)
 			proc.momentum(_peak_vel, _peak_tip, global_position, data.get("weapon_mass", 1.0) * (1.0 + _move_weight * 0.6))
 	# 미끄러짐이 멎어야 다음 동작으로 넘어간다
 	var big_move: bool = _hits[_hit_i].get("motion", "") in ["dash", "back", "side"]
@@ -1380,10 +1528,12 @@ func _sweep(pad: float) -> void:
 		return
 	# 부서지는 소품도 칼날이 지나가면 부서진다
 	for b in game.dungeon.breakables:
-		if is_instance_valid(b) and not b.broken and weapon.swept_hits(b.global_position, b.radius, b.height, pad):
-			var d: Vector3 = b.global_position - global_position
+		if is_instance_valid(b) and not b.broken and not _hit_set.has(b) and weapon.swept_hits(b.global_position, b.radius, b.height, pad):
+			_hit_set[b] = true
+			var d: Vector3 = weapon.tip_vel if weapon.tip_vel.length() > 1.0 else b.global_position - global_position
 			d.y = 0
-			b.smash(d.normalized() if d.length() > 0.01 else face)
+			var at: Vector3 = weapon.hilt.lerp(weapon.tip, 0.7)
+			b.hit(d.normalized() if d.length() > 0.01 else face, at, _move_weight)
 	var label: String = _hits[_hit_i].get("label", "")
 	for e in game.enemies:
 		if not is_instance_valid(e) or e.state == "dead" or _hit_set.has(e):
@@ -1439,12 +1589,13 @@ func _auto_evade() -> bool:
 	var id: int = e.get_instance_id() * 100 + (0 if arrow else int(e.attacks))
 	if id != _evade_for:
 		_evade_for = id
+		# 자동 전투는 사람처럼 놓치기도 한다(약 3할은 못 보고 맞는다). 그래야 자동으로도 가끔 진다
 		var r := randf()
 		if arrow:
 			# 화살은 받아쳐 되튕기거나 옆으로 비껴 간다
-			_evade_plan = "parry" if r < 0.5 else ("step" if r < 0.85 else "none")
+			_evade_plan = "parry" if r < 0.35 else ("step" if r < 0.68 else "none")
 		else:
-			_evade_plan = "step" if r < 0.45 else ("parry" if r < 0.8 else ("roll" if r < 0.9 else "none"))
+			_evade_plan = "step" if r < 0.25 else ("parry" if r < 0.45 else ("guard" if r < 0.6 else ("roll" if r < 0.68 else "none")))
 	match _evade_plan:
 		"step":
 			if ttc <= 0.3:
@@ -1459,6 +1610,14 @@ func _auto_evade() -> bool:
 				_evade_plan = ""
 				_parry(e)
 				return true
+		"guard":
+			# 막기: 닿기 전에 막는 자세로 버티다가 칼이 지나가면 푼다(패링보다 느슨하지만 피해는 조금 받는다)
+			if ttc <= 0.4 and state != "guard":
+				_evade_plan = ""
+				_start_guard()
+				guarding = true
+				get_tree().create_timer(ttc + 0.35).timeout.connect(func(): if state == "guard" and game.auto_mode: guard(false))
+				return true
 		"roll":
 			if ttc <= 0.3:
 				_evade_plan = ""
@@ -1469,8 +1628,8 @@ func _auto_evade() -> bool:
 	return false
 
 
-func take_damage(amount: float, from := Vector3.INF) -> bool:
-	## 맞았으면 true, 회피했으면 false
+func take_damage(amount: float, from := Vector3.INF, at := Vector3.INF, blade := Vector3.ZERO) -> bool:
+	## 맞았으면 true, 회피했으면 false. at은 적의 칼(화살)이 닿은 점: 그 부위가 반응하고 부상이 남는다
 	if state == "dead" or invuln > 0.0:
 		return false
 	amount *= data.guard
@@ -1478,7 +1637,11 @@ func take_damage(amount: float, from := Vector3.INF) -> bool:
 	data.ult = minf(data.ult + 4.0, 100.0)
 	flash = 0.12
 	if from != Vector3.INF:
-		proc.hit(global_position - from, 1.0)
+		if at != Vector3.INF:
+			proc.hit_at(at, global_position - from, 1.0, 0.8, blade)
+		else:
+			proc.hit(global_position - from, 1.0)
+		proc.push(global_position - from, 0.6)
 	game.popup(global_position + Vector3(0, 2.4, 0), str(int(amount)), Color(1, 0.4, 0.35), 52)
 	game.shake(0.3)
 	game.sfx("hit", 0.1, -4.0)
@@ -1505,11 +1668,15 @@ func take_damage(amount: float, from := Vector3.INF) -> bool:
 func _posture() -> void:
 	var spd := Vector2(_vel.x, _vel.z).length()
 	var near: bool = game.nearest_enemy(global_position, 7.0) != null
-	proc.stance = 1.0 if (near and spd < 2.5 and state in ["idle", "attack", "parry", "brake", "recoil", "charge"]) else 0.0
+	proc.stance = 1.0 if (near and spd < 2.5 and state in ["idle", "attack", "parry", "brake", "recoil", "charge", "guard"]) else 0.0
 	proc.gaze_strength = 0.85
 	proc.swing_twist = 0.0
 	proc.swing_bend = 0.0
 	proc.swing_rate = 9.0
+	proc.arm_busy = state in ["attack", "parry", "skill", "guard"]
+	# 일부러 미끄러지는 동작(구르기, 횡대시, 돌진·물러남·옆걸음 베기의 몸놀림)만 발을 붙잡지 않는다
+	var dash: bool = state == "attack" and phase == "swing" and _hit_i < _hits.size() and _hits[_hit_i].get("motion", "") in ["dash", "back", "side"] and spd > 1.5
+	proc.slide = state in ["dodge", "step"] or dash
 	match state:
 		"attack":
 			proc.gaze_strength = 0.15
@@ -1539,6 +1706,11 @@ func _posture() -> void:
 			proc.gaze_strength = 0.5
 			proc.swing_bend = 0.1
 			proc.swing_rate = 28.0
+		"guard":
+			# 막는 자세: 몸을 조금 웅크려 무게중심을 낮추고 상대를 본다
+			proc.gaze_strength = 0.85
+			proc.swing_bend = 0.08
+			proc.swing_rate = 14.0
 		"step":
 			proc.gaze_strength = 0.5
 		"dodge", "skill":
@@ -1554,7 +1726,8 @@ func _animate(delta: float) -> void:
 		var cap := (TURN_MAX * 1.4 if state == "attack" else TURN_MAX) * delta
 		model.rotation.y += clampf(diff * (1.0 - exp(-delta * 14.0)), -cap, cap)
 	var spd := Vector2(_vel.x, _vel.z).length()
-	var moving := spd > 0.5
+	# 아주 느리게 움직일 때는 달리기 클립을 틀지 않는다(제자리 자세에서 절차적 걸음이 발을 옮긴다)
+	var moving := spd > 1.0
 	_react_t = maxf(_react_t - delta, 0.0)
 	var es := _env_speed(delta)
 	if es >= 0.0:
@@ -1564,10 +1737,10 @@ func _animate(delta: float) -> void:
 	match state:
 		"idle":
 			if moving:
-				_play(_anim("run"), clampf(spd / _run_nat, 0.6, 1.6), 0.2)
+				_play(_anim("run"), clampf(spd / _run_nat, 0.35, 1.6), 0.2)
 			elif _current == _anim("hit") and _react_t > 0.0:
 				pass
-			elif not anim.is_playing() or _current in [_anim("run"), _anim("charge"), _anim("hit"), _anim("dodge")]:
+			elif not anim.is_playing() or _current in [_anim("run"), _anim("charge"), _anim("hit"), _anim("dodge"), _anim("parry"), "guard"]:
 				_play(_anim("idle"), 1.0, 0.25)
 		"brake":
 			# 달리던 다리를 거두며 버틴다(발은 붙잡고, 몸 낮추기와 기울기는 절차적으로)

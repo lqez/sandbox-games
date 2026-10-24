@@ -8,8 +8,17 @@ const LIFE := 0.18   # 칼 궤적이 남는 시간(ART_TARGET: 160~200ms). 앞�
 const SUB := 3       # 표본 사이에 끼워 넣는 점 수
 const QI := preload("res://shaders/qi.gdshader")
 
-var color := Color(1, 0.9, 0.7)
-var qi_weight := 0.0          # 이번 베기의 무게(1이면 검기가 1.3배 크고 1.5배 오래, 두 번째 호가 따라 나온다)
+## 영웅 색. hero.gd가 옅게(lightened) 넘겨 주므로 채도를 되살려 쓴다: 덮어 그리는 띠는 색이 진해야 밝은 바닥 위에서 읽힌다
+var color := Color(1, 0.9, 0.7):
+	set(v):
+		color = v
+		_sat = Color.from_hsv(v.h, clampf(v.s * 1.9, 0.0, 0.85), minf(v.v, 1.0))
+		if _mat != null:
+			_mat.set_shader_parameter("color", _sat)
+var _sat := Color(1, 0.75, 0.3)
+var qi_weight := 0.0          # 이번 베기의 무게(1이면 검기가 1.3배 크고 1.4배 오래, 두 번째 호가 따라 나온다)
+## 콤보 수(hero.gd가 매 타격 시작에 넣는다). 쌓일수록 검기가 단계별로 짙어진다(_tier)
+var combo := 0
 var emitting := false:
 	set(v):
 		if emitting and not v:
@@ -27,6 +36,8 @@ var _t := 0.0
 func _ready() -> void:
 	mesh = _imesh
 	_mat.shader = preload("res://shaders/trail.gdshader")
+	_mat.set_shader_parameter("color", _sat)
+	_mat.render_priority = 1
 	material_override = _mat
 	top_level = true
 	global_transform = Transform3D.IDENTITY
@@ -54,7 +65,6 @@ func _rebuild() -> void:
 	var n := _samples.size()
 	if n < 2:
 		return
-	_mat.set_shader_parameter("color", color)
 	# 곡선으로 메운 점 목록: [안쪽, 칼끝, 새로움(1이 방금)]
 	var pts: Array = []
 	for i in n - 1:
@@ -81,8 +91,9 @@ func _rebuild() -> void:
 	_imesh.surface_end()
 
 
-## 칼끝 궤적을 따라 초승달 검기를 띄운다: 0.7배에서 40ms에 1.0배로 펼쳐지고, 60ms 머문 뒤 120ms에 꼬리부터 사라진다.
-## 가운데 두께 0.22m에서 양 끝으로 가늘어진다. 무거운 일격과 JUST는 1.3배 크고 1.5배 오래, 30ms 뒤 0.8배 호가 하나 더
+## 칼끝 궤적을 따라 초승달 검기를 띄운다: 0.7배에서 40ms에 1.0배로 펼쳐지고, 90ms 머문 뒤 170ms에 꼬리부터
+## 노이즈로 바스러지며 사라진다(합계 약 300ms. 타격 뒤 몇 프레임 더 남아 '무엇을 베었는지' 읽힌다).
+## 가운데 두께 0.26m에서 양 끝으로 가늘어진다. 무거운 일격과 JUST는 1.3배 크고 1.4배 오래, 30ms 뒤 0.8배 호가 하나 더
 func _release_qi() -> void:
 	if _stroke.size() < 3:
 		return
@@ -104,12 +115,33 @@ func _release_qi() -> void:
 	if _stroke.size() < 3:
 		return
 	var heavy := qi_weight >= 0.9
-	_spawn_qi(_stroke.duplicate(), 1.3 if heavy else 1.0, 1.5 if heavy else 1.0, 0.0)
-	if heavy:
-		_spawn_qi(_stroke.duplicate(), 0.8, 1.2, 0.03)
+	var tier := _tier()
+	var size: float = (1.3 if heavy else 1.0) * [1.0, 1.15, 1.2, 1.3, 1.4][tier]
+	var slow: float = (1.4 if heavy else 1.0) * [1.0, 1.2, 1.25, 1.35, 1.5][tier]
+	_spawn_qi(_stroke.duplicate(), size, slow, 0.0, tier, 1.0)
+	# 무거운 일격과 10콤보부터는 30ms 뒤 조금 작은 두 번째 호
+	if heavy or tier >= 2:
+		_spawn_qi(_stroke.duplicate(), size * 0.78, slow * 0.85, 0.03, tier, 0.9)
+	# 20콤보부터는 50ms 뒤 조금 크고 옅은 잔상 호
+	if tier >= 3:
+		_spawn_qi(_stroke.duplicate(), size * 1.12, slow * 1.1, 0.05, tier, 0.35 if tier == 3 else 0.5)
 
 
-func _spawn_qi(stroke: Array, size: float, slow: float, delay: float) -> void:
+## 콤보 단계: 0(0~4) 지금 그대로, 1(5~9) 두껍고 조금 오래, 2(10~19) 밝은 심 + 두 번째 호,
+## 3(20~29) 영웅 색 → 백금 그라데이션 + 옅은 잔상 호, 4(30+) 가장 세게. 하얀 덩어리가 되지 않게 몸통 색은 지킨다
+func _tier() -> int:
+	if combo >= 30:
+		return 4
+	if combo >= 20:
+		return 3
+	if combo >= 10:
+		return 2
+	if combo >= 5:
+		return 1
+	return 0
+
+
+func _spawn_qi(stroke: Array, size: float, slow: float, delay: float, tier := 0, alpha := 1.0) -> void:
 	# 몸 가운데(손잡이들의 평균)를 축으로 펼친다
 	var pivot := Vector3.ZERO
 	for smp in stroke:
@@ -135,7 +167,7 @@ func _spawn_qi(stroke: Array, size: float, slow: float, delay: float) -> void:
 		var hilt: Vector3 = pts[i][0]
 		var tip: Vector3 = pts[i][1]
 		var out := (tip - hilt).normalized()
-		var w := 0.22 * size * sin(PI * u)
+		var w := 0.26 * size * sin(PI * u)
 		# 띠는 칼끝 바로 바깥쪽(칼날보다 조금 더 멀리)에 놓인다
 		var mid := tip + out * 0.08 * size
 		rows.append([mid - out * w * 0.5 - pivot, mid + out * w * 0.5 - pivot, u])
@@ -150,7 +182,12 @@ func _spawn_qi(stroke: Array, size: float, slow: float, delay: float) -> void:
 	mi.mesh = st.commit()
 	var mat := ShaderMaterial.new()
 	mat.shader = QI
-	mat.set_shader_parameter("color", color)
+	mat.set_shader_parameter("color", _sat)
+	mat.set_shader_parameter("seed", randf() * 10.0)
+	# 단계별 심 너비(작을수록 하얀 심이 넓다), 머리 쪽 백금 그라데이션, 잔상 알파
+	mat.set_shader_parameter("core_w", [0.66, 0.66, 0.6, 0.56, 0.5][tier])
+	mat.set_shader_parameter("grad", 0.0 if tier < 3 else (0.8 if tier == 3 else 1.0))
+	mat.set_shader_parameter("alpha_mul", alpha)
 	mi.material_override = mat
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	mi.top_level = true
@@ -164,6 +201,6 @@ func _spawn_qi(stroke: Array, size: float, slow: float, delay: float) -> void:
 		tw.tween_interval(delay)
 		tw.tween_callback(func(): mi.visible = true)
 	tw.tween_property(mi, "scale", Vector3.ONE, 0.04 * slow).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_CUBIC)
-	tw.tween_interval(0.06 * slow)
-	tw.tween_method(func(v: float): mat.set_shader_parameter("erase", v), 0.0, 1.1, 0.12 * slow)
+	tw.tween_interval(0.09 * slow)
+	tw.tween_method(func(v: float): mat.set_shader_parameter("erase", v), 0.0, 1.15, 0.17 * slow)
 	tw.tween_callback(mi.queue_free)

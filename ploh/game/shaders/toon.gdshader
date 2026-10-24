@@ -25,9 +25,11 @@ void fragment() {
 	ALBEDO = mix(c.rgb, vec3(1.0), flash * 0.8);
 	float rim = pow(1.0 - clamp(dot(NORMAL, VIEW), 0.0, 1.0), 3.0);
 	// 글로우는 몸 전체가 아니라 윤곽(림)에만 실어 실루엣이 달아오르게 한다
-	float rim2 = pow(1.0 - clamp(dot(NORMAL, VIEW), 0.0, 1.0), 2.0);
+	// 궁극기 오라: 좁은 림(지수 3.5)에만 채도를 올린 영웅 색을 싣는다. 넓은 림에 옅은 금색을 세게 더하면 몸 전체가 하얗게 날아간다
+	float rim_aura = pow(1.0 - clamp(dot(NORMAL, VIEW), 0.0, 1.0), 3.5);
+	vec3 aura_c = clamp(mix(vec3(dot(aura_color.rgb, vec3(0.299, 0.587, 0.114))), aura_color.rgb, 1.8), 0.0, 1.0);
 	EMISSION = rim_color.rgb * rim * rim_amount + glow_color.rgb * glow * rim * 2.5 + vec3(flash) * 0.6
-		+ aura_color.rgb * (rim2 * 2.4 + 0.08) * aura;
+		+ aura_c * (rim_aura * 1.6 + 0.04) * aura;
 	ROUGHNESS = 1.0;
 	SPECULAR = 0.15;
 }

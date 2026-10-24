@@ -36,7 +36,8 @@ const SWIPE_DIST := 55.0     # 이만큼 빠르게 밀면 회피(플릭)
 const SWIPE_TIME := 0.2      # 이 시간 안에 밀어야 플릭으로 본다
 const MOVE_DIST := 28.0      # 플릭이 아닌 채로 이만큼 끌면 직접 이동
 const STICK_R := 90.0        # 이동 스틱이 최대 속도가 되는 거리
-const TAP_DECIDE := 70       # 누른 뒤 이 시간(ms) 동안 손가락이 움직이지 않으면 탭(공격)으로 본다.
+const TAP_DECIDE := 70       # (예전) 누른 뒤 이 시간(ms) 동안 손가락이 움직이지 않으면 탭(공격)으로 본다.
+const GUARD_DELAY := 160     # 손가락을 이만큼(ms) 움직이지 않고 누르고 있으면 막기. 그 전에 떼면 탭(공격, 누른 순간의 박자로 판정)
                              # 플릭·드래그가 먼저 공격을 내지 않게 한다. 박자 판정은 누른 순간 기준
 const TAP_SLOP := 18.0       # 탭으로 보는 손가락 흔들림
 
@@ -49,6 +50,7 @@ var _touch_pos := Vector2.ZERO
 var _pending := false         # 아직 탭인지 플릭인지 정하지 않은 누름
 var _pending_clock := 0.0     # 그 누름의 박자 시계 시각
 var _pending_double := false
+var _guarding := false        # 누르고 있어 막는 중
 var _swiped := false
 var _moving := false
 var _aiming := false
@@ -111,8 +113,11 @@ func _fire_tap() -> void:
 
 
 func _process(delta: float) -> void:
-	if _pending and _touch != -1 and Time.get_ticks_msec() - _touch_time >= TAP_DECIDE and _touch_pos.distance_to(_touch_start) < TAP_SLOP:
-		_fire_tap()
+	if _pending and _touch != -1 and Time.get_ticks_msec() - _touch_time >= GUARD_DELAY and _touch_pos.distance_to(_touch_start) < TAP_SLOP:
+		# 누르고 있다: 공격이 아니라 막기(적의 칼이 곧 닿으면 패링)
+		_pending = false
+		_guarding = true
+		game.guard(true)
 	# CanvasLayer 아래 Control은 앵커만으로 크기가 따라오지 않아 직접 맞춘다
 	position = Vector2.ZERO
 	size = get_viewport().get_visible_rect().size
@@ -186,6 +191,8 @@ func _track(rd: float) -> void:
 
 
 func banner(text: String) -> void:
+	if game != null and game.state == "cutscene":
+		return   # 보스 등장 연출이 이름판을 띄운다
 	_banner = text
 	_banner_t = 2.0
 
@@ -249,6 +256,9 @@ func _input(event: InputEvent) -> void:
 			_touch = -1
 			if _pending:
 				_fire_tap()
+			if _guarding:
+				_guarding = false
+				game.guard(false)
 			if _circled:
 				pass
 			elif _aiming:
@@ -290,7 +300,8 @@ func _input(event: InputEvent) -> void:
 			_swiped = true
 			_trail.append({"a": _touch_start, "b": event.position, "t": 0.0})
 			game.swipe(d.normalized())
-		elif not _swiped and not quick and d.length() >= MOVE_DIST:
+		elif not _swiped and (not quick or _guarding) and d.length() >= MOVE_DIST:
+			# 끌기: 막는 중이면 조금 끌어 게걸음·뒷걸음, 많이 끌면 막기를 풀고 걷거나 뛴다(영웅이 끈 길이로 고른다)
 			_moving = true
 			game.tap_cancel()
 			game.set_move(d.limit_length(STICK_R) / STICK_R)
@@ -351,6 +362,10 @@ func _press_button(pos: Vector2) -> bool:
 					game.toggle_auto()
 				"retry":
 					game.reset()
+				"bomb", "potion":
+					game.use_item(b.id)
+				"skill":
+					game.quick_skill()
 			return true
 	return false
 
@@ -364,6 +379,8 @@ func _draw() -> void:
 	if game == null or game.player == null or not is_instance_valid(game.player):
 		return
 	buttons.clear()
+	if game.state == "cutscene":
+		return   # 보스 등장 연출 중에는 전투 UI를 감춘다(연출 화면은 cutscene.gd·comic.gd가 그린다)
 	var s := size
 	var portrait := s.y >= s.x
 	if _flash_t > 0.0:
@@ -708,8 +725,9 @@ func _draw_controls(s: Vector2, portrait: bool) -> void:
 	_plate_center(uc + Vector2(0, ur + 16), "궁극기", 18, ready)
 	buttons.append({"id": "ult", "center": uc, "radius": ur + 8})
 	# 스킬(롱터치 후 끌기): 버튼이 아니라 이름판. 차지·조준 중에 켜진다
-	var hot: bool = game.player.state in ["charge", "aim"]
-	_plate_center(uc + Vector2(-6, -ur - 30), act.skill_name, 17, hot, true)
+	var hot: bool = game.player.state in ["charge", "aim", "skill"] or game.player.skill_cd <= 0.0
+	_plate_center(uc + Vector2(-6, -ur - 30), act.skill_name if game.player.skill_cd <= 0.0 else "%s %.0f" % [act.skill_name, ceilf(game.player.skill_cd)], 17, hot, true)
+	buttons.append({"id": "skill", "center": uc + Vector2(-6, -ur - 30), "radius": 34.0})
 	# 교대: 다음 영웅의 초상화, 대기 시간은 어두운 부채꼴과 남은 초
 	var sr := 38.0
 	var sc := uc + Vector2(-112, -22)
@@ -732,14 +750,37 @@ func _draw_controls(s: Vector2, portrait: bool) -> void:
 	draw_arc(sc, sr, 0, TAU, 48, TRIM if can else Color(0.4, 0.43, 0.5), 2)
 	_plate_center(sc + Vector2(0, sr + 13), "교대", 16, can)
 	buttons.append({"id": "swap", "center": sc, "radius": sr + 8})
+	# 가방: 폭탄·회복약 버튼(교대 왼쪽). 개수가 없으면 어둡게
+	var ir3 := 30.0
+	for k in 2:
+		var id: String = ["bomb", "potion"][k]
+		var ic := sc + Vector2(-86 - 72 * k, 26)
+		var n: int = int(game.inventory.get(id, 0))
+		var on := n > 0
+		draw_circle(ic, ir3 + 3, Color(0, 0, 0, 0.55))
+		draw_circle(ic, ir3, NAVY_DEEP)
+		var a := 1.0 if on else 0.35
+		if id == "bomb":
+			draw_circle(ic + Vector2(-2, 4), 14, Color(0.12, 0.12, 0.16, a))
+			draw_circle(ic + Vector2(-6, 0), 4, Color(1, 1, 1, 0.35 * a))
+			draw_line(ic + Vector2(5, -8), ic + Vector2(11, -16), Color(0.8, 0.7, 0.5, a), 3)
+			draw_circle(ic + Vector2(12, -18), 3.5 + (1.5 * sin(_clock * 18.0) if on else 0.0), Color(1, 0.65, 0.2, a))
+		else:
+			draw_circle(ic + Vector2(0, 5), 13, Color(0.9, 0.2, 0.25, a))
+			draw_rect(Rect2(ic + Vector2(-5, -15), Vector2(10, 10)), Color(0.85, 0.9, 0.95, a))
+			draw_rect(Rect2(ic + Vector2(-6, -18), Vector2(12, 4)), Color(0.55, 0.35, 0.2, a))
+			draw_circle(ic + Vector2(-4, 2), 3, Color(1, 1, 1, 0.4 * a))
+		draw_arc(ic, ir3, 0, TAU, 40, TRIM if on else Color(0.4, 0.43, 0.5), 2)
+		_text_center(ic + Vector2(ir3 - 6, ir3 - 6), str(n), 18, Color(1, 1, 1, a), _f_num)
+		buttons.append({"id": id, "center": ic, "radius": ir3 + 6})
 	# 처음 30초만 조작 안내
 	if game.elapsed < 30.0 and game.state == "play":
 		var ha := clampf((30.0 - game.elapsed) / 3.0, 0.0, 1.0) * 0.6
 		if portrait:
-			_text_center(Vector2(s.x / 2, s.y - 44), "터치 공격 · 따닥 연타 · 길게 차지 · 길게 끌어 스킬", 17, Color(1, 1, 1, ha))
-			_text_center(Vector2(s.x / 2, s.y - 20), "튕겨 회피·돌진 · 원 그려 회오리", 17, Color(1, 1, 1, ha))
+			_text_center(Vector2(s.x / 2, s.y - 44), "터치 공격 · 따닥 연타 · 누르고 있으면 막기(맞추면 패링)", 17, Color(1, 1, 1, ha))
+			_text_center(Vector2(s.x / 2, s.y - 20), "막으며 조금 끌면 게걸음 · 크게 끌면 달리기 · 튕겨 회피", 17, Color(1, 1, 1, ha))
 		else:
-			_text_left(Vector2(MARGIN + 4, s.y - 20), "터치 공격 · 따닥 연타 · 길게 차지 · 길게 끌어 스킬 · 튕겨 회피·돌진 · 원 그려 회오리", 17, Color(1, 1, 1, ha))
+			_text_left(Vector2(MARGIN + 4, s.y - 20), "터치 공격 · 따닥 연타 · 누르고 있으면 막기(맞추면 패링) · 막으며 끌면 게걸음 · 크게 끌면 달리기 · 튕겨 회피", 17, Color(1, 1, 1, ha))
 
 
 # 알림·결과 -----------------------------------------------------------------

@@ -9,6 +9,8 @@ var _counts := {}            # 영웅 상태·동작에 들어간 횟수(자동 
 var _crowd := 0.0            # 영웅 2.2m 안에 붙은 적 수의 합(싸우는 프레임만)
 var _fight_frames := 0
 var _winds := {}             # 동시에 공격 예고 중인 근접 적 수 → 프레임 수
+var _foe := {}               # 적 상태에 들어간 횟수(빠지기·쓰러짐 등)
+var _foe_prev := {}
 func _ready() -> void:
 	boot = Game.instantiate()
 	add_child(boot)
@@ -27,6 +29,12 @@ func _process(delta: float) -> void:
 		if st != _prev_state:
 			_prev_state = st
 			_counts[st] = _counts.get(st, 0) + 1
+	for e in g.enemies:
+		if is_instance_valid(e):
+			var id: int = e.get_instance_id()
+			if _foe_prev.get(id, "") != e.state:
+				_foe_prev[id] = e.state
+				_foe[e.state] = _foe.get(e.state, 0) + 1
 	if p != null and is_instance_valid(p):
 		var near := 0
 		var wind := 0
@@ -48,8 +56,15 @@ func _process(delta: float) -> void:
 	if g.room != last_room:
 		last_room = g.room
 		print("%.1f room %d" % [t, g.room])
-	if g.state != "play" or t > 150.0:
+	if g.state in ["clear", "dead"] or t > 150.0:   # "cutscene"(보스 등장 연출)은 끝까지 틀고 이어 간다
 		print("%.1f END state=%s room=%d hp=%s" % [t, g.state, g.room, str(g.party.map(func(h): return int(h.hp)))])
 		print("STATES ", _counts)
+		print("FOES ", _foe, " items=", g.inventory, " gold=", g.gold)
+		print("FIGHT ", g.fight_log)
+		if g.state == "play":
+			for e in g.enemies:
+				if is_instance_valid(e):
+					print("  STUCK? %s %s t=%.1f pos=%s dormant=%s" % [e.kind, e.state, e.t, str(e.global_position), str(e.dormant)])
+			print("  hero ", p.state if p != null else "-", " ", p.global_position if p != null else Vector3.ZERO, " room_active=", g.dungeon.rooms[g.room].get("active", "?"))
 		print("CROWD avg_within_2.2m=%.2f winds=%s" % [_crowd / maxf(_fight_frames, 1), str(_winds)])
 		get_tree().quit()

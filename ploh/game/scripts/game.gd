@@ -12,6 +12,11 @@ const Hud := preload("res://scripts/hud.gd")
 const Dungeon := preload("res://scripts/dungeon.gd")
 const Vfx := preload("res://scripts/vfx.gd")
 const Arrow := preload("res://scripts/arrow.gd")
+const Ragdoll := preload("res://scripts/ragdoll.gd")
+const Item := preload("res://scripts/item.gd")
+const Bomb := preload("res://scripts/bomb.gd")
+const Cutscene := preload("res://scripts/cutscene.gd")
+const Breakable := preload("res://scripts/breakable.gd")
 
 const KAYKIT := "res://assets/kaykit/heroes/%s.glb"
 const BPM := 120.0           # 전투 박자. 기본 공격 한 타가 한 박, 피니시가 두 박
@@ -32,7 +37,7 @@ const CAM_FIT := 0.84        # 싸우는 적이 화면 가로 8~92% 안에 들�
 ## 영웅 정의. 모든 캐릭터는 프라우 B와 같은 약 4.5등신으로 통일한다(사용자 결정)
 const HEROES := [
 	{"name": "프라우", "model": "res://assets/astrid/B_mid/astrid.glb", "scale": 1.6, "color": Color(0.95, 0.8, 0.45),
-		"max_hp": 520.0, "atk": 42.0, "speed": 6.0, "reach": 2.6, "guard": 0.85, "ranged": false,
+		"max_hp": 210.0, "atk": 42.0, "speed": 6.0, "reach": 2.6, "guard": 0.85, "ranged": false,
 		"blade": ["weapon_sword"], "weapon_bone": "RightHand", "attack_speed": 1.0,
 		"skill_name": "돌진 찌르기", "skill": "dash",
 		"anims": {"moves": {"idle": "idle", "run": "run", "a1": "attack_1", "a2": "attack_2", "a3": "attack_3", "a4": "cast",
@@ -40,7 +45,7 @@ const HEROES := [
 			"parry": "parry", "thrust": "thrust", "step_l": "sidestep_l", "step_r": "sidestep_r"}}},
 	# 프람(불꽃의 용병): 검과 방패. 단단하고 표준 속도
 	{"name": "프람", "model": "res://assets/fram/fram.glb", "scale": 1.6, "color": Color(1.0, 0.416, 0.239),
-		"max_hp": 640.0, "atk": 38.0, "speed": 5.6, "reach": 2.6, "guard": 0.7, "ranged": false,
+		"max_hp": 250.0, "atk": 38.0, "speed": 5.6, "reach": 2.6, "guard": 0.7, "ranged": false,
 		"blade": ["weapon_sword"], "weapon_bone": "RightHand", "attack_speed": 1.0, "weapon_mass": 1.2,
 		"skill_name": "홍련 일섬", "skill": "wave",
 		"anims": {"moves": {"idle": "idle", "run": "run", "a1": "attack_1", "a2": "attack_2", "a3": "attack_3", "a4": "cast",
@@ -48,7 +53,7 @@ const HEROES := [
 			"parry": "parry", "thrust": "thrust", "step_l": "sidestep_l", "step_r": "sidestep_r"}}},
 	# 슈나이더(온화한 수인기사): 양손 철퇴. 예비 동작이 길고 한 방이 무겁다
 	{"name": "슈나이더", "model": "res://assets/schneider/schneider.glb", "scale": 1.6, "color": Color(0.55, 0.8, 1.0),
-		"max_hp": 600.0, "atk": 56.0, "speed": 5.2, "reach": 2.8, "guard": 0.75, "ranged": false,
+		"max_hp": 240.0, "atk": 56.0, "speed": 5.2, "reach": 2.8, "guard": 0.75, "ranged": false,
 		"blade": ["weapon_mace"], "weapon_bone": "RightHand", "attack_speed": 1.0, "weapon_mass": 1.9, "strike_time": 0.34,
 		"skill_name": "대지 강타", "skill": "quake",
 		"anims": {"moves": {"idle": "idle", "run": "run", "a1": "attack_1", "a2": "attack_2", "a3": "attack_3", "a4": "cast",
@@ -71,6 +76,10 @@ var room := -1               # 지금 싸우는 방
 var route_i := 0             # 자동 이동 경로에서 다음으로 갈 지점
 var state := "play"          # play, clear, dead
 var auto_mode := false
+var inventory := {"bomb": 1, "potion": 1}   # 가방(상자에서 주운 폭탄·회복약). 버튼으로 쓴다
+var gold := 0
+var _item_cd := 0.0          # 자동 전투가 아이템을 다시 쓰기까지
+var fight_log := {"hit": 0, "parried": 0, "dodged": 0, "whiff": 0, "dmg": 0.0, "countered": 0, "armor": 0, "killed_in_wind": 0}   # 적의 공격 결과(밸런스 측정)
 var elapsed := 0.0
 var combo := 0
 var dormant := {}            # 방 번호 → 미리 세워 둔(아직 깨지 않은) 적
@@ -78,6 +87,7 @@ var max_combo := 0
 var just_count := 0
 var swap_cd := 0.0
 var boss: Node3D
+var cutscene: Node           # 보스 등장 연출(cutscene.gd). 도는 동안 state는 "cutscene"
 var arrows: Array = []       # 날아가는 화살(arrow.gd)
 
 var camera: Camera3D
@@ -194,6 +204,7 @@ func reset() -> void:
 	dungeon = Dungeon.new()
 	dungeon.mobile = mobile
 	dungeon.build(world, rng)
+	Ragdoll.wall_guard(dungeon, world)
 	party = []
 	for h in HEROES:
 		var d: Dictionary = h.duplicate(true)
@@ -269,6 +280,12 @@ func _enter_room(i: int) -> void:
 	var r: Dictionary = dungeon.rooms[i]
 	r.active = true
 	_populate(i)
+	if i == dungeon.rooms.size() - 1 and not r.has("intro"):
+		# 보스 방은 처음 들어설 때 전투를 멈추고 등장 연출부터 튼다. 연출이 끝나면 이 함수를 다시 불러 적을 깨운다
+		r.intro = true
+		cutscene = Cutscene.new()
+		cutscene.start(self, i)
+		return
 	for e in dormant[i]:
 		if is_instance_valid(e):
 			e.activate()
@@ -277,6 +294,7 @@ func _enter_room(i: int) -> void:
 				boss = e
 	dormant.erase(i)
 	_populate(i + 1)
+	dungeon.enter_room(i)   # 방 분위기 훅(보스 방이면 화로가 확 타오른다)
 	var last := i == dungeon.rooms.size() - 1
 	_enter_t = 1.1
 	hud.banner("보스 · 균열의 군주" if last else "방 %d / %d" % [i + 1, dungeon.rooms.size()])
@@ -317,12 +335,13 @@ func _process(delta: float) -> void:
 	else:
 		Engine.time_scale = 1.0
 	if state == "play":
+		_auto_items(delta)
 		elapsed += delta
 		swap_cd = maxf(swap_cd - delta, 0.0)
 		# 쉬고 있는 동료는 천천히 회복한다
 		for i in party.size():
 			if i != active and party[i].hp > 0.0:
-				party[i].hp = minf(party[i].hp + party[i].max_hp * 0.02 * delta, party[i].max_hp)
+				party[i].hp = minf(party[i].hp + party[i].max_hp * 0.006 * delta, party[i].max_hp)
 		_update_orbs(delta)
 		enemies = enemies.filter(func(e): return is_instance_valid(e) and e.state != "dead")
 		_update_rooms()
@@ -352,6 +371,8 @@ func _update_camera(delta: float) -> void:
 	## - 연출: 방에 들어서면 잠깐 물러나 방을 보여 주고, 강타에 살짝 다가서고, 궁극기는 낮은 각도에서 돌며 비춘다
 	if player == null or not is_instance_valid(player):
 		return
+	if cutscene != null and is_instance_valid(cutscene) and cutscene.camera_on:
+		return   # 보스 등장 연출이 카메라를 잡고 있다
 	var real := delta / maxf(Engine.time_scale, 0.05)
 	var fighting := false
 	for e in enemies:
@@ -554,6 +575,17 @@ func release_aim() -> void:
 		player.release_aim()
 
 
+## 누르고 있기(막기) 시작·끝
+func guard(on: bool) -> void:
+	if state == "play" and player != null:
+		player.guard(on)
+
+
+func quick_skill() -> void:
+	if state == "play" and player != null:
+		player.quick_skill()
+
+
 func tap_cancel() -> void:
 	if state == "play":
 		player.cancel_hold()
@@ -687,9 +719,14 @@ func hit_enemy(e: Node3D, dmg: float, hero: Node3D, just: bool, label: String, w
 	var crit := randf() < 0.12
 	if crit:
 		dmg *= 1.5
+	# 헛친 적의 빈틈을 쳤다
+	var opening: bool = e.get("whiff_t") != null and e.whiff_t > 0.0
+	if opening:
+		dmg *= 1.3
+		label = "빈틈!" if label == "" else label
 	if just:
 		weight = maxf(weight, 0.6)
-	var result: String = e.take_hit(dmg, dir, 5.0 + weight * 7.0)
+	var result: String = e.take_hit(dmg, dir, 5.0 + weight * 7.0, _contact(e, hero, dir), _sweep(hero, dir))
 	if result == "parry":
 		# 방패병이 받아쳤다: 칼이 크게 튕기고 영웅이 휘청인다. 방패병은 곧바로 찌르기로 반격한다
 		popup(e.global_position + Vector3(0, 2.0 * e.stats.scale + 0.4, 0), "받아침", Color(1, 0.75, 0.4), 40)
@@ -717,6 +754,12 @@ func hit_enemy(e: Node3D, dmg: float, hero: Node3D, just: bool, label: String, w
 		Vfx.sparks(self, at3, -dir, Vector3.UP, Color(0.87, 0.92, 1.0), 12)
 		Vfx.cut(self, at3, Vector3.UP, Color(0.87, 0.92, 1.0), 0.0, false)
 		return
+	if result in ["counter", "armor"]:
+		fight_log.countered += 1 if result == "counter" else 0
+		fight_log.armor += 1 if result == "armor" else 0
+	if result == "armor":
+		# 예고 중인 적이 버텼다: 피해는 들어가지만 공격은 끊기지 않는다
+		popup(e.global_position + Vector3(-0.5, 2.0 * e.stats.scale + 0.2, 0), "버팀", Color(0.8, 0.85, 1.0), 26)
 	combo += 1
 	max_combo = maxi(max_combo, combo)
 	hud.combo_pulse(weight)
@@ -756,7 +799,7 @@ func hit_enemy(e: Node3D, dmg: float, hero: Node3D, just: bool, label: String, w
 		else:
 			sfx("heavy" if weight >= 0.9 else "hit", 0.12)
 			vibrate(12 + int(weight * 25))
-	impact(at, dir, color, weight, _sweep(hero, dir), just)
+	impact(at, dir, color, weight, _sweep(hero, dir), just, true, result == "dead")
 	if result == "dead":
 		sfx("kill", 0.1, -2.0)
 		if e.kind == "boss":
@@ -773,7 +816,8 @@ func hit_enemy(e: Node3D, dmg: float, hero: Node3D, just: bool, label: String, w
 
 ## 공격 감독(attack token): 근접 공격은 한 번에 하나, 공격을 시작하는 사이는 0.45초 넘게 둔다.
 ## 준비된 적들 가운데 점수가 가장 높은 하나에게만 공격권을 준다: 오래 기다렸을수록, 영웅 등 뒤에 있을수록,
-## 영웅이 다른 적을 치느라 빈틈을 보일수록 높다. 두 번째 공격권은 첫 공격자와 120° 넘게 벌어진 협공일 때만 가끔 준다.
+## 영웅이 다른 적을 치느라 빈틈을 보일수록 높다. 둘째 방까지 두 번째 공격권은 100° 넘게 벌어진 협공일 때만 가끔 주고,
+## 셋째 방부터는 둘이 함께 덤빈다.
 ## 보스는 혼자 둘 몫. 궁병은 따로 쏜다(공격권을 쓰지 않는다)
 var _tokens: Array = []           # [적, 받은 시각(초)]
 var _last_grant := -10.0
@@ -788,16 +832,19 @@ func can_attack(e: Node3D) -> bool:
 	for tk in _tokens:
 		used += 2 if tk[0].kind == "boss" else 1
 	var need := 2 if e.kind == "boss" else 1
-	if now - _last_grant < 0.45 or used + need > 2:
+	# 둘째 방까지는 하나씩(둘째 공격권은 드문 협공만), 셋째 방부터는 둘이 함께 덤빈다(보스 방은 보스 + 하나)
+	var boss_in: bool = e.kind == "boss" or _tokens.any(func(tk): return tk[0].kind == "boss")
+	var cap := 3 if (room >= 2 and boss_in) else 2
+	if now - _last_grant < 0.45 or used + need > cap:
 		return false
-	if used == 1:
-		# 협공: 첫 공격자와 영웅을 사이에 두고 120° 넘게 벌어져 있을 때만, 가끔
+	if used == 1 and room < 2:
+		# 협공: 첫 공격자와 영웅을 사이에 두고 100° 넘게 벌어져 있을 때만, 가끔(앞뒤로 조이기)
 		var first: Node3D = _tokens[0][0]
 		var a1: Vector3 = first.global_position - player.global_position
 		var a2: Vector3 = e.global_position - player.global_position
 		a1.y = 0
 		a2.y = 0
-		if a1.angle_to(a2) < deg_to_rad(120.0) or randf() > 0.004:
+		if a1.angle_to(a2) < deg_to_rad(100.0) or randf() > 0.012:
 			return false
 	# 준비된 다른 적보다 점수가 높아야 받는다
 	var mine := attack_score(e)
@@ -845,7 +892,7 @@ func enemy_strike(e: Node3D, at: Vector3, area: float, dmg: float) -> void:
 	var p := player.global_position
 	if Vector2(p.x - at.x, p.z - at.z).length() > area + 0.3:
 		return
-	if player.parrying():
+	if player.parrying() or player.state == "guard":
 		# 넓은 내려찍기는 받아 낼 수 없고, 막아서 피해만 줄인다
 		popup(p + Vector3(0, 2.4, 0), "막음", Color(0.8, 0.85, 0.95), 40)
 		player.take_damage(dmg * 0.3, at)
@@ -868,10 +915,11 @@ func _finish_cinematic(e: Node3D, boss_kill: bool) -> void:
 	sfx("counter", 0.0, 0.0)
 	sfx("heavy", 0.0, 0.0)
 	vibrate(120 if boss_kill else 60)
+	# 바닥 먼지가 사방으로 터지고 큰 불티가 튄다(고리·물보라 대신)
 	var at := Vector3(e.global_position.x, 0.04, e.global_position.z)
-	splash(at, 1.0)
-	for k in (3 if boss_kill else 1):
-		ripple(at, 2.0 + k * 2.2, 0.9 + k * 0.2, k * 0.12)
+	var kdir := (e.global_position - player.global_position).normalized()
+	Vfx.shock(self, at, kdir, 1.3 if boss_kill else 0.9)
+	Vfx.sparks(self, e.global_position + Vector3(0, 1.0 * e.stats.scale, 0), kdir, Vector3.UP, Color(1, 0.9, 0.6), 30, 1.0)
 	if boss_kill:
 		hud.flash(Color(1, 0.96, 0.88), 0.5)
 		hud.title("균열의 군주 격파", "BOSS DEFEATED")
@@ -887,10 +935,29 @@ func enemy_hit(e: Node3D, dmg: float) -> void:
 	var to_e: Vector3 = e.global_position - player.global_position
 	to_e.y = 0
 	if player.parrying() and player.face.dot(to_e.normalized()) > -0.2:
+		fight_log.parried += 1
 		parried(e)
 		return
+	if player.state == "guard" and player.face.dot(to_e.normalized()) > 0.2:
+		# 막았다: 피해는 2할, 쇳소리와 불티, 반걸음 밀린다. 적은 칼이 튕겨 잠깐 멈칫한다
+		fight_log.parried += 0
+		player.blocked(e.global_position, dmg)
+		var at4: Vector3 = player.global_position + to_e.normalized() * 0.6 + Vector3(0, 1.3, 0)
+		Vfx.sparks(self, at4, to_e.normalized(), Vector3.UP, Color(0.87, 0.92, 1.0), 14)
+		Vfx.clash(self, at4, Vector3.UP, Color(0.85, 0.9, 1.0))
+		popup(player.global_position + Vector3(0, 2.4, 0), "막음", Color(0.8, 0.85, 0.95), 34)
+		sfx("glint", 0.1, -2.0)
+		player.freeze(0.04)
+		e.freeze(0.05)
+		e.knock = -to_e.normalized() * 1.5
+		e.knock_decel = 10.0
+		return
 	var dodging: bool = player.state in ["dodge", "step"]
-	var hurt: bool = player.take_damage(dmg, e.global_position)
+	var hp0: float = party[active].hp
+	var hurt: bool = player.take_damage(dmg, e.global_position, _blade_on_hero(e), e.weapon.tip_vel if e.weapon != null else Vector3.ZERO)
+	fight_log.hit += 1 if hurt else 0
+	fight_log.dodged += 0 if hurt else 1
+	fight_log.dmg += hp0 - party[active].hp
 	if not hurt and dodging:
 		player.perfect_dodge()
 	if hurt:
@@ -907,7 +974,7 @@ func arrow_hit(a: Node3D) -> void:
 	if player.state == "dead":
 		return
 	var dodging: bool = player.state in ["dodge", "step"]
-	var hurt: bool = player.take_damage(a.dmg, a.global_position - a.vel.normalized())
+	var hurt: bool = player.take_damage(a.dmg, a.global_position - a.vel.normalized(), a.global_position)
 	if not hurt and dodging:
 		player.perfect_dodge()
 	if hurt:
@@ -934,7 +1001,10 @@ func parried(e: Node3D) -> void:
 	dir = dir.normalized() if dir.length() > 0.01 else player.face
 	var at: Vector3 = hp + dir * 0.7 + Vector3(0, 1.3, 0)
 	Vfx.clash(self, at, dir.cross(Vector3.UP), Color(0.75, 0.9, 1.0))
-	Vfx.sparks(self, at, dir, Vector3.UP, Color(1, 0.9, 0.6), 24)
+	# 금속 불꽃: 흰·청백, 짧고 곧게(ART_TARGET 5.3)
+	Vfx.sparks(self, at, dir, Vector3.UP, Color(0.87, 0.93, 1.0), 24, 0.6)
+	# 아주 짧은 청백 화면 섬광(70ms): 패링은 플레이어의 순간이라 화면 전체로 알린다
+	hud.flash(Color(0.85, 0.93, 1.0), 0.07)
 	popup(hp + Vector3(0, 2.6, 0), "패링!", Color(0.7, 0.92, 1.0), 60)
 	sfx("glint", 0.05, 2.0)
 	sfx("counter", 0.05, -2.0)
@@ -1132,13 +1202,63 @@ func slash(pos: Vector3, face: Vector3, reach: float, arc_deg: float, color: Col
 		tw.tween_callback(mi.queue_free)
 
 
-## 칼날이 적의 몸을 지난 자리: 칼날 선분에서 적의 몸통 축에 가장 가까운 점을 몸 표면으로 옮긴다
+## 가장 최근 _contact()에서 읽은, 닿은 칼날 점이 그 프레임에 움직인 방향(없으면 ZERO). _sweep()이 쓴다
+var _contact_sweep := Vector3.ZERO
+
+
+## 칼날이 적의 몸에 처음 닿은 자리. 직전 프레임에서 지금까지 날이 쓸고 간 면을 시간 순으로 훑어(weapon.swept_hits와
+## 같은 캡슐 판정) 몸통에 처음 들어간 칼날 점을 찾고, 그 높이에서 칼 쪽을 향한 몸 표면으로 옮긴다.
+## 지금 프레임의 칼 위치만 보면 날이 이미 몸을 지나간 뒤라 섬광이 몸 밖 엉뚱한 곳에 뜬다
 func _contact(e: Node3D, hero: Node3D, dir: Vector3) -> Vector3:
 	var base: Vector3 = e.global_position
-	var fallback: Vector3 = base + Vector3(0, 1.0 * e.stats.scale, 0) - dir * e.radius * 0.6
+	var h: float = 2.0 * e.stats.scale
+	_contact_sweep = Vector3.ZERO
 	var w = hero.get("weapon")
 	if w == null:
-		return fallback
+		return base + Vector3(0, 1.0 * e.stats.scale, 0) - dir * e.radius * 0.6
+	var best := Vector3.INF
+	var best_u := -1.0
+	var best_d := INF
+	for si in 9:
+		var s := si / 8.0
+		var a: Vector3 = w.prev_hilt.lerp(w.hilt, s)
+		var b: Vector3 = w.prev_tip.lerp(w.tip, s)
+		for ti in 8:
+			var u := 0.3 + 0.7 * ti / 7.0     # 손잡이 쪽 30%는 날이 아니다
+			var p := a.lerp(b, u)
+			if p.y < base.y - 0.1 or p.y > base.y + h:
+				continue
+			var d := Vector2(p.x - base.x, p.z - base.z).length()
+			if d <= e.radius + 0.2 and d < best_d:
+				best_d = d
+				best = p
+				best_u = u
+		if best_d < INF:
+			break      # 처음 닿은 순간에서 멈춘다(가장 깊이 들어간 점)
+	if best_d == INF:
+		# 쓸린 면이 몸에 닿지 않았으면(판정 여유가 더 컸던 공격) 지금 칼날에서 몸 축에 가장 가까운 점으로
+		var ab := Vector2(w.tip.x - w.hilt.x, w.tip.z - w.hilt.z)
+		var s2 := 1.0
+		if ab.length_squared() > 0.0001:
+			s2 = clampf(Vector2(base.x - w.hilt.x, base.z - w.hilt.z).dot(ab) / ab.length_squared(), 0.3, 1.0)
+		best = (w.hilt as Vector3).lerp(w.tip, s2)
+		best_u = s2
+	# 닿은 칼날 점이 이번 프레임에 움직인 방향 = 그 자리의 칼이 가던 방향
+	var travel: Vector3 = (w.hilt as Vector3).lerp(w.tip, best_u) - (w.prev_hilt as Vector3).lerp(w.prev_tip, best_u)
+	if travel.length() > 0.03:
+		_contact_sweep = travel.normalized()
+	var side := Vector3(best.x - base.x, 0, best.z - base.z)
+	side = side.normalized() if side.length() > 0.05 else -dir
+	var top: float = 1.8 * e.stats.scale
+	return Vector3(base.x, clampf(best.y, base.y + 0.3 * e.stats.scale, base.y + top * 0.95), base.z) + side * e.radius * 0.85
+
+
+## 적의 칼날이 영웅의 몸에 닿은 점: 칼날에서 영웅 몸 축에 가장 가까운 점의 높이로, 몸 겉에
+func _blade_on_hero(e: Node3D) -> Vector3:
+	var base: Vector3 = player.global_position
+	var w = e.get("weapon")
+	if w == null:
+		return Vector3.INF
 	var a: Vector3 = w.hilt
 	var b: Vector3 = w.tip
 	var ab := Vector2(b.x - a.x, b.z - a.z)
@@ -1147,120 +1267,140 @@ func _contact(e: Node3D, hero: Node3D, dir: Vector3) -> Vector3:
 		s = clampf(Vector2(base.x - a.x, base.z - a.z).dot(ab) / ab.length_squared(), 0.3, 1.0)
 	var p := a.lerp(b, s)
 	var side := Vector3(p.x - base.x, 0, p.z - base.z)
-	side = side.normalized() if side.length() > 0.05 else -dir
-	var top: float = 1.8 * e.stats.scale
-	return Vector3(base.x, clampf(p.y, base.y + 0.35 * e.stats.scale, base.y + top * 0.95), base.z) + side * e.radius * 0.85
+	side = side.normalized() if side.length() > 0.05 else (e.global_position - base).normalized()
+	return Vector3(base.x, clampf(p.y, base.y + 0.3, base.y + 1.85), base.z) + side * 0.3
 
 
-## 칼끝이 가던 방향(없으면 맞은 방향을 옆으로 돌린 것)
+## 영웅이 헛쳤다(상대가 빠졌다): 작은 글자와 바람 소리
+func on_hero_whiff(hero: Node3D) -> void:
+	popup(hero.global_position + Vector3(0, 2.3, 0), "헛침", Color(0.7, 0.72, 0.8), 28)
+	sfx("whoosh", 0.15, -6.0)
+
+
+## 적이 헛쳤다(영웅이 피했다): 빈틈 표시
+func on_enemy_whiff(e: Node3D) -> void:
+	fight_log.whiff += 1
+	popup(e.global_position + Vector3(0, 2.0 * e.stats.scale + 0.3, 0), "빗나감", Color(0.75, 0.85, 1.0), 28)
+
+
+## 아이템을 주웠다: 금화는 바로 쌓고, 폭탄·회복약은 가방에 넣는다
+func add_item(k: String) -> void:
+	var at: Vector3 = player.global_position + Vector3(0, 2.4, 0)
+	if k == "gold":
+		gold += 10
+		popup(at, "+10", Color(1, 0.85, 0.3), 28)
+		sfx("glint", 0.2, -10.0)
+		return
+	inventory[k] = int(inventory.get(k, 0)) + 1
+	popup(at, "+" + str(Item.KINDS[k].name), Color(0.85, 0.95, 1.0), 32)
+	sfx("glint", 0.1, -4.0)
+
+
+## 가방의 아이템을 쓴다(왼쪽 아래 버튼, 자동 전투)
+func use_item(k: String) -> void:
+	if int(inventory.get(k, 0)) <= 0 or player == null or player.state == "dead" or state != "play":
+		return
+	match k:
+		"bomb":
+			var target := _bomb_target()
+			if target == Vector3.INF:
+				target = player.global_position + player.face * 5.0
+			if not player.throw_item(target):
+				return
+		"potion":
+			var h: Dictionary = party[active]
+			if h.hp >= h.max_hp:
+				return
+			h.hp = minf(h.hp + h.max_hp * 0.35, h.max_hp)
+			popup(player.global_position + Vector3(0, 2.6, 0), "회복", Color(0.55, 1.0, 0.6), 40)
+			Vfx.sparkles(self, player.global_position + Vector3(0, 1.0, 0), Color(0.55, 1.0, 0.6), 24)
+			sfx("glint", 0.05, 0.0)
+	inventory[k] = int(inventory[k]) - 1
+	_item_cd = 4.0
+
+
+## 폭탄을 던질 곳: 9m 안에서 적이 가장 많이 모인 자리(영웅에게서 2.5m 넘게 떨어진)
+func _bomb_target() -> Vector3:
+	var best := Vector3.INF
+	var best_n := 0
+	for e in enemies:
+		if not is_instance_valid(e) or e.state == "dead" or e.dormant:
+			continue
+		var d: float = e.global_position.distance_to(player.global_position)
+		if d > 9.0 or d < 2.5:
+			continue
+		var n := 0
+		for o in enemies:
+			if is_instance_valid(o) and o.state != "dead" and o.global_position.distance_to(e.global_position) < Bomb.RADIUS:
+				n += 3 if o.kind == "boss" else 1
+		if n > best_n:
+			best_n = n
+			best = e.global_position
+	return best
+
+
+## 자동 전투의 아이템: 체력이 낮으면 회복약, 적이 셋 넘게 뭉쳐 있으면(보스는 하나로) 폭탄
+func _auto_items(delta: float) -> void:
+	_item_cd = maxf(_item_cd - delta, 0.0)
+	if not auto_mode or _item_cd > 0.0 or player == null or player.state not in ["idle", "attack"]:
+		return
+	var h: Dictionary = party[active]
+	if h.hp < h.max_hp * 0.35 and int(inventory.get("potion", 0)) > 0:
+		use_item("potion")
+		return
+	if int(inventory.get("bomb", 0)) > 0 and player.state == "idle":
+		var at := _bomb_target()
+		if at == Vector3.INF:
+			return
+		var n := 0
+		for o in enemies:
+			if is_instance_valid(o) and o.state != "dead" and o.global_position.distance_to(at) < Bomb.RADIUS:
+				n += 3 if o.kind == "boss" else 1
+		if n >= 3:
+			use_item("bomb")
+
+
+## 폭탄에 맞은 적: 피해를 입고, 가벼운 적은 나가떨어진다(래그돌)
+func bomb_hit(e: Node3D, dmg: float, dir: Vector3) -> void:
+	var r: String = e.take_hit(dmg, dir, 10.0)
+	popup(e.global_position + Vector3(0.4, 2.0 * e.stats.scale, 0), str(int(dmg)), Color(1, 0.75, 0.35), 40)
+	party[active].ult = minf(party[active].ult + 3.0, 100.0)
+	if r != "dead" and e.state not in ["down", "getup", "dead"] and e.stats.poise >= 1.0:
+		e._blown(dir, 12.0)
+
+## 칼이 가던 방향: 닿은 칼날 점의 이동 방향(_contact), 없으면 칼끝 속도, 그것도 없으면 맞은 방향을 옆으로 돌린 것
 func _sweep(hero: Node3D, dir: Vector3) -> Vector3:
+	if _contact_sweep != Vector3.ZERO:
+		return _contact_sweep
 	var w = hero.get("weapon")
 	if w != null and w.tip_vel.length() > 1.0:
 		return w.tip_vel.normalized()
 	return dir.cross(Vector3.UP).normalized()
 
 
-## 맞은 자리: 베인 자국과 섬광, 불티, 피. 무거운 타격은 바닥 물결과 물보라가 더해진다
-## (레퍼런스: 화면을 덮는 섬광 대신 맞은 자리와 바닥에 짧고 날카롭게)
-func impact(at: Vector3, dir: Vector3, color: Color, weight: float, sweep := Vector3.ZERO, just := false, flesh := true) -> void:
+## 맞은 자리(칼날이 몸에 닿은 점, _contact): 섬광과 불티는 칼이 가던 방향(sweep)으로, 피는 그 사이로.
+## 무거운 일격은 바닥에 먼지가 사방으로 흩어진다. 고리·원판·물보라는 쓰지 않는다
+## (레퍼런스: 화면을 덮는 섬광 대신 맞은 자리와 바닥에 짧고 날카롭게). kill이면 피가 두 배로 세다
+func impact(at: Vector3, dir: Vector3, color: Color, weight: float, sweep := Vector3.ZERO, just := false, flesh := true, kill := false) -> void:
 	if sweep == Vector3.ZERO:
 		sweep = dir.cross(Vector3.UP).normalized()
 	var ground := Vector3(at.x, height_at(at.x, at.z) + 0.04, at.z)
+	var heavy := weight >= 0.9
 	Vfx.cut(self, at, sweep, color if (just or color != Color(1, 1, 1)) else Color(1, 0.9, 0.75), weight, just)
-	# 불꽃: 일반 12, 무거운 24, JUST 30(ART_TARGET 2.2)
-	Vfx.sparks(self, at, dir, sweep, color, 30 if just else (24 if weight >= 0.9 else 12))
+	# 불꽃: 일반 14, 무거운 24, JUST 30(ART_TARGET 2.2)
+	Vfx.sparks(self, at, dir, sweep, color, 30 if just else (24 if heavy else 14), weight)
 	if flesh:
-		Vfx.blood(self, at, dir.lerp(sweep, 0.35), 10 + int(weight * 12), ground.y)
-		Vfx.dust(self, ground + dir * 0.3)
-	# 바닥 링은 무거운 타격에만, 작게(가벼운 타격까지 링을 그리면 화면이 시끄럽다)
-	if weight >= 0.5:
-		ripple(ground, 0.5 + weight * 0.6, 0.4 + weight * 0.2)
-	if weight >= 0.9:
-		splash(ground, weight)
+		Vfx.blood(self, at, dir.lerp(sweep, 0.35), 10 + int(weight * 12), ground.y, kill)
+		Vfx.dust(self, ground + dir * 0.3, dir)
+	if heavy:
+		Vfx.shock(self, ground, dir, weight)
 
 
-## 바닥에 퍼지는 얇은 물결 링
-func ripple(pos: Vector3, radius: float, life: float, delay := 0.0) -> void:
-	var mi := MeshInstance3D.new()
-	var tm := TorusMesh.new()
-	tm.inner_radius = 0.92
-	tm.outer_radius = 1.0
-	tm.rings = 32
-	tm.ring_segments = 4
-	mi.mesh = tm
-	var m := Fx.mat(Color(0.85, 0.95, 1.0, 0.0), 1.2, true)
-	m.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
-	mi.material_override = m
-	mi.scale = Vector3(0.2, 0.02, 0.2) * radius
-	add_child(mi)
-	mi.global_position = pos
-	var tw := mi.create_tween()
-	tw.tween_interval(delay)
-	tw.tween_property(m, "albedo_color:a", 0.3, 0.04)
-	tw.parallel().tween_property(mi, "scale", Vector3(radius, 0.02, radius), life).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_CUBIC)
-	tw.parallel().tween_property(m, "albedo_color:a", 0.0, life).set_delay(0.04).set_ease(Tween.EASE_IN)
-	tw.tween_callback(mi.queue_free)
-
-
-## 무거운 타격의 물보라 기둥과 물방울
-func splash(pos: Vector3, weight: float) -> void:
-	var p := CPUParticles3D.new()
-	p.one_shot = true
-	p.emitting = true
-	p.amount = 18 + int(weight * 14)
-	p.lifetime = 0.55
-	p.explosiveness = 0.9
-	p.direction = Vector3.UP
-	p.spread = 28.0
-	p.initial_velocity_min = 3.0
-	p.initial_velocity_max = 5.5 + weight * 2.0
-	p.gravity = Vector3(0, -14, 0)
-	p.scale_amount_min = 0.5
-	p.scale_amount_max = 1.3
-	var q := QuadMesh.new()
-	q.size = Vector2(0.12, 0.12)
-	var m := Fx.mat(Color(0.88, 0.96, 1.0, 0.85), 1.0, true)
-	m.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
-	var tex := GradientTexture2D.new()
-	tex.fill = GradientTexture2D.FILL_RADIAL
-	tex.fill_from = Vector2(0.5, 0.5)
-	tex.fill_to = Vector2(1.0, 0.5)
-	var g := Gradient.new()
-	g.set_color(0, Color(1, 1, 1, 1))
-	g.set_color(1, Color(1, 1, 1, 0))
-	tex.gradient = g
-	m.albedo_texture = tex
-	q.material = m
-	p.mesh = q
-	add_child(p)
-	p.global_position = pos + Vector3(0, 0.05, 0)
-	get_tree().create_timer(1.2, true, false, true).timeout.connect(p.queue_free)
-
-
-## JUST 박자 신호: 칼날이 반짝이고 맑은 소리가 난다(화면 UI 없이 동작으로 알린다)
+## JUST 박자 신호: 칼끝에서 금색 별 반짝이가 흩어지고 맑은 소리가 난다(화면 UI 없이 동작으로 알린다)
 func just_cue(hero: Node3D) -> void:
 	sfx("glint", 0.04, -6.0)
 	var tip: Vector3 = hero.global_position + Vector3(0, 1.3, 0) + hero.face * 0.8
-	var p := CPUParticles3D.new()
-	p.one_shot = true
-	p.emitting = true
-	p.amount = 6
-	p.lifetime = 0.25
-	p.explosiveness = 1.0
-	p.spread = 180.0
-	p.initial_velocity_min = 0.5
-	p.initial_velocity_max = 1.5
-	p.gravity = Vector3.ZERO
-	var mesh := QuadMesh.new()
-	mesh.size = Vector2(0.18, 0.18)
-	var mm := Fx.mat(Color(1, 0.95, 0.7), 4.0, true)
-	mm.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
-	mm.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
-	mesh.material = mm
-	p.mesh = mesh
-	add_child(p)
-	p.global_position = tip
-	get_tree().create_timer(0.6, true, false, true).timeout.connect(p.queue_free)
+	Vfx.sparkles(self, tip, Color(1.0, 0.88, 0.5), 7)
 
 
 func sfx(name: String, pitch_var := 0.1, volume_db := 0.0) -> void:
@@ -1346,3 +1486,8 @@ func _build_env() -> void:
 	moon.directional_shadow_mode = DirectionalLight3D.SHADOW_ORTHOGONAL
 	moon.directional_shadow_max_distance = 35.0
 	add_child(moon)
+	# 방 분위기(앰비언트·달빛 색과 방향·안개·배경)는 던전이 영웅 위치에 따라 섞는다(dungeon.gd MOODS, Mood 노드).
+	# 세기는 _env_base에 써 주므로 위 _process의 궁극기 '둘레 어둡게'가 그대로 겹친다
+	var mood := Dungeon.Mood.new()
+	mood.setup(self, e, moon)
+	add_child(mood)

@@ -136,10 +136,10 @@ func _process(delta: float) -> void:
 		"dodge":
 			if near and fmod(t, 1.6) < delta * 1.5:
 				g.swipe(Vector2(1, 0) if int(t / 1.6) % 2 == 0 else Vector2(-1, 0))
-		"room2", "room3":
-			# 앞 방들을 정리한 것으로 하고 그 방(궁병이 있는 넓은 방)으로 옮겨 자동 전투로 싸운다
+		"room1", "room2", "room3":
+			# 앞 방들을 정리한 것으로 하고 그 방(room1 야영지, room2·3 궁병이 있는 넓은 방)으로 옮겨 자동 전투로 싸운다
 			if _once("room"):
-				var ri := 2 if scenario == "room2" else 3
+				var ri := int(scenario.substr(4))
 				for e in g.enemies:
 					if is_instance_valid(e):
 						e.queue_free()
@@ -153,8 +153,14 @@ func _process(delta: float) -> void:
 				var c: Vector3 = g.dungeon.rooms[ri].center
 				p.global_position = c + (prev - c).normalized() * 3.0
 				g.auto_mode = true
-		"boss":
-			# 앞 방들을 정리한 것으로 하고 보스 방으로 옮겨 싸운다
+		"boss", "boss_skip":
+			# 앞 방들을 정리한 것으로 하고 보스 방으로 옮겨 싸운다(들어서면 보스 등장 연출부터).
+			# boss_skip은 연출 2.5초에 화면을 눌러 건너뛴다
+			if scenario == "boss_skip" and t > 2.5 and _once("skip"):
+				var ev := InputEventScreenTouch.new()
+				ev.pressed = true
+				ev.position = Vector2(200, 400)
+				Input.parse_input_event(ev)
 			if _once("boss"):
 				for e in g.enemies:
 					if is_instance_valid(e):
@@ -179,6 +185,44 @@ func _process(delta: float) -> void:
 				p.global_position = Vector3(f.c.x - f.r - 1.0, 0, f.c.y)
 			if t > 0.5:
 				g.set_move(Vector2(0.7071, -0.7071) if fmod(t, 4.0) < 2.0 else Vector2(-0.7071, 0.7071))
+		"tour":
+			# 방 구경(배경·조명 점검): 적 없이 모든 방을 정리한 것으로 하고, 여섯째 인자의 방 입구에서 가운데로 걸어 들어간다
+			if _once("tour"):
+				for e in g.enemies:
+					if is_instance_valid(e):
+						e.queue_free()
+				g.enemies.clear()
+				for i in g.dormant.keys():
+					for e in g.dormant[i]:
+						if is_instance_valid(e):
+							e.queue_free()
+				g.dormant.clear()
+				for i in g.dungeon.rooms.size():
+					g.dungeon.rooms[i].active = true
+					g.dungeon.rooms[i].cleared = true
+				var ri := int(args[5]) if args.size() > 5 else 0
+				var r: Dictionary = g.dungeon.rooms[ri]
+				var c: Vector3 = r.center
+				var prev: Vector3 = g.dungeon.rooms[ri - 1].center if ri > 0 else c + Vector3(6, 0, 6)
+				var dir := (c - prev).normalized()
+				# 일곱째 인자 puddle: 그 방의 첫 웅덩이를 향해 걷는다
+				if args.size() > 6 and args[6] == "puddle" and not g.dungeon._puddles[ri].is_empty():
+					var pc: Vector2 = g.dungeon._puddles[ri][0][0]
+					c = Vector3(pc.x, 0, pc.y)
+					dir = (c - prev).normalized()
+				p.global_position = c - dir * minf(r.rx, r.rz) * 0.8
+				g.room = ri
+				_did["tour_dir"] = Vector2(dir.x, dir.z)
+			var sd: Vector2 = _did["tour_dir"]
+			# 화면 방향 입력이므로(game.screen_to_world의 역) 월드 방향을 카메라 기준으로 되돌린다
+			var w := Vector3(sd.x, 0, sd.y)
+			var right := Vector3(1, 0, 0).rotated(Vector3.UP, deg_to_rad(g.cam_yaw))
+			var up := Vector3(0, 0, -1).rotated(Vector3.UP, deg_to_rad(g.cam_yaw))
+			g.set_move(Vector2(w.dot(right), -w.dot(up)) if t > 0.4 and t < dur - 0.8 else Vector2.ZERO)
+			if t > dur - 0.5 and _once("perf"):
+				print("PERF room %s draw calls %d primitives %d" % [args[5] if args.size() > 5 else "0",
+					RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_TOTAL_DRAW_CALLS_IN_FRAME),
+					RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_TOTAL_PRIMITIVES_IN_FRAME)])
 
 
 func _watch(p: Node3D, delta: float) -> void:

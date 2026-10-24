@@ -2,7 +2,10 @@ extends RefCounted
 ## 처치 순간 물리 뼈대(래그돌)로 넘어가게 한다.
 ##
 ## 주요 뼈마다 PhysicalBone3D와 캡슐 충돌체를 자동으로 만들고(관절은 원뿔 제한),
-## 죽는 순간 시뮬레이션을 켜고 맞은 방향으로 충격을 준다. 벽(1)과 바닥(2)에 부딪힌다.
+## 죽는 순간 시뮬레이션을 켜고 맞은 방향으로 충격을 준다. 바닥(2)과 벽 뒤에 세운 상자(16)에 부딪힌다.
+## 쓰러졌다 일어나는 넉다운도 같은 뼈대로 한다(stop으로 끄고, 주인이 그 자세에서 일어나는 클립으로 섞는다).
+
+const WALL_LAYER := 16
 
 ## [뼈, 다음 뼈(길이 방향), 굵기(m, 모델 크기 1 기준), 관절 원뿔 각도]
 const BONES_MESHY := [
@@ -40,8 +43,8 @@ static func build(skel: Skeleton3D, table: Array, unit := 1.0) -> RefCounted:
 		pb.angular_damp = 2.5
 		pb.friction = 0.9
 		pb.collision_layer = 8
-		# 바닥(2)하고만 부딪힌다. 벽 충돌체(오목한 삼각형 면)에 끼면 관절이 터져 메시가 늘어난다
-		pb.collision_mask = 2
+		# 바닥(2)과 벽 상자(16)에 부딪힌다. 벽 메시 충돌체(오목한 삼각형 면)에 끼면 관절이 터져 메시가 늘어나므로 그것과는 부딪히지 않는다
+		pb.collision_mask = 2 | WALL_LAYER | 32
 		pb.joint_type = PhysicalBone3D.JOINT_TYPE_CONE if row[0] not in ["Hips", "hips"] else PhysicalBone3D.JOINT_TYPE_NONE
 		pb.set("joint_constraints/swing_span", row[3])
 		pb.set("joint_constraints/twist_span", row[3] * 0.4)
@@ -86,7 +89,62 @@ func spread() -> float:
 ## 래그돌 시작: impulse는 월드 충격(방향 × 세기)
 func start(impulse: Vector3) -> void:
 	sim.active = true
+	sim.influence = 1.0
 	sim.physical_bones_start_simulation()
 	for pb: PhysicalBone3D in bodies:
 		var k := 1.0 if pb.bone_name in ["Spine01", "chest", "Head", "head"] else 0.45
 		pb.apply_central_impulse(impulse * k + Vector3(0, impulse.length() * 0.25 * k, 0))
+
+
+## 고꾸라짐: 윗몸(upper)과 다리(lower)에 따로 충격을 준다. 윗몸을 앞으로, 다리를 뒤로 밀면 앞으로 엎어진다
+func topple(upper: Vector3, lower: Vector3) -> void:
+	sim.active = true
+	sim.influence = 1.0
+	sim.physical_bones_start_simulation()
+	for pb: PhysicalBone3D in bodies:
+		var n := String(pb.bone_name)
+		if n in ["Spine01", "chest", "Head", "head", "Hips", "hips"] or n.contains("Arm") or n.contains("arm"):
+			pb.apply_central_impulse(upper * (1.0 if n in ["Spine01", "chest", "Head", "head"] else 0.6))
+		else:
+			pb.apply_central_impulse(lower)
+
+
+func stop() -> void:
+	sim.physical_bones_stop_simulation()
+	sim.active = false
+
+
+## 몸통 뼈의 속도(멎었는지 본다)
+func speed() -> float:
+	if bodies.is_empty():
+		return 0.0
+	var v := 0.0
+	for pb: PhysicalBone3D in bodies:
+		v = maxf(v, pb.get("linear_velocity").length() if "linear_velocity" in pb else 0.0)
+	return v
+
+
+## 래그돌이 벽에 파묻히지 않게: 벽 등고선 선분마다 벽 뒤쪽에 상자(볼록 충돌체)를 세운다(충돌층 16)
+static func wall_guard(dungeon, parent: Node3D) -> void:
+	var body := StaticBody3D.new()
+	body.collision_layer = WALL_LAYER
+	body.collision_mask = 0
+	var e := 0.05
+	for sg in dungeon._segs:
+		var a: Vector2 = sg[0]
+		var b: Vector2 = sg[1]
+		var l := a.distance_to(b)
+		if l < 0.02:
+			continue
+		var mid := (a + b) / 2.0
+		var grad := Vector2(dungeon.sdf(mid + Vector2(e, 0)) - dungeon.sdf(mid - Vector2(e, 0)), dungeon.sdf(mid + Vector2(0, e)) - dungeon.sdf(mid - Vector2(0, e)))
+		var n := -grad.normalized()          # 걸을 수 있는 쪽
+		var x := Vector3(b.x - a.x, 0.0, b.y - a.y).normalized()
+		var cs := CollisionShape3D.new()
+		var box := BoxShape3D.new()
+		box.size = Vector3(l + 0.1, 3.2, 0.8)
+		cs.shape = box
+		var h: float = dungeon.height(mid)
+		cs.transform = Transform3D(Basis(x, Vector3.UP, x.cross(Vector3.UP)), Vector3(mid.x, h + 1.0, mid.y) - Vector3(n.x, 0.0, n.y) * 0.4)
+		body.add_child(cs)
+	parent.add_child(body)
