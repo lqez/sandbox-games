@@ -158,8 +158,9 @@ func _measure(w: Dictionary, feet: Array, cat: String) -> void:
 				var tg := "?"
 				if pr2 != null and "_targets" in pr2 and pr2._targets.size() > i:
 					tg = "tgt=(%.2f,%.2f,%.2f)" % [pr2._targets[i][0].x, pr2._targets[i][0].y, pr2._targets[i][0].z]
-				var hipb := sk.find_bone("Hips")
-				var hp: Vector3 = sk.global_transform * sk.get_bone_global_pose(hipb).origin
+				var sk2: Skeleton3D = w.sk
+				var hipb := sk2.find_bone("Hips")
+				var hp: Vector3 = sk2.global_transform * sk2.get_bone_global_pose(hipb).origin
 				_air.append([va, t, cat, FEET[i], md + " clip=" + str(who.anim.current_animation) + " f%d prev=(%.2f,%.2f,%.2f) now=(%.2f,%.2f,%.2f) hip=(%.2f,%.2f,%.2f) %s" % [Engine.get_physics_frames(), prev_any.x, prev_any.y, prev_any.z, fp.x, fp.y, fp.z, hp.x, hp.y, hp.z, tg]])
 		if down and prev != null:
 			var d := Vector2(fp.x - prev.x, fp.z - prev.z).length()

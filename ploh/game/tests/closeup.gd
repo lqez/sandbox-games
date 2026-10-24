@@ -44,9 +44,13 @@ func _once(key: String) -> bool:
 	return true
 
 
+var _real := 0.0
+
 func _process(delta: float) -> void:
 	t += delta
-	if t >= dur:
+	# 히트스톱·슬로모션이 걸리면 delta가 줄어 t가 늦게 찬다. 실제 시간으로도 세어 dur의 1.5배가 지나면 반드시 끝낸다(창이 남지 않게)
+	_real += delta / maxf(Engine.time_scale, 0.05)
+	if t >= dur or _real >= dur * 1.5:
 		var f := FileAccess.open(OS.get_cmdline_user_args()[3] if OS.get_cmdline_user_args().size() > 3 else "user://pops.log", FileAccess.WRITE)
 		f.store_string("\n".join(_log))
 		f.close()
@@ -187,9 +191,13 @@ func _process(delta: float) -> void:
 			if _once("intro"):
 				g.play_intro()
 		"guard":
-			# 막기: 누르고(막는 자세) 조금 끌어 게걸음 → 뒷걸음 → 크게 끌어 달리기 → 놓기
+			# 막기: 누르고(막는 자세) 조금 끌어 게걸음 → 뒷걸음 → 크게 끌어 달리기 → 놓기. 적은 치워 발만 본다
 			if _once("g_on") and t > 1.0:
 				g.auto_mode = false
+				for e in g.enemies:
+					if is_instance_valid(e):
+						e.queue_free()
+				g.enemies.clear()
 			if t > 1.2 and t < 7.5 and not _did.has("g_hold"):
 				_did["g_hold"] = true
 				g.guard(true)

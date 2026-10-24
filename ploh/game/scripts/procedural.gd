@@ -717,7 +717,7 @@ func _wounds(sk: Skeleton3D) -> void:
 		var side := Vector3(0.05 * (1.0 if clutch_arm == 0 else -1.0), 0.0, 0.0)
 		var target := bg.origin + (fwd * 0.13 + side) * unit
 		var cur := sk.get_bone_global_pose(ids[3]).origin
-		_two_bone(sk, ids[1], ids[2], ids[3], cur.lerp(target, clampf(belly * 1.3, 0.0, 1.0)))
+		_two_bone(sk, ids[1], ids[2], ids[3], cur.lerp(target, clampf(belly * 1.3, 0.0, 1.0)), Basis.IDENTITY, 0.0, Vector3.UP, Vector3(0.3 * (1.0 if clutch_arm == 0 else -1.0), -0.6, -1.0))
 
 
 func _step(dt: float) -> void:
@@ -1064,7 +1064,7 @@ func _plan_gait(sk: Skeleton3D, dt: float, i: int, gi: Dictionary, a: Vector3, h
 	if st[0]:
 		if not f.gstance:
 			# 내려 디뎠다: 지금 자리(들림 끝은 예측 자리에 닿아 있다)에 붙잡는다
-			f.lock = f.out if f.land == Vector3.INF else Vector3(f.land.x, f.out.y, f.land.z)
+			f.lock = f.out   # 들림이 끝난 바로 그 자리(예측 발자국은 디딤 평균이라 닿는 순간의 발과 조금 다르다)
 			f.lock_yaw = ya
 			planted.emit(Vector3(f.lock.x, h, f.lock.z), clampf(spd / 5.0, 0.2, 1.0))
 		f.gstance = true
@@ -1247,11 +1247,14 @@ func _feet(sk: Skeleton3D, dt: float) -> void:
 			var gf := sk.get_bone_global_pose(_legs[i][2])
 			var fwd: Vector3 = sk_global.basis * (gf.basis * sk.get_bone_global_rest(_legs[i][2]).basis.inverse() * Vector3(0, 0, 1))
 			f.corr = angle_difference(atan2(fwd.x, fwd.z), want)
-		_two_bone(sk, _legs[i][0], _legs[i][1], _legs[i][2], inv * (_targets[i][0] as Vector3), _rot_between(up_sk, n_sk), f.corr, up_sk)
+		# 무릎은 몸 앞쪽으로만 굽는다(스켈레톤 공간 +Z가 모델 앞)
+		_two_bone(sk, _legs[i][0], _legs[i][1], _legs[i][2], inv * (_targets[i][0] as Vector3), _rot_between(up_sk, n_sk), f.corr, up_sk, Vector3(0, 0, 1))
 
 
 ## 두 관절 IK(스켈레톤 공간). 무릎은 원래 굽은 방향을 유지한다
-func _two_bone(sk: Skeleton3D, up: int, low: int, foot: int, target: Vector3, tilt := Basis.IDENTITY, yaw := 0.0, up_axis := Vector3.UP) -> void:
+## hint: 가운데 관절이 굽는 쪽(스켈레톤 공간). 무릎은 몸 앞, 팔꿈치는 몸 뒤. 원래 자세의 굽은 방향이 이쪽과 맞으면 그것을 따르고,
+## 반대로 꺾이려 하면(다리가 거의 펴져 굽은 방향이 뒤집힐 때) hint 쪽으로 굽힌다: 관절이 뒤로 꺾이지 않는다
+func _two_bone(sk: Skeleton3D, up: int, low: int, foot: int, target: Vector3, tilt := Basis.IDENTITY, yaw := 0.0, up_axis := Vector3.UP, hint := Vector3.ZERO) -> void:
 	var gu := sk.get_bone_global_pose(up)
 	var gl := sk.get_bone_global_pose(low)
 	var gf := sk.get_bone_global_pose(foot)
@@ -1268,6 +1271,11 @@ func _two_bone(sk: Skeleton3D, up: int, low: int, foot: int, target: Vector3, ti
 	var dir := to_t.normalized()
 	# 무릎이 굽는 방향(원래 무릎 위치에서 다리 축에 수직인 성분). 발을 돌려 디뎠으면 무릎도 그 반만큼 따라 돈다
 	var pole := (b - a) - dir * (b - a).dot(dir)
+	if hint != Vector3.ZERO:
+		var hp := hint - dir * hint.dot(dir)
+		# 원래 굽은 방향이 해부학적 방향과 어긋나거나 거의 펴져 있으면 해부학적 방향으로
+		if hp.length() > 0.0001 and (pole.length() < 0.02 * (la + lb) or pole.normalized().dot(hp.normalized()) < 0.2):
+			pole = hp
 	if pole.length() < 0.0001:
 		pole = Vector3(0, 0, 1)
 	pole = pole.normalized()

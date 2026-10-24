@@ -52,9 +52,35 @@ static func build(skel: Skeleton3D, table: Array, unit := 1.0) -> RefCounted:
 		pb.collision_layer = 8
 		# 바닥(2)과 벽 상자(16)에 부딪힌다. 벽 메시 충돌체(오목한 삼각형 면)에 끼면 관절이 터져 메시가 늘어나므로 그것과는 부딪히지 않는다
 		pb.collision_mask = 2 | WALL_LAYER | 32
-		pb.joint_type = PhysicalBone3D.JOINT_TYPE_CONE if row[0] not in ["Hips", "hips"] else PhysicalBone3D.JOINT_TYPE_NONE
-		pb.set("joint_constraints/swing_span", row[3])
-		pb.set("joint_constraints/twist_span", row[3] * 0.4)
+		# 관절: 골반은 뿌리(없음), 무릎·팔꿈치는 한쪽으로만 굽는 경첩, 나머지는 원뿔
+		var n0: String = row[0]
+		var hinge: bool = n0 in ["LeftLeg", "RightLeg", "LeftForeArm", "RightForeArm", "lowerleg.l", "lowerleg.r", "lowerarm.l", "lowerarm.r"]
+		if n0 in ["Hips", "hips"]:
+			pb.joint_type = PhysicalBone3D.JOINT_TYPE_NONE
+		elif hinge:
+			pb.joint_type = PhysicalBone3D.JOINT_TYPE_HINGE
+			# 경첩 축: 뼈 방향과 굽는 방향(무릎은 앞 +Z, 팔꿈치는 뒤 -Z)에 수직인 축. 뒤로는 0°, 앞(또는 팔꿈치는 뒤)으로만 굽는다
+			var bend_dir := Vector3(0, 0, 1) if n0.contains("Leg") or n0.contains("leg") else Vector3(0, 0, -1)
+			var rest_g := skel.get_bone_global_rest(b)
+			var par := skel.get_bone_parent(b)
+			var seg := (skel.get_bone_global_rest(par).origin - rest_g.origin).normalized() if par >= 0 else Vector3.UP
+			var axis_g := seg.cross(bend_dir)
+			if axis_g.length() < 0.001:
+				axis_g = Vector3.RIGHT
+			axis_g = axis_g.normalized()
+			# 뼈 공간으로 옮겨 경첩(Z축 둘레 회전)을 그 축에 맞춘다
+			var axis_l: Vector3 = rest_g.basis.inverse() * axis_g
+			var rb_z := axis_l.normalized()
+			var rb_x := rb_z.cross(Vector3.UP if absf(rb_z.dot(Vector3.UP)) < 0.9 else Vector3.RIGHT).normalized()
+			var rb_y := rb_z.cross(rb_x).normalized()
+			pb.joint_rotation = Basis(rb_x, rb_y, rb_z).get_euler()
+			pb.set("joint_constraints/angular_limit_enabled", true)
+			pb.set("joint_constraints/angular_limit_lower", -140.0 if n0.contains("Leg") or n0.contains("leg") else -5.0)
+			pb.set("joint_constraints/angular_limit_upper", 5.0 if n0.contains("Leg") or n0.contains("leg") else 140.0)
+		else:
+			pb.joint_type = PhysicalBone3D.JOINT_TYPE_CONE
+			pb.set("joint_constraints/swing_span", row[3])
+			pb.set("joint_constraints/twist_span", row[3] * 0.4)
 		# 뼈 길이: 다음 뼈의 쉬는 자세 위치(이 뼈 기준). 없으면 굵기로 둥글게
 		var thick: float = row[2] * unit
 		var length: float = thick * 2.0
