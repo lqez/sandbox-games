@@ -719,7 +719,7 @@ func _plan_feet(sk: Skeleton3D, dt: float) -> void:
 				var goal: Vector3 = f.goal if f.s > 0.75 else _step_goal(i, a, leg, side)
 				f.goal = goal
 				# 들고 → 옮기고 → 내린다: 발을 먼저 띄운 뒤 옆으로 옮기고, 내려놓을 때는 곧게 내린다
-				var e := clampf((float(f.s) - 0.12) / 0.76, 0.0, 1.0)
+				var e := clampf((float(f.s) - 0.18) / 0.66, 0.0, 1.0)
 				e = e * e * (3.0 - 2.0 * e)
 				var q: Vector3 = (f.from as Vector3).lerp(goal, e)
 				var arc: float = sin(PI * f.s)
@@ -772,7 +772,7 @@ func _plan_feet(sk: Skeleton3D, dt: float) -> void:
 		var fwd_w := Vector3(sk_global.basis.z.x, 0.0, sk_global.basis.z.z).normalized()
 		f.fsign = signf(_body_v.dot(fwd_w)) if spd > 0.3 else 1.0
 		f.dur = clampf(STEP_TIME - 0.022 * spd, 0.12, STEP_TIME) * sqrt(leg / 0.9)
-		f.lift = clampf(0.08 + 0.06 * f.need, 0.08, 0.14) * leg
+		f.lift = clampf(0.1 + 0.06 * f.need, 0.1, 0.16) * leg
 		# 다친 다리는 낮고 느리게 끌며 옮긴다
 		var lame: float = _inj_now["leg%d" % best]
 		f.lift *= 1.0 - 0.65 * lame

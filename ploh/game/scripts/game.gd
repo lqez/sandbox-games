@@ -326,7 +326,7 @@ func _enter_room(i: int) -> void:
 	dungeon.enter_room(i)   # 방 분위기 훅(보스 방이면 화로가 확 타오른다)
 	var last := i == dungeon.rooms.size() - 1
 	_enter_t = 1.1
-	hud.banner("보스 · 균열의 군주" if last else "방 %d / %d" % [i + 1, dungeon.rooms.size()])
+	hud.banner("보스 · 조슈아 레비턴스" if last else "방 %d / %d" % [i + 1, dungeon.rooms.size()])
 
 
 func _update_rooms() -> void:
@@ -951,7 +951,7 @@ func _finish_cinematic(e: Node3D, boss_kill: bool) -> void:
 	Vfx.sparks(self, e.global_position + Vector3(0, 1.0 * e.stats.scale, 0), kdir, Vector3.UP, Color(1, 0.9, 0.6), 30, 1.0)
 	if boss_kill:
 		hud.flash(Color(1, 0.96, 0.88), 0.5)
-		hud.title("균열의 군주 격파", "BOSS DEFEATED")
+		hud.title("조슈아 레비턴스 격파", "BOSS DEFEATED")
 	else:
 		hud.flash(Color(1, 1, 1), 0.15)
 		hud.title("정예 격파", "")

@@ -80,6 +80,8 @@ func _track(who: Node3D) -> void:
 
 func _category(who: Node3D) -> String:
 	# 일부러 미끄러지는 동작(구르기, 횡대시, 돌진 베기)은 따로 센다
+	if "kind" in who and who.state in ["down", "dead"]:
+		return "~래그돌:%s" % who.kind
 	if "slide" in who.proc and who.proc.slide or ("kind" not in who and who.state in ["dodge", "step"]):
 		return "~의도:" + ("%s/%s" % [who.kind, who.state] if "kind" in who else who.state)
 	if "kind" in who:

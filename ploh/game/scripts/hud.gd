@@ -609,7 +609,7 @@ func _draw_boss(s: Vector2, b: Node, portrait: bool) -> void:
 		x1 = s.x - MARGIN - 96 - 30.0
 		y = MARGIN + 44
 	var bar := Rect2(x0, y, x1 - x0, 16)
-	var name := "균열의 군주"
+	var name := "조슈아 레비턴스"
 	var wind: bool = b.state == "wind"
 	var pw := _f_bold.get_string_size(name, HORIZONTAL_ALIGNMENT_LEFT, -1, 19).x + 30
 	var plate := Rect2(x0 - 2, y - 32, pw, 26)

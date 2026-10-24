@@ -1341,10 +1341,11 @@ func _dress_rooms(parent: Node3D, rng: RandomNumberGenerator) -> void:
 					_shaft(ri, c, mood.key_dir, mood.shaft, rng)
 		match ri:
 			0:
+				# 바리케이드는 카메라 반대쪽(방 안쪽)에 둔다. 카메라 쪽에 두면 시작 자리 바로 앞에서 싸움을 가린다
 				for k in 2:
-					var p: Vector2 = r.c2 + CAM_DIR.rotated((k - 0.5) * 1.3 + rng.randf_range(-0.2, 0.2)) * minf(r.rx, r.rz) * 0.62
+					var p: Vector2 = r.c2 - CAM_DIR.rotated((k - 0.5) * 1.3 + rng.randf_range(-0.2, 0.2)) * minf(r.rx, r.rz) * 0.62
 					if sdf(p) < -1.4 and not _near_route(p, 2.0):
-						_barricade(ri, p, CAM_DIR.rotated((k - 0.5) * 1.3), rng)
+						_barricade(ri, p, -CAM_DIR.rotated((k - 0.5) * 1.3), rng)
 				var q := _wall_band(rng, r, -2.0, -1.1)
 				if q != Vector2.INF:
 					_crates(ri, q, rng)
