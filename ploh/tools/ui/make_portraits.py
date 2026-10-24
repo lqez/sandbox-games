@@ -12,7 +12,8 @@ A = PLOH / "game/assets"
 OUT = A / "ui"
 # 얼굴이 가운데 오는 정사각 영역(1024² beauty.png 좌표)
 HEROES = {
-    "frau": ("astrid/B_mid/beauty.png", (382, 70, 632, 320)),
+    # 프라우: 쉬는 자세 얼굴 렌더(tests/portrait.tscn, 정면 3/4, 1024²)
+    "frau": ("astrid/B_mid/portrait_src.png", (200, 360, 700, 860)),
     "fram": ("fram/beauty.png", (372, 92, 592, 312)),
     "schneider": ("schneider/beauty.png", (382, 172, 632, 422)),
 }

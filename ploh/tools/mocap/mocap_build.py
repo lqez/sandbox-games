@@ -219,11 +219,14 @@ SHIELD_NEW = dict(SHIELD_NEW,
                   parry=dict(SHIELD_NEW["parry"], reach=None, place=SB_OUT, shield=SB_FRONT))
 SPEC = {
     # 프라우: 한손검, 민첩. 콤보는 Double Combo Attack(92, 검을 들고 찍은 모캡) 한 벌을 칼끝 속도가 가장 느린 멈춤에서 셋으로 나눈다
+    # v4 (2026-10-24): 몸을 공식 3면도로 다시 만들어(raw/astrid_handkeyed.glb = tools/blender/astrid_build.py 결과, 손 키 동작 없음)
+    # 라이브러리 동작을 새 리그에 세 묶음(mocap / hero2 / guard)으로 다시 요청했다. 클립 표는 그대로.
+    # 감축: 보호 가중치 없이 순수 쿼드릭(dec_opts 모두 1). 머리·손을 보호하면 가는 다리·신발이 판자처럼 뭉개진다(가중치 비용이
+    # 쿼드릭 오차를 압도해 자유 영역에 붕괴가 몰림). 균일 감축이면 12k에서 다리·신발·머리카락이 다 살아남는다.
     "astrid": {
-        "tris": DECIMATE["hero"],
+        "tris": DECIMATE["hero"], "dec_opts": (1.0, 1.0, 1.0, 1.0, 10.0),
         "glb": "astrid/B_mid/astrid.glb", "weapon": "weapon_sword",
-        "src": ["animations.glb", "animations_mocap.glb", "animations_prop.glb", "animations_survey1.glb", "animations_survey2.glb",
-                "animations_react.glb", "animations_prone.glb", "animations_guard.glb"],
+        "src": ["animations_mocap.glb", "animations_hero2.glb", "animations_guard.glb"],
         "clips": {
             "idle": dict(src="Combat_Stance", loop=True, lf=4),
             "run": dict(src="Run_02", loop=True, lf=4),

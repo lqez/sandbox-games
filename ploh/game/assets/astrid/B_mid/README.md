@@ -1,28 +1,44 @@
 # 프라우(아스트리드 레몽) — B_mid
 
-비율 비교용 변형. 약 4.5–4.7 등신, 키 1.25 m(머리 크기를 A안 1.7 m와 맞춤).
+게임이 쓰는 프라우 모델. 약 4.6 등신, 키 1.25 m(다른 영웅과 같은 머리 크기·카메라 배율).
 
 ## 파일
-- `astrid.glb` — 몸 메시 `char1`(스킨) + 무기 메시 `weapon_sword`(오른손 본 `RightHand`의 자식) + 아마추어 1개(Meshy 휴머노이드 24본), 액션 14개, 30 fps
-- `turnaround.png` — gpt-image-2 3면도(정면·좌측면·후면, 1536×1024)
-- `view_front.png`, `view_side.png`, `view_back.png` — 3면도를 같은 배율로 자른 1024² 입력 이미지
+- `astrid.glb` — 몸 메시 `char1`(스킨, 삼각형 12,000) + 무기 메시 `weapon_sword`(오른손 본 `RightHand`의 자식, 504) + 아마추어 1개(Meshy 휴머노이드 24본), 액션 25개, 30 fps
+- `astrid_root.json` — 클립별 루트 이동 사이드카(아래 '모캡 액션' 참고)
+- `turnaround.png` — 공식 3면도(`삼면도_[대지]프라우_전신_무기없음`)를 4.6 등신으로 변형한 입력용 3면도(2048×1152, `tools/heroes/chibi_warp.py`)
+- `view_front.png`, `view_side.png`, `view_back.png` — 위 3면도를 같은 배율로 자른 1024² Meshy 입력 이미지(`tools/soldiers/crop_views.py`)
+- `turnaround_render.png` — 결과 모델 정면·좌측면·후면·얼굴(idle 0프레임, Workbench 400²×4)
+- `compare_turnaround.png` — 윗줄 입력 3면도·공식 상반신 원화, 아랫줄 결과 모델(기본 자세, Eevee) 비교
 - `beauty.png` — 정면 3/4, idle 0프레임(검을 든 경계 자세), Eevee 1024²
-- `ingame.png` — 4×4 m 바닥, 세로 화각 50°, 피치 38°, 요 45°, 발 위 1 m 지점에서 8 m, 720×1280, attack_1 타격 프레임(10/24)
-- `raw/` — Meshy 원본(`model.glb`, `rigged.glb`, `basic_walking.glb`, `basic_running.glb`, `animations.glb`, 썸네일, `tasks.json`)
-- `raw/old_single_image/` — 폐기한 첫 시도(단일 정면 이미지 → image-to-3d). 결과물에는 쓰지 않음
+- `ingame.png` — 4×4 m 바닥, 세로 화각 50°, 피치 38°, 요 45°, 발 위 1 m 지점에서 8 m, 720×1280, attack_1 타격 프레임(21/30)
+- `raw/` — Meshy 원본(`model.glb`, `rigged.glb`, `basic_walking.glb`, `basic_running.glb`, `animations_{mocap,hero2,guard}.glb`, 작업 JSON, 썸네일, `tasks.json`), 기준 GLB `astrid_handkeyed.glb`(이름만 예전 것, 아래 참고), 감축·재굽기 캐시 `astrid_body12000_*`
+- `raw/astrid_gptimage_v1.glb` — 교체 전 게임 GLB(gpt-image 추정 3면도로 만든 v3, 검은 머리·노란 조끼). `raw/gptimage_v1/`에 그 버전의 Meshy 원본·입력 이미지·캐시·`tasks.json`·루트 사이드카를 옮겨 두었습니다. `raw/gptimage_v1/old_single_image/`는 폐기한 첫 시도
+
+## v4 (2026-10-24) — 공식 원화로 다시 제작
+이전 버전은 gpt-image가 추정한 3면도(검은 머리 묶음, 노란 조끼)로 만들어 원작과 달랐습니다. 회사 원화(`ploh/research/frau_source/`, git 제외)의 공식 3면도 `삼면도_[대지]프라우_전신_무기없음.png`(4096×2304, 정면·좌측면·후면)로 몸을 다시 만들었습니다. 떠다니는 칼날 날개(`무기있음` 3면도)는 스킬 이펙트용이라 몸에 넣지 않았습니다.
+
+- **비율 변형**: 공식 3면도는 약 6.4 등신(머리 250 px, 키 1609 px)이라 그대로 넣으면 다른 영웅(4.5 등신, 1.25 m)보다 머리가 28% 작아집니다. `tools/heroes/chibi_warp.py`로 턱 행(650)을 고정점으로 머리를 1.45배(목 축 x=808/1870/3160 중심, 세 인물 공통 세로 변환), 턱 아래 몸을 세로 0.92배로 바꿔 4.66 등신(머리 355 px)으로 만들었습니다. 턱 −40..+140 행에서 배율이 매끄럽게 바뀌어 마스크·옆머리가 꺾이지 않고, 가로 배율은 턱 아래에서 1.0으로 돌아가 어깨·몸 폭은 그대로입니다. 그 결과를 `crop_views.py`로 잘라 `view_*.png`를 만들었습니다(인물 높이가 정사각형의 89%, 이전 입력과 같은 규격).
+- **Meshy**: multi-image-to-3d(A-pose, 2K, 30k 삼각형) → rigging(1.25 m) → 라이브러리 동작 20개를 새 리그에 세 묶음으로 요청. 첫 시도에서 머리 색(보라 포니테일)·뾰족 귀·목의 가스마스크·군번줄·주황 누빔 깃·흰 크롭탑·검은 반바지+레깅스·주황/검정 운동화가 모두 나와 입력을 다시 만들지 않았습니다.
+- **기준 GLB**(`raw/astrid_handkeyed.glb`, `tools/blender/astrid_build.py`): Meshy `rigged.glb`를 키 1.25 m·발바닥 원점·수평 중심으로 정리하고(변환 적용, 노멀 재계산으로 감김 방향 통일, 스무스), 오른손을 주먹으로 말고(`soldier_lib.make_fist`, 정점 811개), 절차 생성 검 `weapon_sword`를 `RightHand`에 붙였습니다. 손 키 동작은 없습니다(파일 이름은 `mocap_build.py`가 찾는 이름을 그대로 둔 것). 몸 메시 이름 `char1`, 재질 `Material_0`, 텍스처 `Material_0_baseColor` 2048²는 이전과 같습니다.
+- **검**: 원화 `프라우_무기.jpg`의 오른쪽 단일 칼날 스케치(칼날 날개 한 장과 같은 디자인: 가늘게 빠지는 끝, 등 쪽 아래 1/3에 오목한 파임과 갈고리, 파임 뿌리의 둥근 리벳)와 `FrauWeaponBasicE.tga`의 색(건메탈 몸체, 라임 날, 마젠타 마름모 상감)을 따라 `astrid_build.py`에서 만들었습니다. 날 0.43 m(손목에서 끝까지 0.60 m, 이전 KayKit 검 0.57 m), 검은 8각 손잡이, 라임 자루끝, 삼각형 504개, 재질 5개(텍스처 없음, 라임·마젠타는 약한 발광). 이전 `astrid_knight_texture.png`(KayKit 검 텍스처)는 지웠습니다.
+- **감축**: `mocap_build.py`의 `dec_opts=(1,1,1,1,10)` — 보호 가중치 없이 순수 쿼드릭 감축. 기본값(머리 0.1·손 0.2 보호)으로는 가중치 비용이 쿼드릭 오차를 압도해 붕괴가 자유 영역에 몰리고 가는 다리·신발이 판자처럼 뭉개졌습니다(머리 0.6–0.8로 낮춰도 같음). 균일 감축이면 12,000개에서 다리·신발·머리카락이 다 살아남고 얼굴만 조금 단순해집니다(게임 카메라 거리에서는 구분 안 됨). 30,952 → 11,999. 감김 방향: 다면체 간선 12,393개 중 이웃과 방향이 어긋난 간선 9개(이전 GLB 14개), 검 0개.
+- **텍스처**: v3와 같은 재굽기(xatlas 새 UV 1,454 차트, 원본 몸에서 기본색 2048² 굽기, 빈 텍셀 82개).
+- **클립**: 아래 표와 같은 라이브러리 동작·설정(`mocap_build.py` `SPEC["astrid"]`, 클립 표는 그대로). 타격 프레임은 이전과 모두 같습니다(attack_1 21, attack_2 6, attack_3 17, cast 20, spin 30, thrust 11). 리그 비율이 달라 루트 이동량·가드 걸음 속도가 조금 바뀌었습니다(표의 값은 v4).
+- **남은 문제**: 머리카락이 원화의 진보라보다 자홍색에 가깝습니다(Meshy 텍스처). 하프소드 가드에서 왼손이 칼날 가운데에 닿지 못해(팔이 짧아 칼날 중간면까지 4.5 cm 남음) 칼날이 왼팔을 1–3 cm 지납니다: parry 최대 3.2 cm(11프레임), guard_fwd 1.7 cm, strafe_l 2.6 cm(미러 클립, 손목 55° 회전·팔 IK 19 cm로도 2.4 cm 남음). guard는 0.8 cm. dodge는 구르는 동안 2프레임에 1.9 cm 남습니다.
 
 ## Meshy 작업
 | 단계 | 작업 ID | 크레딧 |
 |---|---|---|
-| multi-image-to-3d (meshy 7.1, 2K 텍스처, 삼각형 리메시 30k, A-pose) | `01a16921-328d-7128-9bca-aaefa55f3201` | 30 |
-| rigging (height_meters=1.25) | `01a16923-b3c3-7180-af89-87ab0c3fc003` | 5 |
-| animations (action_ids 10개) | `01a16924-03d2-725b-9bd0-ad1d4e4f6244` | 30 |
-| (폐기) image-to-3d / rigging / animations | `01a1691c-2f04-75ac-9b58-2169c5fc656e` / `01a1691e-2df4-73da-aae5-ee1d991115fe` / `01a1691e-82e4-758a-92e9-6f21790a25fd` | 65 |
+| multi-image-to-3d (meshy latest, 2K 텍스처, 삼각형 리메시 30k, A-pose) | `01a16d8e-6387-72b7-8f97-b65b764c2345` | 30 |
+| rigging (height_meters=1.25) | `01a16d91-a4a8-7064-96a3-6fdcdec7a6ff` | 5 |
+| animations `mocap` (89, 14, 92, 221, 102, 238, 159, 179, 8, 148) | `01a16d92-2ddc-7172-9075-e7cfce138a37` | 30 |
+| animations `hero2` (192, 404, 182, 100, 351) | `01a16d92-843a-73b3-8b66-5141c6d72f8e` | 15 |
+| animations `guard` (21, 546, 528, 531, 416) | `01a16d92-da78-7303-84e9-665c3c2f0014` | 15 |
 
-이 변형 합계 130 크레딧(사용 65 + 폐기 65).
+v4 합계 95 크레딧. 이전 gpt-image 버전(v1–v3)의 작업은 `raw/gptimage_v1/tasks.json`에 있습니다(모델 65 + 폐기 65 + 라이브러리 동작 99 = 229 크레딧).
 
 ## 모캡 액션(현재 `astrid.glb`, 30 fps)
-손으로 키를 준 액션을 Meshy 애니메이션 라이브러리의 모캡 클립으로 바꿨습니다(2026-10-24). 클립은 이 캐릭터의 리깅 작업(`01a16923-b3c3-7180-af89-87ab0c3fc003`)에 요청해 받았고, 몸 메시·텍스처·무기 노드(`weapon_*`는 손 본의 자식, 가장 먼 정점이 끝)·주먹 고침은 이전 GLB에서 그대로 가져왔습니다. 이전 GLB는 `raw/astrid_handkeyed.glb`이고, 아래 '손 키 액션' 절은 그 버전 설명입니다.
+손으로 키를 준 액션을 Meshy 애니메이션 라이브러리의 모캡 클립으로 바꿨습니다(2026-10-24). v4부터 클립은 공식 원화 모델의 리깅 작업(`01a16d91-a4a8-7064-96a3-6fdcdec7a6ff`)에 요청해 받고, 몸 메시·텍스처·무기 노드(`weapon_*`는 손 본의 자식, 가장 먼 정점이 끝)·주먹은 기준 GLB `raw/astrid_handkeyed.glb`(`astrid_build.py` 결과)에서 가져옵니다. 아래 '손 키 액션' 절과 그 이후 절은 이전 gpt-image 버전(`raw/gptimage_v1/astrid_handkeyed.glb`) 설명입니다.
 
 | 액션 | 라이브러리 액션(ID) | 원본 프레임 | 길이 | 타격 프레임(빠른 구간), 칼끝 최고 속도 | 손질 |
 |---|---|---|---|---|---|
@@ -40,35 +56,26 @@
 | sidestep_l | 절차 생성(idle 자세) | – | 14 (0.43 s) | – | 왼쪽(+X)으로 0.5 m 옆 대시. idle 자세로 시작하고 끝남 |
 | sidestep_r | 절차 생성(idle 자세) | – | 14 (0.43 s) | – | 오른쪽(−X)으로 0.5 m 옆 대시 |
 | thrust | Right Jab from Guard (192) | 6–30 | 35 (1.13 s) | 11 (11–12), 7.5 m/s | 잽에 칼 방향을 앞으로 덮어써 찌르기로 만듦, idle에서 8프레임 섞어 시작, idle 복귀 10프레임 덧붙임 |
-| stumble | Crouch and Step Back (404) | 16–60 | 36 (1.17 s) | 발 디딤 왼발 0–2·10–14·23–26·35, 오른발 0–4·19–24·30–35(디딘 동안 미끄러짐 최대 0.0 cm) | 가슴이 뒤로 젖혀지는 프레임부터 1.25배 빠르게, idle에서 4프레임 섞어 시작, 끝 8프레임 idle로, 양팔 idle 고정, 발 디딤 고정(replant). 루트 X +0.00 m, Z -0.95 m |
-| knockdown | Shot and Blown Back (182) | 22–68 | 63 (2.07 s) | 골반이 바닥에 닿는 프레임 13 | 맞는 순간부터. idle에서 4프레임 섞어 시작, 끝 16프레임에 평평하게 누운 자세(lie_up)로 가라앉음. 루트 X +0.02 m, Z -2.77 m |
-| getup | Spin Down and Stand Up (100) | 96–212 | 82 (2.70 s) | 두 발이 몸 아래 디딤 59 | 누운 자세(lie_up = knockdown 마지막 프레임)에서 12프레임 섞어 시작, 1.43배 빠르게, 끝 8프레임 idle로, 발 디딤 고정. 루트 X +0.11 m, Z +0.47 m |
-| getup_front | Stand Up 8 (351) | 0–70 | 71 (2.33 s) | 두 발이 몸 아래 디딤 39 | 엎드린 자세(lie_down)에서 12프레임 섞어 시작, 끝 8프레임 idle로, 발 디딤 고정. 루트 X +0.04 m, Z -0.19 m |
+| stumble | Crouch and Step Back (404) | 16–60 | 36 (1.17 s) | 발 디딤 왼발 0–2·10–14·23–26·35, 오른발 0–4·19–24·30–35(디딘 동안 미끄러짐 최대 0.0 cm) | 가슴이 뒤로 젖혀지는 프레임부터 1.25배 빠르게, idle에서 4프레임 섞어 시작, 끝 8프레임 idle로, 양팔 idle 고정, 발 디딤 고정(replant). 루트 X +0.00 m, Z -1.08 m |
+| knockdown | Shot and Blown Back (182) | 22–68 | 63 (2.07 s) | 골반이 바닥에 닿는 프레임 13 | 맞는 순간부터. idle에서 4프레임 섞어 시작, 끝 16프레임에 평평하게 누운 자세(lie_up)로 가라앉음. 루트 X +0.02 m, Z -3.12 m |
+| getup | Spin Down and Stand Up (100) | 96–212 | 82 (2.70 s) | 두 발이 몸 아래 디딤 59 | 누운 자세(lie_up = knockdown 마지막 프레임)에서 12프레임 섞어 시작, 1.43배 빠르게, 끝 8프레임 idle로, 발 디딤 고정. 루트 X +0.12 m, Z +0.53 m |
+| getup_front | Stand Up 8 (351) | 0–70 | 71 (2.33 s) | 두 발이 몸 아래 디딤 39 | 엎드린 자세(lie_down)에서 12프레임 섞어 시작, 끝 8프레임 idle로, 발 디딤 고정. 루트 X +0.04 m, Z -0.22 m |
 | guard | Combat Idel (89) 몸 + Sword Parry Backward (148) 6프레임 팔 | 0–50 | 51 (1.67 s) | – | 루프. 무기를 몸 앞에 비스듬히 들어 올린 막기 자세, 왼손 바닥을 칼날 면 가운데(손잡이에서 끝까지의 55%)에 댄 하프소드 가드 |
-| guard_fwd | Walk Fight Forward (21) | 0–50 | 36 (1.17 s) | 속도 0.76 m/s | 루프, 1.43배 빠르게, 제자리 걸음이라 받치는 발에서 이동량을 다시 만듦, guard 팔, 발 디딤 고정 |
-| guard_back | Walk Backward with Sword (546) | 0–39 | 23 (0.73 s) | 속도 0.78 m/s | 루프, 1.75배 빠르게, guard 팔, 발 디딤 고정 |
-| strafe_r | Walk Left with Gun (528) | 0–35 | 22 (0.70 s) | 속도 0.79 m/s | 루프, 1.67배 빠르게, 상체를 정면으로 +38° 돌림, guard 팔, 발 디딤 고정 |
-| strafe_l | Walk Left with Gun (528) 좌우 반전 | 0–35 | 22 (0.70 s) | 속도 0.79 m/s | strafe_r를 좌우 반전, 상체 -40° |
-| run_stop | Sprint and Sudden Stop (531) | 8–55 | 48 (1.57 s) | – | run 마지막 프레임에서 4프레임 섞어 시작, 세 걸음에 걸쳐 체중을 뒤로 실으며 멈춤, 끝 10프레임 idle로, 양팔 idle 고정, 발 디딤 고정. 루트 X -0.01 m, Z +1.28 m |
-| trip | Hit in Back While Running (416) | 12–52 | 33 (1.07 s) | – | run에서 6프레임 섞어 시작, 1.25배 빠르게, 앞으로 고꾸라질 뻔하다 큰 걸음으로 버팀, 끝 10프레임 idle로, 발 디딤 고정. 루트 X -0.14 m, Z +1.33 m |
+| guard_fwd | Walk Fight Forward (21) | 0–50 | 36 (1.17 s) | 속도 0.72 m/s | 루프, 1.43배 빠르게, 제자리 걸음이라 받치는 발에서 이동량을 다시 만듦, guard 팔, 발 디딤 고정 |
+| guard_back | Walk Backward with Sword (546) | 0–39 | 23 (0.73 s) | 속도 0.88 m/s | 루프, 1.75배 빠르게, guard 팔, 발 디딤 고정 |
+| strafe_r | Walk Left with Gun (528) | 0–35 | 22 (0.70 s) | 속도 0.89 m/s | 루프, 1.67배 빠르게, 상체를 정면으로 +38° 돌림, guard 팔, 발 디딤 고정 |
+| strafe_l | Walk Left with Gun (528) 좌우 반전 | 0–35 | 22 (0.70 s) | 속도 0.89 m/s | strafe_r를 좌우 반전, 상체 -40° |
+| run_stop | Sprint and Sudden Stop (531) | 8–55 | 48 (1.57 s) | – | run 마지막 프레임에서 4프레임 섞어 시작, 세 걸음에 걸쳐 체중을 뒤로 실으며 멈춤, 끝 10프레임 idle로, 양팔 idle 고정, 발 디딤 고정. 루트 X -0.01 m, Z +1.44 m |
+| trip | Hit in Back While Running (416) | 12–52 | 33 (1.07 s) | – | run에서 6프레임 섞어 시작, 1.25배 빠르게, 앞으로 고꾸라질 뻔하다 큰 걸음으로 버팀, 끝 10프레임 idle로, 발 디딤 고정. 루트 X -0.16 m, Z +1.50 m |
 
+- 표의 길이·타격 프레임·루트 이동·속도는 v4(공식 원화 모델) 값입니다. 아래 하위 절(피격 반응, 가드 세트, 텍스처 재굽기, 패리·옆 대시·찌르기, 무기 관통)의 설계는 그대로 쓰지만 본문의 cm·m/s 수치는 v3(gpt-image 모델) 측정값입니다. v4 수치는 위 'v4' 절의 '남은 문제'와 `mocap_build.py` 실행 로그(REPORT)에 있습니다.
 - 모든 클립의 모든 프레임에 24본 키가 있고 보간은 선형입니다. 반복 설정은 GLB에 없습니다(idle·run·walk·block은 게임에서 루프로 바꿔야 함).
 - 타격 프레임은 칼끝(무기 메시에서 손 본 원점과 가장 먼 정점) 속도가 가장 빠른 프레임이고, 빠른 구간은 최고 속도의 25% 이상인 연속 프레임입니다(`hero_measure.py`).
 - 루트 이동: Hips의 수평 이동은 지우고(세로 이동은 남김) `astrid_root.json`에 클립별·프레임별 X/Z로 남겼습니다. 값은 0프레임 기준이고 모델 크기 m(게임 배율을 곱해 씀), 캐릭터 기준 +Z 앞, +X 캐릭터 왼쪽입니다. 루프 클립은 평균·드리프트만 지우고 작은 흔들림은 남겼습니다.
 - 공격·스킬은 idle 0프레임 자세에서 시작하고(콤보 2·3타는 앞 타의 마지막 프레임에서 이어짐) 마지막 타는 idle로 끝납니다. 자세를 섞는 구간에서 발이 미끄러지지 않게 발을 들어 옮기는 2본 IK를 넣었습니다.
 - hit는 맞는 동안 무기 팔을 idle 자세로 고정한 짧은 움찔(23프레임)입니다.
 - 몸 메시는 모바일용으로 줄였습니다: 삼각형 31,086 → 12,000. Blender Decimate(collapse) 전에 같은 위치·같은 방향 법선의 정점만 붙이고(UV 이음매 중복), 얼굴(가중치 0)·머리(0.1)·손(0.2)·UV 이음매(0.35)를 보호했습니다. 게임 카메라 거리에서는 원본과 구분되지 않습니다.
-- Meshy 요청(라이브러리 애니메이션, 액션당 3 크레딧):
-
-| 작업 ID | action_id | 크레딧 |
-|---|---|---|
-| `01a169ea-7055-7328-8e48-edecec12a33a` | 89, 199, 221, 238, 159, 179 | 18 |
-| `01a169f8-338d-7498-ab35-23f358b858e0` | 92, 102 | 6 |
-| `01a16bce-05dd-7481-a4e0-4a740393c0b5` | 147, 148, 151, 152, 153, 154, 192, 240 (패리·찌르기 후보 조사) | 24 |
-| `01a16bce-0db6-75c2-a0ae-c171db06a378` | 156, 157, 164, 384, 9, 10, 5, 6 (옆 대시 후보 조사) | 24 |
-| `01a16cb9-f9bd-710b-85a2-6d584c4f6322` | 404, 182, 100 (피격 반응·넘어짐·기상) | 9 |
-| `01a16cc0-18ac-7626-979a-3e3547fd6b4d` | 351 (엎드린 자세에서 기상) | 3 |
-| `01a16ce8-9b07-7794-978f-cdf446d2ff88` | 21, 546, 528, 531, 416 (가드 세트) | 15 |
+- Meshy 요청(라이브러리 애니메이션, 액션당 3 크레딧): v4는 위 'Meshy 작업' 표의 `mocap`/`hero2`/`guard` 세 작업(`raw/animations_<태그>.glb`). 후보 조사(패리·찌르기·옆 대시)는 이전 리그에서 끝냈으므로 다시 요청하지 않았습니다(이전 요청 목록은 `raw/gptimage_v1/tasks.json`).
 
 ### 피격 반응·넘어짐·기상 (v3, 2026-10-24 추가)
 세게 맞았을 때 쓰는 클립입니다. 8명이 같은 설정(`mocap_build.py`의 `react()`)을 씁니다. 라이브러리 동작은 이 캐릭터의 리깅 작업에 요청했습니다(위 Meshy 요청 표).
@@ -122,10 +129,13 @@
 - 라이브러리 클립은 레퍼런스(예비 150–250 ms, 베기 50–130 ms)보다 예비 동작이 깁니다. 시간 재배치는 게임 코드가 맡습니다.
 
 ### 재현
-- Meshy 요청: `uv run --no-project --with requests python ploh/tools/heroes/meshy.py astrid/B_mid anim <action_id,...> <태그>` (`raw/animations_<태그>.glb`)
-- GLB·사이드카: `uv run --no-project --with numpy --with scipy python ploh/tools/mocap/mocap_build.py astrid` (클립 표는 이 스크립트의 `SPEC`·`HERO_NEW`, 몸 감축은 `decimate_body.py`를 헤드리스 Blender로 실행, 무기 관통 검사·수정은 `clipcheck.py`, 그 밖의 검사는 `qa.py`)
+- 입력 이미지: `uv run --no-project --with pillow --with numpy python ploh/tools/heroes/chibi_warp.py "<공식 3면도>" <out.png> 650 808,1870,3160 1.45 0.92 405` → `python ploh/tools/soldiers/crop_views.py <out.png> ploh/game/assets/astrid/B_mid`
+- Meshy: `uv run --no-project --with requests python ploh/tools/heroes/meshy.py astrid/B_mid mi23d` → `... rig 1.25` → `... anim <action_id,...> <태그>` (`raw/animations_<태그>.glb`; 세 묶음을 동시에 돌리면 `tasks.json`을 서로 덮어쓰므로 차례로)
+- 기준 GLB: `/Applications/Blender.app/Contents/MacOS/Blender -b --python ploh/tools/blender/astrid_build.py -- ploh/game/assets/astrid/B_mid/raw/rigged.glb ploh/game/assets/astrid/B_mid/raw/astrid_handkeyed.glb`
+- GLB·사이드카: `uv run --no-project --with numpy --with scipy python ploh/tools/mocap/mocap_build.py astrid` (감축·재굽기 캐시 `raw/astrid_body12000_*`는 기준 GLB를 바꾸면 지우고 다시 만들 것)
+- 렌더: `Blender -b --python ploh/tools/heroes/hero_render.py -- <astrid.glb> <B_mid> 21`, `Blender -b --python ploh/tools/blender/astrid_views.py -- <astrid.glb> <접두사> "idle:0:0:0:1.15,idle:0:90:0:1.15,idle:0:180:0:1.15,idle:0:35:10:0.3:Head"` (클립 표는 이 스크립트의 `SPEC`·`HERO_NEW`, 몸 감축은 `decimate_body.py`를 헤드리스 Blender로 실행, 무기 관통 검사·수정은 `clipcheck.py`, 그 밖의 검사는 `qa.py`)
 - 무기 관통 검사만: `uv run --no-project --with numpy --with scipy python ploh/tools/mocap/clipcheck.py ploh/game/assets/astrid/B_mid/astrid.glb`
-- 이전 GLB: 모캡 1차 버전은 `raw/astrid_mocap1.glb`(+ `raw/astrid_root_mocap1.json`), 손 키 버전은 `raw/astrid_handkeyed.glb`
+- 이전 GLB(gpt-image 모델): 게임에 쓰던 v3는 `raw/astrid_gptimage_v1.glb`, 모캡 1차 버전은 `raw/gptimage_v1/astrid_mocap1.glb`(+ `astrid_root_mocap1.json`), 손 키 버전은 `raw/gptimage_v1/astrid_handkeyed.glb`
 
 ## 손 키 액션(이전 버전, `raw/astrid_handkeyed.glb`, 30 fps)
 이 절과 아래 하위 절은 모캡으로 바꾸기 전의 액션 설명입니다.

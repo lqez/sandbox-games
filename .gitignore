@@ -8,3 +8,12 @@ ploh/docs/
 ploh/game/.godot/
 # 모델 작업 원본(Meshy 다운로드 등)은 저장소에 올리지 않는다
 ploh/game/assets/**/raw/
+# 원작 프라우 원본 자료(3ds Max 씬, 텍스처, 원화): 공개 저장소에 올리지 않는다
+ploh/research/frau_source/
+# 원작 3면도를 잘라 만든 Meshy 입력과 비교 이미지(원작 자료): 공개 저장소에 올리지 않는다
+ploh/game/assets/astrid/B_mid/view_*.png
+ploh/game/assets/astrid/B_mid/view_*.png.import
+ploh/game/assets/astrid/B_mid/turnaround.png
+ploh/game/assets/astrid/B_mid/turnaround.png.import
+ploh/game/assets/astrid/B_mid/compare_turnaround.png*
+ploh/game/assets/astrid/B_mid/turnaround_render.png*
