@@ -58,7 +58,7 @@ static func _init_shared() -> void:
 	_stain_mat = StandardMaterial3D.new()
 	_stain_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	_stain_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	_stain_mat.albedo_color = Color(0.28, 0.02, 0.04, 0.75)
+	_stain_mat.albedo_color = Color(0.3, 0.03, 0.05, 0.6)
 	_stain_mat.albedo_texture = _radial_noise()
 	_stain_mesh.material = _stain_mat
 
@@ -202,7 +202,7 @@ static func blood(parent: Node3D, at: Vector3, dir: Vector3, amount: int, ground
 	parent.get_tree().create_timer(1.0, true, false, true).timeout.connect(p.queue_free)
 	# 바닥 얼룩은 맞은 방향 조금 앞에, 오래된 것부터 지워 개수를 묶는다
 	var spot := at + dir.normalized() * randf_range(0.5, 1.1)
-	stain(parent, Vector3(spot.x, ground_y + 0.02, spot.z), randf_range(0.45, 0.8))
+	stain(parent, Vector3(spot.x, ground_y + 0.02, spot.z), randf_range(0.28, 0.5))
 
 
 static func stain(parent: Node3D, at: Vector3, size: float) -> void:

@@ -1,6 +1,7 @@
 // 궁극기 오라.
 // mode 0: 몸을 감싼 원기둥 껍질. 위로 흘러가는 노이즈 불길이 윤곽(화면에서 껍질의 가장자리)에서 밝고 가운데는 옅어 몸이 보인다
 // mode 1: 바닥 빛 고리. 천천히 도는 눈금과 안쪽으로 번지는 빛
+// mode 2: 하늘로 솟는 빛기둥. 윤곽이 밝고 위로 갈수록 옅으며, 가는 빛줄기가 위로 흐른다
 shader_type spatial;
 render_mode unshaded, blend_add, depth_draw_never, cull_back;
 
@@ -29,6 +30,11 @@ void fragment() {
 		float fade = (1.0 - smoothstep(0.55, 1.0, h)) * smoothstep(0.0, 0.08, h);
 		float edge = pow(1.0 - abs(dot(NORMAL, VIEW)), 1.6);
 		a = flame * fade * (0.18 + edge * 1.1);
+	} else if (mode == 2) {
+		float h = 1.0 - UV.y;
+		float edge = pow(1.0 - abs(dot(NORMAL, VIEW)), 1.2);
+		float streak = smoothstep(0.6, 1.0, noise(vec2(UV.x * 18.0, h * 1.5 - TIME * 2.5)));
+		a = (edge * 0.5 + streak * 0.35) * pow(1.0 - h, 0.7) * smoothstep(0.0, 0.05, h);
 	} else {
 		vec2 p = UV * 2.0 - 1.0;
 		float r = length(p);

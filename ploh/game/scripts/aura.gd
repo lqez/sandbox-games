@@ -10,6 +10,9 @@ var radius := 0.7
 var strength := 0.0
 var _shell_mat: ShaderMaterial
 var _ring_mat: ShaderMaterial
+var _beam_mat: ShaderMaterial
+var _waist_mat: StandardMaterial3D
+var _waist: MeshInstance3D
 var _motes: CPUParticles3D
 
 
@@ -29,8 +32,42 @@ func _ready() -> void:
 	shell.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	shell.position.y = height * 0.5
 	add_child(shell)
+	# 빛기둥(ART_TARGET 3장): 몸을 지나 하늘로 솟는다
+	var beam := CylinderMesh.new()
+	beam.top_radius = radius * 0.55
+	beam.bottom_radius = radius * 0.6
+	beam.height = 7.0
+	beam.radial_segments = 12
+	beam.rings = 1
+	beam.cap_top = false
+	beam.cap_bottom = false
+	_beam_mat = _mat(2)
+	var bm := MeshInstance3D.new()
+	bm.mesh = beam
+	bm.material_override = _beam_mat
+	bm.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	bm.position.y = 3.5
+	add_child(bm)
+	# 허리 고리: 몸을 감아 도는 가는 빛 고리(지름 1.3m), 조금 기울어 돈다
+	var tm := TorusMesh.new()
+	tm.inner_radius = 0.62
+	tm.outer_radius = 0.66
+	tm.rings = 32
+	tm.ring_segments = 4
+	_waist_mat = StandardMaterial3D.new()
+	_waist_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	_waist_mat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	_waist_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	_waist_mat.albedo_color = Color(color.lightened(0.5), 1.0)
+	_waist = MeshInstance3D.new()
+	_waist.mesh = tm
+	_waist.material_override = _waist_mat
+	_waist.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_waist.position.y = 1.05
+	_waist.rotation = Vector3(0.18, 0, 0.1)
+	add_child(_waist)
 	var q := QuadMesh.new()
-	q.size = Vector2(radius * 3.2, radius * 3.2)
+	q.size = Vector2(2.6, 2.6)
 	q.orientation = PlaneMesh.FACE_Y
 	_ring_mat = _mat(1)
 	var ring := MeshInstance3D.new()
@@ -40,7 +77,7 @@ func _ready() -> void:
 	ring.position.y = 0.04
 	add_child(ring)
 	_motes = CPUParticles3D.new()
-	_motes.amount = 18
+	_motes.amount = 32
 	_motes.lifetime = 0.9
 	_motes.local_coords = false
 	_motes.emission_shape = CPUParticles3D.EMISSION_SHAPE_RING
@@ -71,6 +108,11 @@ func _ready() -> void:
 	set_strength(strength)
 
 
+func _process(delta: float) -> void:
+	if visible and _waist != null:
+		_waist.rotate_object_local(Vector3.UP, delta * 2.4)
+
+
 func _mat(mode: int) -> ShaderMaterial:
 	var m := ShaderMaterial.new()
 	m.shader = SHADER
@@ -85,5 +127,7 @@ func set_strength(v: float) -> void:
 		return
 	_shell_mat.set_shader_parameter("strength", v)
 	_ring_mat.set_shader_parameter("strength", v * 0.8)
+	_beam_mat.set_shader_parameter("strength", v * v * 0.9)
+	_waist_mat.albedo_color.a = clampf(v, 0.0, 1.0)
 	visible = v > 0.01
 	_motes.emitting = v > 0.2
