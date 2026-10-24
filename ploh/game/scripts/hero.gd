@@ -314,7 +314,9 @@ func _play(name: String, speed := 1.0, blend := 0.08, restart := false) -> void:
 		anim.speed_scale = speed
 		return
 	_current = name
-	anim.play(name, blend)
+	# 섞는 시간은 재생 속도만큼 빨리 흐르므로, 실제 초로 blend가 되게 속도를 곱해 준다
+	# (예비 동작을 2배속으로 틀면 0.15초 섞기가 2프레임에 끝나 칼이 순간이동처럼 튀었다)
+	anim.play(name, blend * maxf(speed, 0.05))
 	anim.speed_scale = speed
 
 

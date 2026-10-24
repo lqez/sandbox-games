@@ -110,6 +110,16 @@ func _process(delta: float) -> void:
 		"hit":
 			# 탭하지 않고 맞기만 한다(적의 내려치기와 피격 반응을 본다)
 			pass
+		"single", "double":
+			# 대기 자세에서 한 번(double은 박자에 두 번) 벤다: 준비 자세 → 예비 → 베기 → 머묾 → 거두기 → 대기의 연결을 본다
+			if near and p.state == "idle" and not _did.has("tap1") and t > 1.2 and g.incoming(p, 0.4).is_empty():
+				_did["tap1"] = t
+				g.tap_down()
+				g.tap_up()
+			elif scenario == "double" and _did.has("tap1") and not _did.has("tap2") and t > float(_did["tap1"]) + g.BEAT:
+				_did["tap2"] = true
+				g.tap_down()
+				g.tap_up()
 		"ult":
 			# 적 가까이에서 궁극기를 쓴다(오라·카메라 연출을 본다)
 			if near and _once("ult"):
